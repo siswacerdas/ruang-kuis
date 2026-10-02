@@ -20,10 +20,10 @@ Update file ini setiap kali ada progress berarti.
 - [x] Setup Firebase project + Authentication (Email/Password)
 - [x] Hubungkan Firebase Auth ke aplikasi
 - [x] Login Admin berhasil menggunakan Firebase
-- [x] Membuat halaman **Dashboard Admin** (sederhana)
-- [x] Proteksi route (hanya user login yang bisa akses dashboard)
-- [x] Fitur **Logout**
-- [x] Redirect otomatis setelah login / logout
+- [x] Membuat halaman **Dashboard Admin**
+- [x] Proteksi route + Logout
+- [x] Setup **Firestore Database**
+- [x] Fitur **Kelola Soal** (lihat, tambah, hapus)
 
 ### Keputusan
 - Frontend: Vite + React + TypeScript + Tailwind CSS
@@ -31,10 +31,9 @@ Update file ini setiap kali ada progress berarti.
 - Hosting nanti: Firebase Hosting (atau GitHub Pages)
 
 ### Selanjutnya
-- [ ] Setup Firestore (database)
-- [ ] Fitur mengelola soal (CRUD)
+- [ ] Fitur Edit Soal
 - [ ] Halaman untuk siswa mengerjakan latihan
-- [ ] Sistem role (Admin vs Siswa) — opsional nanti
+- [ ] Sistem role (Admin vs Siswa)
 - [ ] Deploy ke Firebase Hosting
 
 ---

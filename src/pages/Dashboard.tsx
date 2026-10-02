@@ -1,6 +1,6 @@
 import { signOut } from 'firebase/auth'
 import { auth } from '../lib/firebase'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -35,22 +35,26 @@ export default function Dashboard() {
           <h2 className="text-2xl font-semibold text-gray-800 mb-2">
             Selamat datang, Admin!
           </h2>
-          <p className="text-gray-500">
-            Ini adalah halaman dashboard. Nanti di sini akan muncul fitur mengelola soal, melihat progress siswa, dll.
+          <p className="text-gray-500 mb-8">
+            Pilih menu di bawah untuk mulai mengelola.
           </p>
 
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="border border-gray-200 rounded-lg p-5 text-center">
-              <p className="text-3xl font-bold text-indigo-600">0</p>
-              <p className="text-sm text-gray-500 mt-1">Total Soal</p>
-            </div>
-            <div className="border border-gray-200 rounded-lg p-5 text-center">
-              <p className="text-3xl font-bold text-green-600">0</p>
-              <p className="text-sm text-gray-500 mt-1">Siswa Aktif</p>
-            </div>
-            <div className="border border-gray-200 rounded-lg p-5 text-center">
-              <p className="text-3xl font-bold text-orange-600">0</p>
-              <p className="text-sm text-gray-500 mt-1">Latihan Selesai</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Link
+              to="/questions"
+              className="border border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 rounded-xl p-6 transition"
+            >
+              <h3 className="text-lg font-semibold text-gray-800">Kelola Soal</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Tambah, lihat, dan hapus soal latihan
+              </p>
+            </Link>
+
+            <div className="border border-gray-200 rounded-xl p-6 opacity-50 cursor-not-allowed">
+              <h3 className="text-lg font-semibold text-gray-800">Progress Siswa</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Segera hadir
+              </p>
             </div>
           </div>
         </div>
