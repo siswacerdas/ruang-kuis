@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { signInWithEmailAndPassword } from 'firebase/auth'
+import { auth } from '../lib/firebase'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -6,21 +8,26 @@ export default function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
 
-    // Sementara hanya simulasi (nanti diganti Firebase)
-    setTimeout(() => {
-      if (email === 'admin@ruangkuis.com' && password === 'admin123') {
-        alert('Login berhasil! (sementara masih simulasi)')
-        // Nanti di sini akan redirect ke dashboard
-      } else {
+    try {
+      await signInWithEmailAndPassword(auth, email, password)
+	  // Redirect otomatis ditangani oleh App.tsx
+    } catch (err: any) {
+      console.error(err)
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
         setError('Email atau password salah')
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Terlalu banyak percobaan. Coba lagi nanti.')
+      } else {
+        setError('Terjadi kesalahan. Coba lagi.')
       }
+    } finally {
       setLoading(false)
-    }, 1000)
+    }
   }
 
   return (
@@ -50,7 +57,7 @@ export default function Login() {
               onChange={(e) => setEmail(e.target.value)}
               required
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-              placeholder="admin@ruangkuis.com"
+              placeholder="email@contoh.com"
             />
           </div>
 
