@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { collection, addDoc, getDocs, deleteDoc, doc, orderBy, query, serverTimestamp } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import { Question } from '../types/question'
+import type { Question } from '../types/question'
 import { Link } from 'react-router-dom'
 
 export default function Questions() {
