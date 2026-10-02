@@ -23,7 +23,8 @@ Update file ini setiap kali ada progress berarti.
 - [x] Membuat halaman **Dashboard Admin**
 - [x] Proteksi route + Logout
 - [x] Setup **Firestore Database**
-- [x] Fitur **Kelola Soal** (lihat, tambah, hapus, **edit**)
+- [x] Fitur **Kelola Soal** (lihat, tambah, edit, hapus)
+- [x] Fitur **Import Soal** dari file (JSON, CSV, Excel)
 
 ### Keputusan
 - Frontend: Vite + React + TypeScript + Tailwind CSS

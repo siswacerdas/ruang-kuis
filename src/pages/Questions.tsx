@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react'
-import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, orderBy, query, serverTimestamp } from 'firebase/firestore'
+import { useEffect, useState, useRef } from 'react'
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, orderBy, query, serverTimestamp, writeBatch } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import type { Question } from '../types/question'
 import { Link } from 'react-router-dom'
+import * as XLSX from 'xlsx'
 
 export default function Questions() {
   const [questions, setQuestions] = useState<Question[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Form state
   const [questionText, setQuestionText] = useState('')
@@ -56,7 +59,6 @@ export default function Questions() {
     setEditingId(q.id || null)
     setShowForm(true)
     setError('')
-    // Scroll ke atas form
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -77,14 +79,12 @@ export default function Questions() {
     setSaving(true)
     try {
       if (editingId) {
-        // Mode Edit
         await updateDoc(doc(db, 'questions', editingId), {
           question: questionText.trim(),
           options: options.map(o => o.trim()),
           correctAnswer
         })
       } else {
-        // Mode Tambah
         await addDoc(collection(db, 'questions'), {
           question: questionText.trim(),
           options: options.map(o => o.trim()),
@@ -116,6 +116,128 @@ export default function Questions() {
     }
   }
 
+  // ========== IMPORT SOAL ==========
+  const parseCorrectAnswer = (value: any): number => {
+    if (typeof value === 'number') return value
+    if (typeof value === 'string') {
+      const upper = value.trim().toUpperCase()
+      if (upper === 'A') return 0
+      if (upper === 'B') return 1
+      if (upper === 'C') return 2
+      if (upper === 'D') return 3
+      const num = parseInt(value, 10)
+      if (!isNaN(num) && num >= 0 && num <= 3) return num
+    }
+    return 0
+  }
+
+  const normalizeQuestion = (item: any): Question | null => {
+    try {
+      const question = item.question || item.Pertanyaan || item.pertanyaan || ''
+      if (!question.trim()) return null
+
+      let options: string[] = []
+
+      if (Array.isArray(item.options)) {
+        options = item.options
+      } else {
+        options = [
+          item.optionA || item.A || item.pilihanA || item['Pilihan A'] || '',
+          item.optionB || item.B || item.pilihanB || item['Pilihan B'] || '',
+          item.optionC || item.C || item.pilihanC || item['Pilihan C'] || '',
+          item.optionD || item.D || item.pilihanD || item['Pilihan D'] || ''
+        ]
+      }
+
+      if (options.length < 4 || options.some(o => !String(o).trim())) return null
+
+      const correctAnswer = parseCorrectAnswer(
+        item.correctAnswer ?? item.jawaban ?? item.Jawaban ?? item.correct ?? 0
+      )
+
+      return {
+        question: String(question).trim(),
+        options: options.map(o => String(o).trim()),
+        correctAnswer
+      }
+    } catch {
+      return null
+    }
+  }
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setImporting(true)
+    setError('')
+
+    try {
+      const fileName = file.name.toLowerCase()
+      let rawData: any[] = []
+
+      if (fileName.endsWith('.json')) {
+        const text = await file.text()
+        const parsed = JSON.parse(text)
+        rawData = Array.isArray(parsed) ? parsed : [parsed]
+      } else if (fileName.endsWith('.csv')) {
+        const text = await file.text()
+        const workbook = XLSX.read(text, { type: 'string' })
+        const sheet = workbook.Sheets[workbook.SheetNames[0]]
+        rawData = XLSX.utils.sheet_to_json(sheet)
+      } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        const data = await file.arrayBuffer()
+        const workbook = XLSX.read(data)
+        const sheet = workbook.Sheets[workbook.SheetNames[0]]
+        rawData = XLSX.utils.sheet_to_json(sheet)
+      } else {
+        alert('Format file tidak didukung. Gunakan .json, .csv, atau .xlsx')
+        return
+      }
+
+      const validQuestions: Question[] = []
+      for (const item of rawData) {
+        const q = normalizeQuestion(item)
+        if (q) validQuestions.push(q)
+      }
+
+      if (validQuestions.length === 0) {
+        alert('Tidak ada soal valid yang ditemukan di file.')
+        return
+      }
+
+      // Simpan ke Firestore (batch)
+      const batch = writeBatch(db)
+      const colRef = collection(db, 'questions')
+
+      // Karena writeBatch terbatas 500, kita pakai addDoc satu per satu untuk aman
+      let successCount = 0
+      for (const q of validQuestions) {
+        try {
+          await addDoc(colRef, {
+            ...q,
+            createdAt: serverTimestamp()
+          })
+          successCount++
+        } catch (err) {
+          console.error('Gagal import satu soal:', err)
+        }
+      }
+
+      alert(`Berhasil mengimpor ${successCount} dari ${validQuestions.length} soal.`)
+      await fetchQuestions()
+    } catch (err) {
+      console.error(err)
+      alert('Gagal membaca file. Pastikan format file benar.')
+    } finally {
+      setImporting(false)
+      // Reset input file
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -127,19 +249,37 @@ export default function Questions() {
             </Link>
             <h1 className="text-xl font-bold text-gray-800">Kelola Soal</h1>
           </div>
-          <button
-            onClick={() => {
-              if (showForm) {
-                resetForm()
-              } else {
-                setShowForm(true)
-                setEditingId(null)
-              }
-            }}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm transition"
-          >
-            {showForm ? 'Tutup Form' : '+ Tambah Soal'}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Tombol Import */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+              className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-4 py-2 rounded-lg text-sm transition"
+            >
+              {importing ? 'Mengimpor...' : 'Import Soal'}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,.csv,.xlsx,.xls"
+              onChange={handleImportFile}
+              className="hidden"
+            />
+
+            <button
+              onClick={() => {
+                if (showForm) {
+                  resetForm()
+                } else {
+                  setShowForm(true)
+                  setEditingId(null)
+                }
+              }}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm transition"
+            >
+              {showForm ? 'Tutup Form' : '+ Tambah Soal'}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -243,7 +383,7 @@ export default function Questions() {
           {loading ? (
             <p className="text-gray-500">Memuat soal...</p>
           ) : questions.length === 0 ? (
-            <p className="text-gray-500">Belum ada soal. Klik "+ Tambah Soal" untuk mulai.</p>
+            <p className="text-gray-500">Belum ada soal. Klik "+ Tambah Soal" atau "Import Soal" untuk mulai.</p>
           ) : (
             <div className="space-y-4">
               {questions.map((q, idx) => (
