@@ -44,9 +44,9 @@ export default function Dashboard() {
               to="/questions"
               className="border border-gray-200 hover:border-indigo-400 hover:bg-indigo-50 rounded-xl p-6 transition"
             >
-              <h3 className="text-lg font-semibold text-gray-800">Kelola Soal</h3>
+              <h3 className="text-lg font-semibold text-gray-800">Tambah Soal</h3>
               <p className="text-sm text-gray-500 mt-1">
-                Tambah, lihat, dan hapus soal latihan
+                Tambah, lihat, edit, dan hapus soal latihan
               </p>
             </Link>
 
