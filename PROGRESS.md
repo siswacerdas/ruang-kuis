@@ -12,15 +12,18 @@ Update file ini setiap kali ada progress berarti.
 - [x] Membuat `README.md`
 - [x] Membuat `PROGRESS.md` (file ini)
 - [x] Membuat `docs/ANTI_REGRESSION.md`
+- [x] Memutuskan tech stack: **Vite + React + TypeScript + Tailwind CSS**
 
-### Keputusan sementara
-- Frontend: masih didiskusikan (Vite + React vs pure HTML/CSS/JS + GitHub Pages)
+### Keputusan
+- Frontend: Vite + React + TypeScript + Tailwind CSS
 - Backend: Firebase (Authentication + Firestore)
+- Hosting nanti: Firebase Hosting (atau GitHub Pages)
 - Prioritas pertama: Halaman Login Admin
 
 ### Selanjutnya
-- [ ] Menentukan tech stack final untuk frontend
-- [ ] Setup struktur dasar proyek
+- [ ] Setup project Vite di komputer lokal
+- [ ] Install Tailwind CSS
+- [ ] Push struktur dasar ke GitHub
 - [ ] Membuat halaman Login Admin
 - [ ] Setup Firebase Authentication
 
