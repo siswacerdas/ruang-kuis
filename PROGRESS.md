@@ -16,20 +16,22 @@ Update file ini setiap kali ada progress berarti.
 - [x] Setup project Vite + React + TypeScript
 - [x] Install dan konfigurasi Tailwind CSS
 - [x] Install React Router
-- [x] Membuat halaman **Login Admin** (UI + simulasi login)
+- [x] Membuat halaman **Login Admin** (UI)
+- [x] Setup Firebase project + Authentication (Email/Password)
+- [x] Hubungkan Firebase Auth ke aplikasi
+- [x] Login Admin berhasil menggunakan Firebase
 
 ### Keputusan
 - Frontend: Vite + React + TypeScript + Tailwind CSS
 - Backend: Firebase (Authentication + Firestore)
 - Hosting nanti: Firebase Hosting (atau GitHub Pages)
-- Prioritas pertama: Halaman Login Admin → **selesai (simulasi)**
 
 ### Selanjutnya
-- [ ] Setup Firebase project
-- [ ] Aktifkan Firebase Authentication (Email/Password)
-- [ ] Hubungkan Firebase ke aplikasi
-- [ ] Ganti simulasi login dengan Firebase Auth yang sebenarnya
-- [ ] Buat halaman Dashboard Admin (sederhana)
+- [ ] Membuat halaman Dashboard Admin (sederhana)
+- [ ] Proteksi route (hanya user yang login yang bisa akses dashboard)
+- [ ] Fitur Logout
+- [ ] Redirect otomatis setelah login berhasil
+- [ ] Setup Firestore (nanti untuk soal & data siswa)
 
 ---
 
