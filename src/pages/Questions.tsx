@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { collection, addDoc, getDocs, deleteDoc, doc, orderBy, query, serverTimestamp } from 'firebase/firestore'
+import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, orderBy, query, serverTimestamp } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import type { Question } from '../types/question'
 import { Link } from 'react-router-dom'
@@ -8,6 +8,7 @@ export default function Questions() {
   const [questions, setQuestions] = useState<Question[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   // Form state
   const [questionText, setQuestionText] = useState('')
@@ -37,8 +38,30 @@ export default function Questions() {
     fetchQuestions()
   }, [])
 
-  // Tambah soal baru
-  const handleAdd = async (e: React.FormEvent) => {
+  // Reset form
+  const resetForm = () => {
+    setQuestionText('')
+    setOptions(['', '', '', ''])
+    setCorrectAnswer(0)
+    setEditingId(null)
+    setError('')
+    setShowForm(false)
+  }
+
+  // Buka form untuk edit
+  const handleEdit = (q: Question) => {
+    setQuestionText(q.question)
+    setOptions([...q.options])
+    setCorrectAnswer(q.correctAnswer)
+    setEditingId(q.id || null)
+    setShowForm(true)
+    setError('')
+    // Scroll ke atas form
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // Tambah atau Update soal
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
@@ -53,20 +76,24 @@ export default function Questions() {
 
     setSaving(true)
     try {
-      await addDoc(collection(db, 'questions'), {
-        question: questionText.trim(),
-        options: options.map(o => o.trim()),
-        correctAnswer,
-        createdAt: serverTimestamp()
-      })
+      if (editingId) {
+        // Mode Edit
+        await updateDoc(doc(db, 'questions', editingId), {
+          question: questionText.trim(),
+          options: options.map(o => o.trim()),
+          correctAnswer
+        })
+      } else {
+        // Mode Tambah
+        await addDoc(collection(db, 'questions'), {
+          question: questionText.trim(),
+          options: options.map(o => o.trim()),
+          correctAnswer,
+          createdAt: serverTimestamp()
+        })
+      }
 
-      // Reset form
-      setQuestionText('')
-      setOptions(['', '', '', ''])
-      setCorrectAnswer(0)
-      setShowForm(false)
-
-      // Refresh daftar
+      resetForm()
       await fetchQuestions()
     } catch (err) {
       console.error(err)
@@ -101,7 +128,14 @@ export default function Questions() {
             <h1 className="text-xl font-bold text-gray-800">Kelola Soal</h1>
           </div>
           <button
-            onClick={() => setShowForm(!showForm)}
+            onClick={() => {
+              if (showForm) {
+                resetForm()
+              } else {
+                setShowForm(true)
+                setEditingId(null)
+              }
+            }}
             className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm transition"
           >
             {showForm ? 'Tutup Form' : '+ Tambah Soal'}
@@ -110,10 +144,12 @@ export default function Questions() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-8">
-        {/* Form Tambah Soal */}
+        {/* Form Tambah / Edit Soal */}
         {showForm && (
           <div className="bg-white rounded-xl shadow-sm p-6 mb-8">
-            <h2 className="text-lg font-semibold mb-4">Tambah Soal Baru</h2>
+            <h2 className="text-lg font-semibold mb-4">
+              {editingId ? 'Edit Soal' : 'Tambah Soal Baru'}
+            </h2>
 
             {error && (
               <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg mb-4">
@@ -121,7 +157,7 @@ export default function Questions() {
               </div>
             )}
 
-            <form onSubmit={handleAdd} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Pertanyaan
@@ -175,13 +211,25 @@ export default function Questions() {
                 ))}
               </div>
 
-              <button
-                type="submit"
-                disabled={saving}
-                className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white px-6 py-2.5 rounded-lg transition"
-              >
-                {saving ? 'Menyimpan...' : 'Simpan Soal'}
-              </button>
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white px-6 py-2.5 rounded-lg transition"
+                >
+                  {saving ? 'Menyimpan...' : (editingId ? 'Update Soal' : 'Simpan Soal')}
+                </button>
+
+                {editingId && (
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-6 py-2.5 rounded-lg transition"
+                  >
+                    Batal
+                  </button>
+                )}
+              </div>
             </form>
           </div>
         )}
@@ -220,12 +268,20 @@ export default function Questions() {
                         ))}
                       </div>
                     </div>
-                    <button
-                      onClick={() => q.id && handleDelete(q.id)}
-                      className="text-red-500 hover:text-red-700 text-sm"
-                    >
-                      Hapus
-                    </button>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => handleEdit(q)}
+                        className="text-indigo-600 hover:text-indigo-800 text-sm"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => q.id && handleDelete(q.id)}
+                        className="text-red-500 hover:text-red-700 text-sm"
+                      >
+                        Hapus
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
