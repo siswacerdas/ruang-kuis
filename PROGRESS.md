@@ -5,6 +5,31 @@ Update file ini setiap kali ada progress berarti.
 
 ---
 
+## 2026-10-03 (lanjutan – UI/UX refresh)
+
+### Yang sudah dilakukan
+- [x] Redesign UI/UX admin panel dengan referensi modern dashboard
+- [x] Membuat komponen Layout bersama (sidebar + top bar + mobile nav)
+- [x] Memperbarui halaman Login (split panel, show/hide password, visual lebih polished)
+- [x] Memperbarui halaman Dashboard (card statistik, welcome banner, tips)
+- [x] Memperbarui halaman Kelola Soal (form, daftar soal, tombol aksi, empty state)
+- [x] Konsistensi warna, radius, shadow, dan tipografi di seluruh admin UI
+
+### Keputusan UI
+- Sidebar kiri dengan navigasi Dashboard & Kelola Soal
+- Background soft `#F5F6FA`, card putih rounded-2xl, aksen indigo/violet
+- Icon SVG inline (tanpa dependency tambahan)
+- Responsive: sidebar desktop, tab navigasi mobile
+
+### Selanjutnya (Prioritas)
+- [ ] Halaman untuk siswa mengerjakan latihan soal
+- [ ] Menampilkan skor / hasil latihan
+- [ ] Sistem role (Admin vs Siswa) — opsional
+- [ ] Kunci Firestore Security Rules (saat ini masih test mode)
+- [ ] Deploy ke Firebase Hosting
+
+---
+
 ## 2026-10-03
 
 ### Yang sudah dilakukan
@@ -49,4 +74,4 @@ Update file ini setiap kali ada progress berarti.
 ---
 
 *Catatan: Selalu update file ini setelah menyelesaikan task penting.*
-*Update terakhir: 2026-10-03*
+*Update terakhir: 2026-10-03 (UI/UX refresh)*
