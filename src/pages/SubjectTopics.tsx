@@ -234,6 +234,7 @@ export default function SubjectTopics() {
 
   const onBookChange = (bookId: string) => {
     setFormBookId(bookId)
+    // Saat ganti tautan di mode edit/new: tawarkan salin TP usulan (tidak paksa timpa jika sudah ada)
     const book = materials.find((m) => m.id === bookId)
     if (book?.suggestedTpCodes?.length && formTpCodes.length === 0) {
       setFormTpCodes([...book.suggestedTpCodes])
@@ -287,6 +288,7 @@ export default function SubjectTopics() {
     if (!confirm(msg)) return
     try {
       const qSnap = await getDocs(query(collection(db, 'questions'), where('topicId', '==', selected.id)))
+      // Batch delete soal (chunk 400)
       const ids = qSnap.docs.map((d) => d.id)
       for (let i = 0; i < ids.length; i += 400) {
         const batch = writeBatch(db)
@@ -521,6 +523,7 @@ export default function SubjectTopics() {
         <div className="lg:col-span-8 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col min-h-[22rem] lg:h-[calc(100vh-12rem)]">
           {mode === 'new' || (selected && isEditing) || selected ? (
             <>
+              {/* Toolbar detail */}
               <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap shrink-0">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-gray-900 truncate">
@@ -582,6 +585,7 @@ export default function SubjectTopics() {
               </div>
 
               <div className="flex-1 min-h-0 overflow-y-auto p-5 md:p-6 space-y-6">
+                {/* --- Nama --- */}
                 <section>
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
                     Nama materi bank soal
@@ -603,6 +607,7 @@ export default function SubjectTopics() {
                   </p>
                 </section>
 
+                {/* --- Tautan materi buku --- */}
                 <section className="rounded-xl border border-gray-100 bg-gray-50/80 p-4">
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
@@ -689,6 +694,7 @@ export default function SubjectTopics() {
                   )}
                 </section>
 
+                {/* --- Kode TP --- */}
                 <section>
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
@@ -697,6 +703,7 @@ export default function SubjectTopics() {
                     <span className="text-[11px] text-gray-400">{displayCodes.length} dipilih</span>
                   </div>
 
+                  {/* Chip terpilih */}
                   {displayCodes.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5 mb-3">
                       {displayCodes.map((code) => {
@@ -728,6 +735,7 @@ export default function SubjectTopics() {
                     </p>
                   )}
 
+                  {/* Daftar rumusan (view) */}
                   {!isEditing && displayCodes.length > 0 && (
                     <ul className="space-y-2 mb-1">
                       {displayCodes.map((code) => {
@@ -757,6 +765,7 @@ export default function SubjectTopics() {
                     </ul>
                   )}
 
+                  {/* Picker TP (edit/new) */}
                   {isEditing && (
                     <div className="rounded-xl border border-gray-200 overflow-hidden">
                       <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex flex-wrap items-center gap-2">
@@ -829,6 +838,7 @@ export default function SubjectTopics() {
                   )}
                 </section>
 
+                {/* --- Aksi cepat (view) --- */}
                 {!isEditing && selected && (
                   <section className="rounded-xl border border-dashed border-gray-200 px-4 py-3 flex flex-wrap gap-2 items-center">
                     <span className="text-xs text-gray-400 mr-1">Lanjut:</span>
