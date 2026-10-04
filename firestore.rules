@@ -6,25 +6,21 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Materi (topics) — siswa tidak perlu list, admin penuh
     match /topics/{topicId} {
       allow read: if isAdmin();
       allow write: if isAdmin();
     }
 
-    // Soal — siswa perlu baca saat mengerjakan (by id / query in)
     match /questions/{questionId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // Paket latihan — siswa cari by token (query where token ==)
     match /latihan/{latihanId} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // Hasil pengerjaan — siswa hanya create; admin baca/kelola
     match /attempts/{attemptId} {
       allow create: if true
         && request.resource.data.keys().hasAll([
@@ -39,7 +35,14 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // Default: tolak
+    // Daftar siswa — admin kelola; siswa terautentikasi boleh baca miliknya (by email)
+    match /students/{studentId} {
+      allow read: if isAdmin()
+        || (request.auth != null
+            && resource.data.email == request.auth.token.email);
+      allow write: if isAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

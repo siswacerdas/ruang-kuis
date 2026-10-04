@@ -1,38 +1,62 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { collection, getDocs, query, where } from 'firebase/firestore'
-import { db } from '../lib/firebase'
+import { signOut } from 'firebase/auth'
+import { auth, db } from '../lib/firebase'
 import { useNavigate, Link } from 'react-router-dom'
-import {
-  resolveLatihanStatus,
-  type LatihanPaket,
-} from '../types/question'
+import { resolveLatihanStatus, type LatihanPaket } from '../types/question'
+
+interface StudentSession {
+  studentId: string
+  fullName: string
+  nickname?: string
+  email: string
+  className?: string
+}
 
 export default function KerjakanEntry() {
   const navigate = useNavigate()
+  const [student, setStudent] = useState<StudentSession | null>(null)
   const [token, setToken] = useState('')
-  const [name, setName] = useState('')
-  const [studentClass, setStudentClass] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
+  useEffect(() => {
+    const raw = sessionStorage.getItem('rk_student')
+    if (!raw) {
+      navigate('/kerjakan')
+      return
+    }
+    try {
+      setStudent(JSON.parse(raw))
+    } catch {
+      navigate('/kerjakan')
+    }
+  }, [navigate])
+
+  const handleLogout = async () => {
+    sessionStorage.removeItem('rk_student')
+    sessionStorage.removeItem('rk_session')
+    try {
+      await signOut(auth)
+    } catch {
+      /* ignore */
+    }
+    navigate('/kerjakan')
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!student) return
     setError('')
     const t = token.trim().toUpperCase()
     if (!t) {
       setError('Masukkan token latihan')
       return
     }
-    if (!name.trim()) {
-      setError('Masukkan nama lengkap')
-      return
-    }
 
     setLoading(true)
     try {
-      const snap = await getDocs(
-        query(collection(db, 'latihan'), where('token', '==', t))
-      )
+      const snap = await getDocs(query(collection(db, 'latihan'), where('token', '==', t)))
       if (snap.empty) {
         setError('Token tidak ditemukan. Periksa lagi dengan guru.')
         return
@@ -44,7 +68,6 @@ export default function KerjakanEntry() {
         setError('Latihan ini belum dibuka atau sudah diarsipkan.')
         return
       }
-
       const resolved = resolveLatihanStatus(paket)
       if (resolved === 'scheduled') {
         setError('Latihan belum dimulai. Tunggu sesuai jadwal.')
@@ -55,13 +78,13 @@ export default function KerjakanEntry() {
         return
       }
 
-      // Simpan identitas sesi di sessionStorage
       sessionStorage.setItem(
         'rk_session',
         JSON.stringify({
           latihanId: paket.id,
-          studentName: name.trim(),
-          studentClass: studentClass.trim() || undefined,
+          studentName: student.fullName,
+          studentId: student.studentId,
+          studentClass: student.className || '5A',
           token: t,
         })
       )
@@ -74,67 +97,69 @@ export default function KerjakanEntry() {
     }
   }
 
+  if (!student) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F5F6FA]">
+        <p className="text-gray-500 text-sm">Memuat...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[#F5F6FA] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center mx-auto mb-4 shadow-sm">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">Ruang Kuis</h1>
-          <p className="text-sm text-gray-500 mt-1">Masuk dengan token dari guru</p>
+        <div className="text-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Masukkan Token</h1>
+          <p className="text-sm text-gray-500 mt-1">Token dari guru untuk latihan hari ini</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
-          {error && (
-            <div className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-3 rounded-xl">{error}</div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Token latihan</label>
-            <input
-              type="text"
-              value={token}
-              onChange={(e) => setToken(e.target.value.toUpperCase())}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none font-mono tracking-widest text-center text-lg"
-              placeholder="ABC123"
-              maxLength={12}
-              autoFocus
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Nama lengkap</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none"
-              placeholder="Nama kamu"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Kelas <span className="text-gray-400 font-normal">(opsional)</span>
-            </label>
-            <input
-              type="text"
-              value={studentClass}
-              onChange={(e) => setStudentClass(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none"
-              placeholder="Contoh: 5A"
-            />
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-indigo-50 border border-indigo-100">
+            <div className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center text-sm font-semibold shrink-0">
+              {student.fullName
+                .split(/\s+/)
+                .slice(0, 2)
+                .map((w) => w[0])
+                .join('')
+                .toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-gray-900 truncate">{student.fullName}</p>
+              <p className="text-xs text-gray-500 truncate">
+                {student.nickname ? `${student.nickname} · ` : ''}
+                Kelas {student.className || '5A'}
+              </p>
+            </div>
+            <button type="button" onClick={handleLogout} className="text-xs text-gray-500 hover:text-red-600 shrink-0">
+              Keluar
+            </button>
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-3 rounded-xl transition shadow-sm shadow-indigo-200"
-          >
-            {loading ? 'Memeriksa...' : 'Mulai Latihan'}
-          </button>
-        </form>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-3 rounded-xl">{error}</div>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Token latihan</label>
+              <input
+                type="text"
+                value={token}
+                onChange={(e) => setToken(e.target.value.toUpperCase())}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none font-mono tracking-widest text-center text-lg"
+                placeholder="ABC123"
+                maxLength={12}
+                autoFocus
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-3 rounded-xl transition"
+            >
+              {loading ? 'Memeriksa...' : 'Mulai Latihan'}
+            </button>
+          </form>
+        </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">
           <Link to="/login" className="hover:text-indigo-600">Login admin</Link>

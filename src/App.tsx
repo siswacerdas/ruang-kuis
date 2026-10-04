@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
-import { auth } from './lib/firebase'
+import { collection, getDocs, query, where } from 'firebase/firestore'
+import { auth, db } from './lib/firebase'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import BankSoal from './pages/BankSoal'
@@ -11,17 +12,32 @@ import LatihanSoal from './pages/LatihanSoal'
 import LatihanForm from './pages/LatihanForm'
 import LatihanHasil from './pages/LatihanHasil'
 import Laporan from './pages/Laporan'
+import SiswaList from './pages/SiswaList'
+import SiswaLogin from './pages/SiswaLogin'
 import KerjakanEntry from './pages/KerjakanEntry'
 import KerjakanQuiz from './pages/KerjakanQuiz'
 import KerjakanResult from './pages/KerjakanResult'
 
 function App() {
   const [user, setUser] = useState<any>(null)
+  const [isStudent, setIsStudent] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser)
+      if (currentUser?.email) {
+        try {
+          const snap = await getDocs(
+            query(collection(db, 'students'), where('email', '==', currentUser.email.toLowerCase()))
+          )
+          setIsStudent(!snap.empty)
+        } catch {
+          setIsStudent(false)
+        }
+      } else {
+        setIsStudent(false)
+      }
       setLoading(false)
     })
     return () => unsubscribe()
@@ -35,27 +51,46 @@ function App() {
     )
   }
 
+  const isAdmin = !!user && !isStudent
+
   return (
     <BrowserRouter>
       <Routes>
-        {/* Publik — siswa */}
-        <Route path="/kerjakan" element={<KerjakanEntry />} />
+        {/* Siswa */}
+        <Route path="/kerjakan" element={<SiswaLogin />} />
+        <Route path="/kerjakan/token" element={<KerjakanEntry />} />
         <Route path="/kerjakan/hasil" element={<KerjakanResult />} />
         <Route path="/kerjakan/:latihanId" element={<KerjakanQuiz />} />
 
-        {/* Admin */}
-        <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login />} />
-        <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
-        <Route path="/bank-soal" element={user ? <BankSoal /> : <Navigate to="/login" />} />
-        <Route path="/bank-soal/:subjectKey" element={user ? <SubjectTopics /> : <Navigate to="/login" />} />
-        <Route path="/bank-soal/:subjectKey/:topicId" element={user ? <TopicQuestions /> : <Navigate to="/login" />} />
-        <Route path="/latihan-soal" element={user ? <LatihanSoal /> : <Navigate to="/login" />} />
-        <Route path="/laporan" element={user ? <Laporan /> : <Navigate to="/login" />} />
-        <Route path="/latihan-soal/baru" element={user ? <LatihanForm /> : <Navigate to="/login" />} />
-        <Route path="/latihan-soal/:id/hasil" element={user ? <LatihanHasil /> : <Navigate to="/login" />} />
-        <Route path="/latihan-soal/:id" element={user ? <LatihanForm /> : <Navigate to="/login" />} />
+        {/* Admin auth */}
+        <Route
+          path="/login"
+          element={
+            isAdmin ? <Navigate to="/dashboard" /> : isStudent ? <Navigate to="/kerjakan/token" /> : <Login />
+          }
+        />
+
+        {/* Admin pages */}
+        <Route path="/dashboard" element={isAdmin ? <Dashboard /> : <Navigate to={isStudent ? '/kerjakan/token' : '/login'} />} />
+        <Route path="/bank-soal" element={isAdmin ? <BankSoal /> : <Navigate to="/login" />} />
+        <Route path="/bank-soal/:subjectKey" element={isAdmin ? <SubjectTopics /> : <Navigate to="/login" />} />
+        <Route path="/bank-soal/:subjectKey/:topicId" element={isAdmin ? <TopicQuestions /> : <Navigate to="/login" />} />
+        <Route path="/latihan-soal" element={isAdmin ? <LatihanSoal /> : <Navigate to="/login" />} />
+        <Route path="/latihan-soal/baru" element={isAdmin ? <LatihanForm /> : <Navigate to="/login" />} />
+        <Route path="/latihan-soal/:id/hasil" element={isAdmin ? <LatihanHasil /> : <Navigate to="/login" />} />
+        <Route path="/latihan-soal/:id" element={isAdmin ? <LatihanForm /> : <Navigate to="/login" />} />
+        <Route path="/laporan" element={isAdmin ? <Laporan /> : <Navigate to="/login" />} />
+        <Route path="/siswa" element={isAdmin ? <SiswaList /> : <Navigate to="/login" />} />
+
         <Route path="/questions" element={<Navigate to="/bank-soal" replace />} />
-        <Route path="/" element={<Navigate to={user ? '/dashboard' : '/kerjakan'} />} />
+        <Route
+          path="/"
+          element={
+            <Navigate
+              to={isAdmin ? '/dashboard' : isStudent ? '/kerjakan/token' : '/kerjakan'}
+            />
+          }
+        />
       </Routes>
     </BrowserRouter>
   )

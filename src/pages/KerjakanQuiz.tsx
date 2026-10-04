@@ -23,6 +23,7 @@ import {
 interface Session {
   latihanId: string
   studentName: string
+  studentId?: string
   studentClass?: string
   token: string
 }
@@ -210,7 +211,8 @@ export default function KerjakanQuiz() {
         latihanId: paket.id,
         latihanTitle: paket.title,
         studentName: session.studentName,
-        studentClass: session.studentClass || null,
+        studentId: session.studentId || null,
+        studentClass: session.studentClass || '5A',
         answers: answerList,
         score,
         total,
