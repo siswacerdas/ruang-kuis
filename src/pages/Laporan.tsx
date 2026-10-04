@@ -121,6 +121,9 @@ export default function Laporan() {
   const [tab, setTab] = useState<TabKey>('ringkasan')
   const [filterSubject, setFilterSubject] = useState<SubjectKey | ''>('')
   const [filterLatihan, setFilterLatihan] = useState('')
+  const [searchQ, setSearchQ] = useState('')
+  const [filterClass, setFilterClass] = useState('')
+  const [filterScore, setFilterScore] = useState<'all' | 'pass' | 'fail'>('all')
   const [trendRange, setTrendRange] = useState<TrendRange>('month')
   const [selectedStudentKey, setSelectedStudentKey] = useState<string | null>(null)
 
@@ -157,16 +160,34 @@ export default function Laporan() {
     return m
   }, [pakets])
 
+  const classOptions = useMemo(() => {
+    const set = new Set<string>()
+    attempts.forEach((a) => {
+      const c = (a.studentClass || '').trim()
+      if (c) set.add(c)
+    })
+    return [...set].sort((a, b) => a.localeCompare(b, 'id'))
+  }, [attempts])
+
   const filteredAttempts = useMemo(() => {
+    const q = searchQ.trim().toLowerCase()
     return attempts.filter((a) => {
       if (filterLatihan && a.latihanId !== filterLatihan) return false
       if (filterSubject) {
         const p = paketMap.get(a.latihanId)
         if (!p || p.subjectKey !== filterSubject) return false
       }
+      if (filterClass && (a.studentClass || '').trim() !== filterClass) return false
+      if (filterScore === 'pass' && (a.percent || 0) < 70) return false
+      if (filterScore === 'fail' && (a.percent || 0) >= 70) return false
+      if (q) {
+        const name = (a.studentName || '').toLowerCase()
+        const title = (a.latihanTitle || paketMap.get(a.latihanId)?.title || '').toLowerCase()
+        if (!name.includes(q) && !title.includes(q)) return false
+      }
       return true
     })
-  }, [attempts, filterLatihan, filterSubject, paketMap])
+  }, [attempts, filterLatihan, filterSubject, filterClass, filterScore, searchQ, paketMap])
 
   const stats = useMemo(() => {
     const list = filteredAttempts
@@ -358,55 +379,97 @@ export default function Laporan() {
 
   return (
     <Layout title="Laporan" subtitle="Progress siswa dari hasil kuis — skor, waktu pengerjaan, dan capaian TP">
-      {/* Filter */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-5 flex flex-wrap gap-3 items-end">
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Mata pelajaran</label>
-          <select
-            value={filterSubject}
-            onChange={(e) => {
-              setFilterSubject(e.target.value as SubjectKey | '')
-              setFilterLatihan('')
-            }}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white min-w-[160px]"
-          >
-            <option value="">Semua mapel</option>
-            {SUBJECTS.map((s) => (
-              <option key={s.key} value={s.key}>
-                {s.shortName}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-gray-500 mb-1">Paket latihan</label>
-          <select
-            value={filterLatihan}
-            onChange={(e) => setFilterLatihan(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white min-w-[200px] max-w-[280px]"
-          >
-            <option value="">Semua paket</option>
-            {pakets
-              .filter((p) => !filterSubject || p.subjectKey === filterSubject)
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.title}
+      {/* Filter + pencarian */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-5 space-y-3">
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="flex-1 min-w-[180px]">
+            <label className="block text-xs text-gray-500 mb-1">Cari siswa / judul latihan</label>
+            <input
+              type="search"
+              value={searchQ}
+              onChange={(e) => setSearchQ(e.target.value)}
+              placeholder="Ketik nama atau judul paket…"
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Mata pelajaran</label>
+            <select
+              value={filterSubject}
+              onChange={(e) => {
+                setFilterSubject(e.target.value as SubjectKey | '')
+                setFilterLatihan('')
+              }}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white min-w-[140px]"
+            >
+              <option value="">Semua mapel</option>
+              {SUBJECTS.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.shortName}
                 </option>
               ))}
-          </select>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Paket latihan</label>
+            <select
+              value={filterLatihan}
+              onChange={(e) => setFilterLatihan(e.target.value)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white min-w-[180px] max-w-[260px]"
+            >
+              <option value="">Semua paket</option>
+              {pakets
+                .filter((p) => !filterSubject || p.subjectKey === filterSubject)
+                .map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.title}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Kelas</label>
+            <select
+              value={filterClass}
+              onChange={(e) => setFilterClass(e.target.value)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white min-w-[100px]"
+            >
+              <option value="">Semua</option>
+              {classOptions.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Skor</label>
+            <select
+              value={filterScore}
+              onChange={(e) => setFilterScore(e.target.value as 'all' | 'pass' | 'fail')}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white min-w-[120px]"
+            >
+              <option value="all">Semua</option>
+              <option value="pass">≥ 70%</option>
+              <option value="fail">&lt; 70%</option>
+            </select>
+          </div>
+          {(filterSubject || filterLatihan || searchQ || filterClass || filterScore !== 'all') && (
+            <button
+              type="button"
+              onClick={() => {
+                setFilterSubject('')
+                setFilterLatihan('')
+                setSearchQ('')
+                setFilterClass('')
+                setFilterScore('all')
+              }}
+              className="text-xs text-gray-500 hover:text-indigo-600 pb-2"
+            >
+              Reset
+            </button>
+          )}
         </div>
-        {(filterSubject || filterLatihan) && (
-          <button
-            type="button"
-            onClick={() => {
-              setFilterSubject('')
-              setFilterLatihan('')
-            }}
-            className="text-xs text-gray-500 hover:text-indigo-600 pb-2"
-          >
-            Reset filter
-          </button>
-        )}
       </div>
 
       {/* Stat cards — pola referensi dashboard */}
