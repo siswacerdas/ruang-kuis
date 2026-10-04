@@ -35,11 +35,9 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // Daftar siswa — admin kelola; siswa terautentikasi boleh baca miliknya (by email)
+    // Baca daftar untuk dropdown login (email fiktif); tulis hanya admin
     match /students/{studentId} {
-      allow read: if isAdmin()
-        || (request.auth != null
-            && resource.data.email == request.auth.token.email);
+      allow read: if true;
       allow write: if isAdmin();
     }
 
