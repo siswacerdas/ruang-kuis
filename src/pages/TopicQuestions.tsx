@@ -357,11 +357,13 @@ function sanitizeStimulusHtml(html: string): string {
         const fw = el.style.fontWeight
         const fs = el.style.fontStyle
         const td = el.style.textDecoration
+        const ta = el.style.textAlign
         el.removeAttribute('style')
         if (lh) el.style.lineHeight = lh
         if (fw) el.style.fontWeight = fw
         if (fs) el.style.fontStyle = fs
         if (td) el.style.textDecoration = td
+        if (ta) el.style.textAlign = ta
         if (el.classList.contains('math-tex')) {
           el.setAttribute('class', 'math-tex')
         } else {
@@ -382,13 +384,15 @@ function StimulusToolbar({
   onCmd,
   onEquation,
   onLineHeight,
+  onPreview,
 }: {
   onCmd: (cmd: string, val?: string) => void
   onEquation: () => void
   onLineHeight: (v: string) => void
+  onPreview?: () => void
 }) {
   const btn =
-    'px-2 py-1 rounded border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 bg-white'
+    'px-2 py-1 rounded border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 bg-white min-w-[1.75rem]'
   return (
     <div className="flex flex-wrap items-center gap-1 mb-1.5">
       <button type="button" className={btn} title="Tebal" onMouseDown={(e) => { e.preventDefault(); onCmd('bold') }}>
@@ -401,12 +405,25 @@ function StimulusToolbar({
         <span className="underline">U</span>
       </button>
       <span className="w-px h-5 bg-gray-200 mx-0.5" />
-      <button type="button" className={btn} title="Paragraf" onMouseDown={(e) => { e.preventDefault(); onCmd('formatBlock', 'p') }}>
+      <button type="button" className={btn} title="Rata kiri" onMouseDown={(e) => { e.preventDefault(); onCmd('justifyLeft') }}>
+        ⬅
+      </button>
+      <button type="button" className={btn} title="Rata tengah" onMouseDown={(e) => { e.preventDefault(); onCmd('justifyCenter') }}>
+        ↔
+      </button>
+      <button type="button" className={btn} title="Rata kanan" onMouseDown={(e) => { e.preventDefault(); onCmd('justifyRight') }}>
+        ➡
+      </button>
+      <button type="button" className={btn} title="Rata kiri-kanan" onMouseDown={(e) => { e.preventDefault(); onCmd('justifyFull') }}>
+        ⬌
+      </button>
+      <span className="w-px h-5 bg-gray-200 mx-0.5" />
+      <button type="button" className={btn} title="Paragraf baru" onMouseDown={(e) => { e.preventDefault(); onCmd('formatBlock', 'p') }}>
         ¶
       </button>
       <select
         className="text-xs border border-gray-200 rounded px-1.5 py-1 bg-white"
-        title="Jarak baris"
+        title="Jarak baris (paragraf terpilih atau seluruh teks)"
         defaultValue=""
         onMouseDown={(e) => e.stopPropagation()}
         onChange={(e) => {
@@ -433,6 +450,19 @@ function StimulusToolbar({
       >
         ƒx
       </button>
+      {onPreview && (
+        <button
+          type="button"
+          className={btn + ' text-indigo-700 border-indigo-200 ml-auto'}
+          title="Preview stimulus saja"
+          onMouseDown={(e) => {
+            e.preventDefault()
+            onPreview()
+          }}
+        >
+          👁 Preview
+        </button>
+      )}
     </div>
   )
 }
@@ -440,9 +470,11 @@ function StimulusToolbar({
 function StimulusRichEditor({
   value,
   onChange,
+  onPreview,
 }: {
   value: string
   onChange: (html: string) => void
+  onPreview?: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const skip = useRef(false)
@@ -473,17 +505,49 @@ function StimulusRichEditor({
   const setLineHeight = (lh: string) => {
     ref.current?.focus()
     const sel = window.getSelection()
-    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
-      document.execCommand('styleWithCSS', false, 'true')
-      // wrap via surround or apply to block
-      document.execCommand('formatBlock', false, 'p')
+    if (sel && sel.rangeCount > 0 && ref.current) {
+      const range = sel.getRangeAt(0)
+      // Kumpulkan blok paragraf yang terpotong seleksi
+      const blocks = new Set<HTMLElement>()
+      if (!sel.isCollapsed) {
+        const walker = document.createTreeWalker(ref.current, NodeFilter.SHOW_ELEMENT)
+        let n = walker.nextNode()
+        while (n) {
+          const el = n as HTMLElement
+          if ((el.tagName === 'P' || el.tagName === 'DIV') && el !== ref.current) {
+            try {
+              if (range.intersectsNode(el)) blocks.add(el)
+            } catch { /* ignore */ }
+          }
+          n = walker.nextNode()
+        }
+        // Jika seleksi di dalam satu teks tanpa <p>, bungkus dulu
+        if (blocks.size === 0) {
+          document.execCommand('formatBlock', false, 'p')
+          const parent = sel.anchorNode?.parentElement
+          if (parent && parent !== ref.current && (parent.tagName === 'P' || parent.tagName === 'DIV')) {
+            blocks.add(parent)
+          }
+        }
+        blocks.forEach((el) => {
+          el.style.lineHeight = lh
+        })
+        if (blocks.size > 0) {
+          emit()
+          return
+        }
+      }
     }
+    // Tanpa seleksi: terapkan ke semua paragraf; fallback ke container
     if (ref.current) {
-      ref.current.style.lineHeight = lh
       const paragraphs = ref.current.querySelectorAll('p, div')
-      paragraphs.forEach((p) => {
-        ;(p as HTMLElement).style.lineHeight = lh
-      })
+      if (paragraphs.length > 0) {
+        paragraphs.forEach((p) => {
+          ;(p as HTMLElement).style.lineHeight = lh
+        })
+      } else {
+        ref.current.style.lineHeight = lh
+      }
       emit()
     }
   }
@@ -503,7 +567,7 @@ function StimulusRichEditor({
 
   return (
     <div>
-      <StimulusToolbar onCmd={run} onEquation={insertEquation} onLineHeight={setLineHeight} />
+      <StimulusToolbar onCmd={run} onEquation={insertEquation} onLineHeight={setLineHeight} onPreview={onPreview} />
       <div
         ref={ref}
         contentEditable
@@ -583,6 +647,7 @@ export default function TopicQuestions() {
   const [imageBusy, setImageBusy] = useState(false)
   const [imageInfo, setImageInfo] = useState('')
   const [showPreview, setShowPreview] = useState(false)
+  const [showStimulusPreview, setShowStimulusPreview] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [checkedIds, setCheckedIds] = useState<string[]>([])
 
@@ -1117,6 +1182,7 @@ export default function TopicQuestions() {
                 <StimulusRichEditor
                   value={form.stimulus}
                   onChange={(html) => setForm({ ...form, stimulus: html })}
+                  onPreview={() => setShowStimulusPreview(true)}
                 />
               </div>
               <div>
@@ -1364,6 +1430,7 @@ export default function TopicQuestions() {
         </div>
       )}
 
+      {!showEditor && (
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         <div className="lg:col-span-4 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
@@ -1522,6 +1589,8 @@ export default function TopicQuestions() {
           )}
         </div>
       </div>
+
+      )}
 
       {/* Modal preview tampilan kuis — dari daftar soal (selected) */}
       {showPreview && selected && (

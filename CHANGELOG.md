@@ -8,11 +8,26 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
-### Added — Fase C (siap push manual)
-- **`src/pages/KerjakanQuiz.tsx`**: tampilan stimulus gambar terbingkai + tombol perbesar; lightbox (zoom +/−, Tutup/Esc, **tidak** tutup saat klik backdrop); tabel kategori desktop + kartu mobile; badge skor soal.
+### Fixed (manual push UI besar)
+- **`src/pages/TopicQuestions.tsx`** & **`KerjakanQuiz.tsx`**: pastikan file patch terbaru sudah di repo lokal sebelum deploy (lihat patch zip di chat).
 
-### Fixed (manual push masih diperlukan)
-- **`src/pages/TopicQuestions.tsx`** — UI bank soal + import tka2026 (file di GitHub masih stub).
+---
+
+## [0.3.0] — 2026-10-04
+
+### Added — Stimulus & preview (Fase C lanjut)
+- Editor stimulus kaya fitur: **tebal, miring, garis bawah**, paragraf, **rata kiri/tengah/kanan/kiri-kanan**, jarak baris (per paragraf terpilih bila ada seleksi), sisip **persamaan LaTeX** (opsional KaTeX di `index.html`).
+- **Preview stimulus** di form edit (hanya bacaan + gambar stimulus).
+- **Preview kuis** di **daftar soal** (panel detail): tampilan ala siswa termasuk stimulus HTML + gambar, tanpa kunci jawaban.
+- Panel detail daftar soal menampilkan **stimulus terformat + gambar** (sebelumnya hanya teks polos / tanpa gambar).
+- Unggah gambar stimulus: **kompres & resize otomatis** (maks ~1200px, target ~450 KB) — tidak menolak file >1,5 MB.
+
+### Fixed
+- Import soal gagal jika kunci jawaban teks mengandung **koma** (contoh: `Sabtu, 11 Oktober…`) — `resolveCorrectAnswers` mencocokkan string utuh dulu; pemisah multi-kunci mengutamakan `;` / `|`.
+- Saat **edit soal**, daftar soal tidak lagi tampil di bawah form (hanya form editor).
+
+### Changed
+- Form edit: preview cuplikan di dalam form dihapus; preview penuh dipindah ke daftar soal.
 
 ---
 
@@ -37,7 +52,7 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 ## [0.2.0] — 2026-10-04
 
 ### Added
-- CHANGELOG, anti-regresi diperluas, rencana A→B→C.
+- CHANGELOG, anti-regresi diperluas, rencana A→B→C (selaras tka2026).
 
 ---
 
