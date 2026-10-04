@@ -65,7 +65,15 @@ function shuffleArray<T>(arr: T[]): T[] {
 function generateQuestions(
   pool: Question[],
   count: number,
-  opts: { topicIds?: string[]; types?: QuestionType[]; balancedByTp?: boolean }
+  opts: {
+    topicIds?: string[]
+    types?: QuestionType[]
+    balancedByTp?: boolean
+    /** Soal yang dihindari dulu (sudah terpakai di paket lain) */
+    excludeIds?: Set<string>
+    /** Jika kurang, isi sisa dari soal yang di-exclude */
+    fillFromExcluded?: boolean
+  }
 ): string[] {
   let list = pool.filter((q) => q.id)
   if (opts.topicIds && opts.topicIds.length > 0) {
@@ -76,40 +84,62 @@ function generateQuestions(
   }
   if (list.length === 0) return []
 
-  if (!opts.balancedByTp) {
-    return shuffleArray(list)
-      .slice(0, Math.min(count, list.length))
-      .map((q) => q.id!)
-  }
-
-  // Group by TP (empty TP -> "_")
-  const groups = new Map<string, Question[]>()
-  for (const q of list) {
-    const key = (q.tp || '').trim() || '_'
-    if (!groups.has(key)) groups.set(key, [])
-    groups.get(key)!.push(q)
-  }
-  // Shuffle inside groups
-  for (const [k, arr] of groups) {
-    groups.set(k, shuffleArray(arr))
-  }
-
-  const keys = shuffleArray([...groups.keys()])
-  const picked: Question[] = []
-  let guard = 0
-  while (picked.length < count && guard < count * 20) {
-    guard++
-    let added = false
-    for (const key of keys) {
-      const g = groups.get(key)!
-      if (g.length > 0 && picked.length < count) {
-        picked.push(g.shift()!)
-        added = true
-      }
+  const excluded = opts.excludeIds
+  let primary = list
+  let secondary: Question[] = []
+  if (excluded && excluded.size > 0) {
+    primary = list.filter((q) => !excluded.has(q.id!))
+    if (opts.fillFromExcluded) {
+      secondary = list.filter((q) => excluded.has(q.id!))
     }
-    if (!added) break
   }
-  return picked.map((q) => q.id!)
+
+  const pickFrom = (source: Question[], need: number, already: Set<string>): Question[] => {
+    if (need <= 0 || source.length === 0) return []
+    const avail = source.filter((q) => !already.has(q.id!))
+    if (!opts.balancedByTp) {
+      return shuffleArray(avail).slice(0, need)
+    }
+    const groups = new Map<string, Question[]>()
+    for (const q of avail) {
+      const key = (q.tp || '').trim() || '_'
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(q)
+    }
+    for (const [k, arr] of groups) {
+      groups.set(k, shuffleArray(arr))
+    }
+    const keys = shuffleArray([...groups.keys()])
+    const picked: Question[] = []
+    let guard = 0
+    while (picked.length < need && guard < need * 20) {
+      guard++
+      let added = false
+      for (const key of keys) {
+        const g = groups.get(key)!
+        if (g.length > 0 && picked.length < need) {
+          picked.push(g.shift()!)
+          added = true
+        }
+      }
+      if (!added) break
+    }
+    return picked
+  }
+
+  const chosen: Question[] = []
+  const have = new Set<string>()
+  for (const q of pickFrom(primary, count, have)) {
+    chosen.push(q)
+    have.add(q.id!)
+  }
+  if (chosen.length < count && secondary.length > 0) {
+    for (const q of pickFrom(secondary, count - chosen.length, have)) {
+      chosen.push(q)
+      have.add(q.id!)
+    }
+  }
+  return chosen.map((q) => q.id!)
 }
 
 export default function LatihanForm() {
@@ -155,6 +185,10 @@ export default function LatihanForm() {
   const [autoTypes, setAutoTypes] = useState<QuestionType[]>([])
   const [autoBalancedTp, setAutoBalancedTp] = useState(true)
   const [autoMessage, setAutoMessage] = useState('')
+  /** Soal yang sudah ada di paket latihan lain */
+  const [usedQuestionIds, setUsedQuestionIds] = useState<Set<string>>(new Set())
+  const [preferUnused, setPreferUnused] = useState(true)
+  const [showUnusedOnly, setShowUnusedOnly] = useState(false)
 
   useEffect(() => {
     if (!isNew && id) loadPaket(id)
@@ -204,6 +238,24 @@ export default function LatihanForm() {
     }
   }
 
+  const loadUsedQuestionIds = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'latihan'))
+      const used = new Set<string>()
+      snap.docs.forEach((d) => {
+        // Paket yang sedang diedit tidak dihitung "terpakai di paket lain"
+        if (!isNew && id && d.id === id) return
+        const ids = (d.data().questionIds || []) as string[]
+        ids.forEach((qid) => {
+          if (qid) used.add(qid)
+        })
+      })
+      setUsedQuestionIds(used)
+    } catch (err) {
+      console.warn('loadUsedQuestionIds', err)
+    }
+  }
+
   const loadBank = async (sk: SubjectKey) => {
     setBankLoading(true)
     try {
@@ -213,6 +265,7 @@ export default function LatihanForm() {
       ])
       setTopics(tSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Topic)))
       setBankQuestions(qSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Question)))
+      await loadUsedQuestionIds()
     } catch (err) {
       console.error(err)
     } finally {
@@ -223,8 +276,14 @@ export default function LatihanForm() {
   const filteredBank = useMemo(() => {
     let list = bankQuestions
     if (filterTopicId) list = list.filter((q) => q.topicId === filterTopicId)
+    if (showUnusedOnly) list = list.filter((q) => q.id && !usedQuestionIds.has(q.id))
     return list
-  }, [bankQuestions, filterTopicId])
+  }, [bankQuestions, filterTopicId, showUnusedOnly, usedQuestionIds])
+
+  const unusedCount = useMemo(
+    () => bankQuestions.filter((q) => q.id && !usedQuestionIds.has(q.id)).length,
+    [bankQuestions, usedQuestionIds]
+  )
 
   const poolForAuto = useMemo(() => {
     let list = bankQuestions
@@ -280,12 +339,28 @@ export default function LatihanForm() {
       topicIds: autoTopicIds.length > 0 ? autoTopicIds : undefined,
       types: autoTypes.length > 0 ? autoTypes : undefined,
       balancedByTp: autoBalancedTp,
+      excludeIds: preferUnused ? usedQuestionIds : undefined,
+      fillFromExcluded: preferUnused,
     })
     setSelectedIds(ids)
+    const unusedPicked = ids.filter((qid) => !usedQuestionIds.has(qid)).length
+    const usedPicked = ids.length - unusedPicked
     if (ids.length < n) {
-      setAutoMessage(`Hanya ${ids.length} soal tersedia (diminta ${n}). Paket diisi dengan semua yang ada.`)
+      setAutoMessage(
+        `Hanya ${ids.length} soal tersedia (diminta ${n}).` +
+          (preferUnused ? ` Belum terpakai di paket: ${unusedPicked}.` : '')
+      )
+    } else if (preferUnused && usedPicked > 0) {
+      setAutoMessage(
+        `Generate ${ids.length} soal: ${unusedPicked} belum terpakai, ${usedPicked} mengisi dari yang sudah terpakai (pool belum terpakai kurang).`
+      )
     } else {
-      setAutoMessage(`Berhasil generate ${ids.length} soal${autoBalancedTp ? ' (sebaran TP merata)' : ' (acak)'}.`)
+      setAutoMessage(
+        `Berhasil generate ${ids.length} soal` +
+          (preferUnused ? ' (mengutamakan belum terpakai)' : '') +
+          (autoBalancedTp ? ' · sebaran TP merata' : ' · acak') +
+          '.'
+      )
     }
   }
 
@@ -629,11 +704,22 @@ export default function LatihanForm() {
                     <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
                 </select>
+                <label className="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer px-2 py-1 rounded-lg hover:bg-gray-50">
+                  <input
+                    type="checkbox"
+                    checked={showUnusedOnly}
+                    onChange={(e) => setShowUnusedOnly(e.target.checked)}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  Hanya belum terpakai
+                </label>
                 <button type="button" onClick={selectAllFiltered} className="text-xs font-medium text-indigo-600 px-2 py-1 hover:bg-indigo-50 rounded-lg">
                   Pilih semua terfilter
                 </button>
                 <span className="text-xs text-gray-400">
-                  {bankLoading ? 'Memuat...' : `${filteredBank.length} soal ditampilkan`}
+                  {bankLoading
+                    ? 'Memuat...'
+                    : `${filteredBank.length} ditampilkan · ${unusedCount} belum terpakai`}
                 </span>
               </div>
 
@@ -647,6 +733,7 @@ export default function LatihanForm() {
                 <div className="max-h-72 overflow-y-auto space-y-1 border border-gray-100 rounded-xl p-2">
                   {filteredBank.map((q) => {
                     const checked = selectedIds.includes(q.id!)
+                    const used = !!(q.id && usedQuestionIds.has(q.id))
                     return (
                       <label
                         key={q.id}
@@ -660,8 +747,19 @@ export default function LatihanForm() {
                           onChange={() => toggleQuestion(q.id!)}
                           className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         />
-                        <div className="min-w-0">
-                          <p className="text-gray-800 line-clamp-2">{q.question}</p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <p className="text-gray-800 line-clamp-2 flex-1 min-w-0">{q.question}</p>
+                            {used ? (
+                              <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-100">
+                                Terpakai
+                              </span>
+                            ) : (
+                              <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                Baru
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[11px] text-gray-400 mt-0.5">
                             {topicName(q.topicId)} · {QUESTION_TYPE_LABELS[q.type]}
                             {q.tp ? ` · TP ${q.tp}` : ''}
@@ -679,7 +777,8 @@ export default function LatihanForm() {
           {buildMode === 'auto' && subjectKey && (
             <div className="space-y-4 border border-indigo-100 rounded-xl p-4 bg-indigo-50/30">
               <p className="text-xs text-indigo-800">
-                Sistem memilih soal secara acak dari pool mapel. Atur jumlah, materi, tipe, dan opsi sebaran TP.
+                Sistem memilih soal dari pool mapel. Secara default menghindari soal yang sudah dipakai di paket
+                latihan lain; jika kurang, sisa diisi dari soal terpakai.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -693,10 +792,13 @@ export default function LatihanForm() {
                     onChange={(e) => setAutoCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-sm"
                   />
-                  <p className="text-xs text-gray-400 mt-1">Pool cocok: {poolForAuto.length} soal</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Pool cocok: {poolForAuto.length} · belum terpakai:{' '}
+                    {poolForAuto.filter((q) => q.id && !usedQuestionIds.has(q.id)).length}
+                  </p>
                 </div>
-                <div className="flex items-end">
-                  <label className="inline-flex items-center gap-2 cursor-pointer text-sm pb-2">
+                <div className="flex flex-col justify-end gap-2 pb-1">
+                  <label className="inline-flex items-center gap-2 cursor-pointer text-sm">
                     <input
                       type="checkbox"
                       checked={autoBalancedTp}
@@ -704,6 +806,15 @@ export default function LatihanForm() {
                       className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                     />
                     Sebaran TP merata
+                  </label>
+                  <label className="inline-flex items-center gap-2 cursor-pointer text-sm">
+                    <input
+                      type="checkbox"
+                      checked={preferUnused}
+                      onChange={(e) => setPreferUnused(e.target.checked)}
+                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    Utamakan soal belum terpakai
                   </label>
                 </div>
               </div>
