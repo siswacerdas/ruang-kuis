@@ -8,6 +8,14 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Added — Progress siswa di Laporan (`Laporan.tsx`)
+- Dashboard progress berbasis **attempts (kuis saja)**: kartu pengerjaan, siswa unik, rata skor, waktu pengerjaan, % paket tersentuh.
+- **Tren skor** per minggu/bulan (bar chart CSS).
+- **Waktu pengerjaan** per periode (velocity menit kuis — bukan jam belajar mandiri).
+- **Perhatian TP**: capaian TP terendah untuk prioritas remedial.
+- Tab **Per siswa**: klik baris → panel profil (ringkas, capaian TP, riwayat kuis).
+- Ringkasan: taut Profil + detail paket; filter mapel/paket tetap.
+
 ### Changed — Daftar materi bank soal (`SubjectTopics.tsx`)
 - **Redesign layout master–detail** (bukan polesan visual): daftar kiri + panel kelola kanan, pola sama dengan bank soal per materi.
 - **Edit materi**: ubah nama, tautan ke materi buku, dan kode TP dalam satu form Simpan.
