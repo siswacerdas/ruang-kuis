@@ -8,6 +8,15 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Changed — Daftar materi bank soal (`SubjectTopics.tsx`)
+- **Redesign layout master–detail** (bukan polesan visual): daftar kiri + panel kelola kanan, pola sama dengan bank soal per materi.
+- **Edit materi**: ubah nama, tautan ke materi buku, dan kode TP dalam satu form Simpan.
+- **Pilih TP dari master** `learningObjectives` (mapel yang sama, aktif saja): multi-select + pencarian kode/elemen/rumusan; chip terpilih bisa dilepas.
+- **Tautan materi buku**: select dengan cegah double-link; tampil ringkas + usulan TP; tombol “Ambil usulan dari materi buku”.
+- Filter daftar: Semua / Tertaut / Belum + pencarian nama/tautan/TP.
+- Aksi jelas: Kelola soal →, Edit, Hapus; taut ke halaman Master TP & materi buku.
+- Perilaku lama dipertahankan: salin materi buku, auto-link nama mirip, ensureTopics non-destruktif.
+
 ### Added
 - **Lightbox gambar stimulus di bank soal (admin)** — `TopicQuestions.tsx`: tombol 🔍 Lihat lebih besar pada panel detail, preview stimulus, dan preview kuis. Zoom +/− / 100%. Tutup **hanya** lewat tombol Tutup atau Esc (klik backdrop tidak menutup). Pola sama dengan `KerjakanQuiz` siswa.
 
