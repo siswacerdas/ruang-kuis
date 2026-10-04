@@ -64,7 +64,7 @@ Setiap elemen questions:
 - options: string[] — 4 opsi untuk single/multiple; 3–5 pernyataan untuk category
 - correctAnswers: number[] indeks 0-based
   · single: tepat 1 indeks
-  · multiple: ≥2 indeks benar
+  · multiple (PG kompleks): TEPAT 2 indeks benar dari 4 opsi (2 benar + 2 salah). JANGAN semua opsi benar.
   · category: array panjang = options.length, tiap nilai 0 atau 1 (0=Benar, 1=Salah) sesuai categoryLabels
 - categoryLabels: ["Benar","Salah"] hanya untuk type category
 - explanation: string singkat mengapa jawaban benar
@@ -77,6 +77,7 @@ Setiap elemen questions:
 1. Jangan opsi "semua benar" / "tidak ada yang benar" / "semua salah".
 2. Soal tidak ambigu; satu interpretasi jelas.
 3. Opsi pengecoh masuk akal (bukan konyol).
+3b. Pilihan ganda kompleks (type "multiple"): WAJIB tepat 4 opsi dan TEPAT 2 jawaban benar (correctAnswers berisi tepat 2 indeks berbeda). Dua opsi lainnya harus salah. Dilarang menandai 3 atau 4 opsi sebagai benar.
 4. Jika ada stimulus: pertanyaan HARUS bergantung pada stimulus (tidak bisa dijawab tanpa membacanya).
 5. Stimulus teks: 2–6 kalimat atau data singkat (tabel ASCII sederhana boleh).
 6. Stimulus gambar: isi imagePrompt (English, simple illustration, no text in image if possible) DAN stimulus berisi keterangan singkat berbahasa Indonesia untuk siswa (apa yang digambarkan).
@@ -125,6 +126,9 @@ function buildUserPrompt(opts: GenerateAiOptions): string {
     stimulusInstr,
     kompInstr,
     opts.extraContext?.trim() ? `Instruksi tambahan guru: ${opts.extraContext.trim()}` : '',
+    types.includes('multiple')
+      ? 'Untuk type multiple: setiap soal punya 4 opsi, tepat 2 benar dan 2 salah. Jangan correctAnswers berisi 3 atau 4 indeks.'
+      : '',
     'Buat soal saling berbeda; jangan mengulang ide yang sama.',
   ]
     .filter(Boolean)
@@ -162,8 +166,22 @@ function normalizeDraft(raw: any, fallbackKomp?: string): AiDraftQuestion | null
     if (correctAnswers.length === 0) correctAnswers = [0]
     correctAnswers = [correctAnswers[0]]
   } else if (type === 'multiple') {
-    correctAnswers = [...new Set(correctAnswers.filter((n) => n < options.length))]
-    if (correctAnswers.length === 0) correctAnswers = [0]
+    // PG kompleks: tepat 4 opsi, tepat 2 kunci benar
+    while (options.length < 4) options.push(`Opsi ${String.fromCharCode(65 + options.length)}`)
+    if (options.length > 4) options = options.slice(0, 4)
+    correctAnswers = [...new Set(correctAnswers.filter((n) => n >= 0 && n < options.length))]
+    // Jika AI menandai semua/ terlalu banyak benar → potong jadi 2 pertama yang valid
+    if (correctAnswers.length > 2) {
+      correctAnswers = correctAnswers.slice(0, 2)
+    }
+    if (correctAnswers.length === 0) {
+      correctAnswers = [0, 1]
+    } else if (correctAnswers.length === 1) {
+      // Lengkapi satu kunci lagi yang belum dipilih
+      const extra = [0, 1, 2, 3].find((i) => !correctAnswers.includes(i))
+      if (extra != null) correctAnswers = [...correctAnswers, extra]
+    }
+    correctAnswers = correctAnswers.slice(0, 2).sort((a, b) => a - b)
   } else {
     const labels =
       Array.isArray(raw.categoryLabels) && raw.categoryLabels.length >= 2
