@@ -1493,9 +1493,9 @@ export default function TopicQuestions() {
       )}
 
       {!showEditor && (
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        <div className="lg:col-span-4 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 space-y-2">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:items-stretch">
+        <div className="lg:col-span-4 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col min-h-[20rem] lg:h-[calc(100vh-11rem)]">
+          <div className="px-4 py-3 border-b border-gray-100 space-y-2 shrink-0">
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-semibold text-gray-900">Daftar soal</span>
               <label className="text-xs text-gray-500 flex items-center gap-1 shrink-0">
@@ -1553,21 +1553,21 @@ export default function TopicQuestions() {
             )}
           </div>
           {loading ? (
-            <div className="p-8 text-center text-sm text-gray-500">Memuat...</div>
+            <div className="flex-1 p-8 text-center text-sm text-gray-500">Memuat...</div>
           ) : questions.length === 0 ? (
-            <div className="p-8 text-center">
+            <div className="flex-1 p-8 text-center">
               <p className="text-sm text-gray-500">Belum ada soal</p>
               <button onClick={openNew} className="mt-3 text-sm text-indigo-600 font-medium hover:underline">+ Tambah soal pertama</button>
             </div>
           ) : filteredQuestions.length === 0 ? (
-            <div className="p-8 text-center">
+            <div className="flex-1 p-8 text-center">
               <p className="text-sm text-gray-500">Tidak ada soal yang cocok</p>
               <button type="button" onClick={() => setListSearch('')} className="mt-2 text-sm text-indigo-600 font-medium hover:underline">
                 Hapus pencarian
               </button>
             </div>
           ) : (
-            <div className="divide-y divide-gray-50 max-h-[28rem] overflow-y-auto">
+            <div className="divide-y divide-gray-50 flex-1 min-h-0 overflow-y-auto">
               {filteredQuestions.map((q) => {
                 const fullIdx = questions.findIndex((x) => x.id === q.id)
                 const isSelected = fullIdx === selectedIndex
@@ -1607,12 +1607,12 @@ export default function TopicQuestions() {
           )}
         </div>
 
-        <div className="lg:col-span-8 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="lg:col-span-8 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col min-h-[20rem] lg:h-[calc(100vh-11rem)]">
           {!selected ? (
-            <div className="p-12 text-center text-gray-400 text-sm">Pilih soal di daftar atau tambah soal baru</div>
+            <div className="flex-1 p-12 text-center text-gray-400 text-sm flex items-center justify-center">Pilih soal di daftar atau tambah soal baru</div>
           ) : (
             <>
-              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap shrink-0">
                 <div className="flex items-center gap-2 text-sm text-gray-500 flex-wrap">
                   <span>Soal {selectedIndex + 1}/{questions.length}</span>
                   <span className="text-gray-300">·</span>
@@ -1649,7 +1649,7 @@ export default function TopicQuestions() {
                   </button>
                 </div>
               </div>
-              <div className="p-6">
+              <div className="p-6 flex-1 min-h-0 overflow-y-auto">
                 {(selected.stimulus || selected.stimulusImage) ? (
                   <div className="mb-4 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
                     {selected.stimulusImage && (
