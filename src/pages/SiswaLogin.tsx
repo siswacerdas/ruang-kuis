@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { signInWithEmailAndPassword, signOut } from 'firebase/auth'
+import { signInWithEmailAndPassword } from 'firebase/auth'
 import { collection, getDocs, query, orderBy } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 import { useNavigate, Link } from 'react-router-dom'
