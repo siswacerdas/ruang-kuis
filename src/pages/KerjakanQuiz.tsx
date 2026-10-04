@@ -68,6 +68,8 @@ export default function KerjakanQuiz() {
   const questionStarted = useRef(Date.now())
   const timePerQ = useRef<Record<string, number>>({})
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
+  const [lightbox, setLightbox] = useState<{ img?: string; text?: string } | null>(null)
+  const [lbScale, setLbScale] = useState(1)
 
   useEffect(() => {
     const raw = sessionStorage.getItem('rk_session')
@@ -155,6 +157,16 @@ export default function KerjakanQuiz() {
     const t = setInterval(() => setTimeLeft((s) => (s === null ? null : s - 1)), 1000)
     return () => clearInterval(t)
   }, [timeLeft])
+
+  // Tutup lightbox dengan Esc
+  useEffect(() => {
+    if (!lightbox) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightbox(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [lightbox])
 
   const recordTime = (qid: string) => {
     const elapsed = Date.now() - questionStarted.current
@@ -362,12 +374,51 @@ export default function KerjakanQuiz() {
             Soal {current + 1} dari {questions.length}
             {q.tp ? ` · TP ${q.tp}` : ''}
           </p>
-          {q.stimulus && (
-            <div className="mb-4 rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-              {q.stimulus}
+          {/* Stimulus teks + gambar (pola tka2026: frame terbatas + lightbox) */}
+          {(q.stimulus || q.stimulusImage) && (
+            <div className="mb-4 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
+              {q.stimulusImage &&
+                (q.stimulusImage.startsWith('data:image') ||
+                  /^https?:\/\//i.test(q.stimulusImage)) && (
+                  <div className="px-3 pt-3">
+                    <div className="flex items-center justify-center max-h-[min(40vh,260px)] bg-white rounded-lg border border-gray-100 p-2">
+                      <img
+                        src={q.stimulusImage}
+                        alt="Ilustrasi soal"
+                        className="max-h-[min(38vh,240px)] max-w-full object-contain"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLbScale(1)
+                        setLightbox({ img: q.stimulusImage, text: q.stimulus })
+                      }}
+                      className="mt-2 mb-1 text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                    >
+                      🔍 Lihat lebih besar
+                    </button>
+                  </div>
+                )}
+              {q.stimulus && (
+                <div className="px-4 py-3 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                  {q.stimulus}
+                </div>
+              )}
             </div>
           )}
-          <p className="text-base md:text-lg font-medium text-gray-900 leading-relaxed mb-6">{q.question}</p>
+          <div className="flex items-start justify-between gap-2 mb-6">
+            <p className="text-base md:text-lg font-medium text-gray-900 leading-relaxed flex-1">
+              {q.question}
+            </p>
+            {q.skor != null && q.skor > 0 && (
+              <span className="shrink-0 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-md">
+                Skor {q.skor}
+              </span>
+            )}
+          </div>
 
           {/* Options */}
           {q.type === 'category' ? (
@@ -375,31 +426,79 @@ export default function KerjakanQuiz() {
               <p className="text-xs text-gray-400">
                 Pilih {(q.categoryLabels || DEFAULT_CATEGORY_LABELS).join(' / ')} untuk setiap pernyataan
               </p>
-              {q.options.map((stmt, si) => {
-                const labels = q.categoryLabels || DEFAULT_CATEGORY_LABELS
-                const val = selected[si]
-                return (
-                  <div key={si} className="border border-gray-100 rounded-xl p-3">
-                    <p className="text-sm text-gray-800 mb-2">{si + 1}. {stmt}</p>
-                    <div className="flex gap-2">
-                      {[0, 1].map((li) => (
-                        <button
-                          key={li}
-                          type="button"
-                          onClick={() => setCategory(q.id!, si, li, q.options.length)}
-                          className={`flex-1 py-2 rounded-lg text-sm font-medium border transition ${
-                            val === li
-                              ? 'bg-indigo-600 border-indigo-600 text-white'
-                              : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300'
-                          }`}
-                        >
-                          {labels[li]}
-                        </button>
+              {/* Tabel (desktop) — pola tka2026 pgk-cat */}
+              <div className="hidden sm:block overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-left text-xs text-gray-500">
+                      <th className="px-3 py-2 w-10 font-medium">No</th>
+                      <th className="px-3 py-2 font-medium">Pernyataan</th>
+                      {(q.categoryLabels || DEFAULT_CATEGORY_LABELS).map((lab) => (
+                        <th key={lab} className="px-3 py-2 text-center font-medium whitespace-nowrap">
+                          {lab}
+                        </th>
                       ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {q.options.map((stmt, si) => {
+                      const labels = q.categoryLabels || DEFAULT_CATEGORY_LABELS
+                      const val = selected[si]
+                      return (
+                        <tr key={si} className="border-t border-gray-50">
+                          <td className="px-3 py-2.5 text-gray-400 align-top">{si + 1}</td>
+                          <td className="px-3 py-2.5 text-gray-800 align-top">{stmt}</td>
+                          {labels.map((lab, li) => (
+                            <td key={lab} className="px-3 py-2.5 text-center align-middle">
+                              <button
+                                type="button"
+                                onClick={() => setCategory(q.id!, si, li, q.options.length)}
+                                className={`inline-flex items-center justify-center min-w-[4.5rem] px-2 py-1.5 rounded-lg text-xs font-medium border transition ${
+                                  val === li
+                                    ? 'bg-indigo-600 border-indigo-600 text-white'
+                                    : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300'
+                                }`}
+                              >
+                                {lab}
+                              </button>
+                            </td>
+                          ))}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {/* Kartu (mobile) */}
+              <div className="sm:hidden space-y-3">
+                {q.options.map((stmt, si) => {
+                  const labels = q.categoryLabels || [...DEFAULT_CATEGORY_LABELS]
+                  const val = selected[si]
+                  return (
+                    <div key={si} className="border border-gray-100 rounded-xl p-3">
+                      <p className="text-sm text-gray-800 mb-2">
+                        {si + 1}. {stmt}
+                      </p>
+                      <div className="flex gap-2 flex-wrap">
+                        {labels.map((lab, li) => (
+                          <button
+                            key={lab}
+                            type="button"
+                            onClick={() => setCategory(q.id!, si, li, q.options.length)}
+                            className={`flex-1 min-w-[5rem] py-2 rounded-lg text-sm font-medium border transition ${
+                              val === li
+                                ? 'bg-indigo-600 border-indigo-600 text-white'
+                                : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300'
+                            }`}
+                          >
+                            {lab}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
           ) : (
             <div className="space-y-2">
@@ -476,6 +575,66 @@ export default function KerjakanQuiz() {
           )}
         </div>
       </main>
+
+      {/* Lightbox stimulus — tidak menutup saat klik backdrop (hanya Tutup / Esc) */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Pratinjau stimulus"
+        >
+          <div className="relative bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-auto p-4 md:p-6">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setLbScale((s) => Math.min(3, Math.round((s + 0.25) * 100) / 100))}
+                  className="px-2.5 py-1 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLbScale((s) => Math.max(0.5, Math.round((s - 0.25) * 100) / 100))}
+                  className="px-2.5 py-1 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLbScale(1)}
+                  className="px-2.5 py-1 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                >
+                  100%
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLightbox(null)}
+                className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-sm font-medium hover:bg-gray-800"
+              >
+                Tutup
+              </button>
+            </div>
+            {lightbox.img && (
+              <div className="overflow-auto flex justify-center mb-3">
+                <img
+                  src={lightbox.img}
+                  alt="Stimulus"
+                  style={{ transform: `scale(${lbScale})`, transformOrigin: 'center top' }}
+                  className="max-w-full transition-transform"
+                />
+              </div>
+            )}
+            {lightbox.text && (
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap border-t border-gray-100 pt-3">
+                {lightbox.text}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
