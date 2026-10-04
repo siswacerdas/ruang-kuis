@@ -453,11 +453,9 @@ export default function TopicQuestions() {
         return
       }
 
-      const valid: ReturnType<typeof normalizeImportItem>[] = []
-      for (const item of rawData) {
-        const q = normalizeImportItem(item)
-        if (q) valid.push(q)
-      }
+      const valid = rawData
+        .map((item) => normalizeImportItem(item))
+        .filter((q): q is NonNullable<ReturnType<typeof normalizeImportItem>> => q !== null)
 
       if (valid.length === 0) {
         alert('Tidak ada soal valid. Periksa format (lihat panduan import).')
