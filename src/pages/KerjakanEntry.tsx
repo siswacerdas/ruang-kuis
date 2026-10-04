@@ -11,6 +11,7 @@ import {
   isPaketForStudent,
   canRetryPaket,
   hoursUntilEnd,
+  needsToken,
   type LatihanPaket,
   type LatihanAttempt,
   type LatihanStatus,
@@ -20,7 +21,7 @@ import {
  * Beranda siswa setelah login:
  * - Jadwal kuis (aktif / terjadwal) dalam garis waktu
  * - Status sudah/belum dikerjakan
- * - Klik kartu → fokus form token (token tidak ditampilkan terbuka)
+ * - Klik kartu → langsung mulai (atau token bila requireToken)
  */
 
 interface StudentSession {
@@ -218,17 +219,57 @@ export default function KerjakanEntry() {
     navigate('/kerjakan')
   }
 
-  const selectPaket = (p: LatihanPaket) => {
-    const done = p.id ? doneIds.has(p.id) : false
-    const blocked = done && !canRetryPaket(p)
+  const beginSession = (paket: LatihanPaket, tokenUsed?: string) => {
+    if (!student || !paket.id) return
+    sessionStorage.setItem(
+      'rk_session',
+      JSON.stringify({
+        latihanId: paket.id,
+        studentName: student.fullName,
+        studentId: student.studentId,
+        studentClass: student.className || '5A',
+        token: tokenUsed || null,
+      })
+    )
+    navigate(`/kerjakan/${paket.id}`)
+  }
+
+  const assertCanEnter = (paket: LatihanPaket): string | null => {
+    if (!student) return 'Sesi siswa tidak valid'
+    if (paket.status === 'draft' || paket.status === 'archived') {
+      return 'Latihan ini belum dibuka atau sudah diarsipkan.'
+    }
+    const resolved = resolveLatihanStatus(paket)
+    if (resolved === 'scheduled') return 'Latihan belum dimulai. Tunggu sesuai jadwal.'
+    if (resolved === 'finished') return 'Waktu latihan sudah berakhir.'
+    if (!isPaketForStudent(paket, student)) {
+      return 'Paket ini tidak ditugaskan untuk kelas/akun kamu.'
+    }
+    if (paket.id && doneIds.has(paket.id) && !canRetryPaket(paket)) {
+      return 'Kamu sudah mengerjakan paket ini. Pengerjaan ulang tidak diizinkan.'
+    }
+    return null
+  }
+
+  /** Klik kartu jadwal: langsung masuk jika tidak wajib token; jika wajib → fokus form token */
+  const selectPaket = async (p: LatihanPaket) => {
     setSelectedId(p.id || null)
     setError('')
-    if (blocked) {
-      setError('Kamu sudah mengerjakan paket ini. Guru tidak mengizinkan pengerjaan ulang.')
+    const err = assertCanEnter(p)
+    if (err) {
+      setError(err)
       return
     }
-    if (resolveLatihanStatus(p) === 'active') {
+    if (needsToken(p)) {
       setTimeout(() => tokenRef.current?.focus(), 50)
+      return
+    }
+    // Tanpa token: login + jadwal aktif + penugasan
+    setLoading(true)
+    try {
+      beginSession(p)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -251,41 +292,15 @@ export default function KerjakanEntry() {
       const docSnap = snap.docs[0]
       const paket = { id: docSnap.id, ...docSnap.data() } as LatihanPaket
 
-      if (paket.status === 'draft' || paket.status === 'archived') {
-        setError('Latihan ini belum dibuka atau sudah diarsipkan.')
+      const err = assertCanEnter(paket)
+      if (err) {
+        setError(err)
         return
       }
-      const resolved = resolveLatihanStatus(paket)
-      if (resolved === 'scheduled') {
-        setError('Latihan belum dimulai. Tunggu sesuai jadwal.')
-        return
+      if (!needsToken(paket)) {
+        // Token diisi tapi paket tidak mewajibkannya — tetap izinkan masuk
       }
-      if (resolved === 'finished') {
-        setError('Waktu latihan sudah berakhir.')
-        return
-      }
-
-      if (!isPaketForStudent(paket, student)) {
-        setError('Paket ini tidak ditugaskan untuk kelas/akun kamu.')
-        return
-      }
-
-      if (paket.id && doneIds.has(paket.id) && !canRetryPaket(paket)) {
-        setError('Kamu sudah mengerjakan paket ini. Pengerjaan ulang tidak diizinkan.')
-        return
-      }
-
-      sessionStorage.setItem(
-        'rk_session',
-        JSON.stringify({
-          latihanId: paket.id,
-          studentName: student.fullName,
-          studentId: student.studentId,
-          studentClass: student.className || '5A',
-          token: t,
-        })
-      )
-      navigate(`/kerjakan/${paket.id}`)
+      beginSession(paket, t)
     } catch (err) {
       console.error(err)
       setError('Gagal memeriksa token. Coba lagi.')
@@ -296,6 +311,30 @@ export default function KerjakanEntry() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    // Jika paket terpilih wajib token, validasi token cocok ke paket itu
+    if (selected && needsToken(selected)) {
+      const t = token.trim().toUpperCase()
+      if (!t) {
+        setError('Paket ini mewajibkan token dari guru')
+        return
+      }
+      if (selected.token && t !== selected.token.toUpperCase()) {
+        setError('Token tidak cocok untuk paket yang dipilih')
+        return
+      }
+      const err = assertCanEnter(selected)
+      if (err) {
+        setError(err)
+        return
+      }
+      setLoading(true)
+      try {
+        beginSession(selected, t)
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
     await startWithToken(token)
   }
 
@@ -367,12 +406,17 @@ export default function KerjakanEntry() {
         )}
 
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <h2 className="text-sm font-semibold text-gray-900 mb-1">Masuk dengan token</h2>
+          <h2 className="text-sm font-semibold text-gray-900 mb-1">
+            {selected && needsToken(selected) ? 'Token diperlukan' : 'Token (opsional)'}
+          </h2>
           <p className="text-xs text-gray-500 mb-3">
-            Token dari guru. Tidak ditampilkan di jadwal agar tetap aman.
+            {selected && needsToken(selected)
+              ? 'Guru mewajibkan token untuk paket ini.'
+              : 'Sebagian besar kuis cukup diklik dari jadwal. Token hanya jika guru mengaktifkannya.'}
             {selected && (
               <span className="block mt-1 text-indigo-600 font-medium">
                 Dipilih: {selected.title}
+                {needsToken(selected) ? ' · wajib token' : ' · tanpa token'}
               </span>
             )}
           </p>
@@ -478,7 +522,7 @@ export default function KerjakanEntry() {
                                 {p.timeLimitMinutes
                                   ? ` · batas ${p.timeLimitMinutes} mnt`
                                   : ''}
-                                {canStart && !done ? ' · ketuk lalu masukkan token' : ''}
+                                {canStart && !done ? (needsToken(p) ? ' · ketuk lalu masukkan token' : ' · ketuk untuk mulai') : ''}
                                 {blocked ? ' · sudah selesai, pengerjaan ulang ditutup' : canStart && done ? ' · boleh diulang (guru mengizinkan)' : ''}
                                 {resolved === 'scheduled' ? ' · belum dibuka' : ''}
                                 {resolved === 'finished' ? ' · waktu habis' : ''}
@@ -486,7 +530,7 @@ export default function KerjakanEntry() {
                             </div>
                             {canStart && (
                               <span className="text-indigo-600 text-xs font-semibold shrink-0 mt-1">
-                                Token →
+                                {needsToken(p) ? 'Token →' : 'Mulai →'}
                               </span>
                             )}
                           </div>
@@ -501,7 +545,7 @@ export default function KerjakanEntry() {
         </div>
 
         <p className="text-[11px] text-center text-gray-400 px-4">
-          Jadwal menampilkan paket yang dipublikasikan guru. Token tetap rahasia — minta langsung ke guru.
+          Akses utama: login siswa + jadwal aktif + penugasan kelas. Token hanya jika guru mengaktifkannya.
         </p>
       </div>
     </div>

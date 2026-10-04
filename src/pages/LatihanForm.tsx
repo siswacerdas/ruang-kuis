@@ -140,6 +140,7 @@ export default function LatihanForm() {
   const [audienceAll, setAudienceAll] = useState(true)
   const [assignedClassesText, setAssignedClassesText] = useState('5A')
   const [allowRetry, setAllowRetry] = useState(false)
+  const [requireToken, setRequireToken] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
 
   // Bank
@@ -192,6 +193,7 @@ export default function LatihanForm() {
       setAudienceAll(!hasAssign)
       setAssignedClassesText(ac.length ? ac.join(', ') : '5A')
       setAllowRetry(p.allowRetry === true)
+      setRequireToken(p.requireToken === true)
       setSelectedIds(p.questionIds || [])
       setBuildMode('manual')
     } catch (err) {
@@ -309,8 +311,8 @@ export default function LatihanForm() {
       setError('Waktu selesai harus setelah waktu mulai')
       return
     }
-    if (!token.trim()) {
-      setError('Token akses wajib diisi')
+    if (requireToken && !token.trim()) {
+      setError('Token wajib diisi karena opsi "Wajibkan token" aktif')
       return
     }
 
@@ -324,7 +326,7 @@ export default function LatihanForm() {
         questionCount: selectedIds.length,
         startAt: start,
         endAt: end,
-        token: token.trim().toUpperCase(),
+        token: (token.trim() || generateToken()).toUpperCase(),
         status,
         timeLimitMinutes: timeLimitMinutes > 0 ? timeLimitMinutes : undefined,
         shuffleQuestions,
@@ -337,6 +339,7 @@ export default function LatihanForm() {
               .map((c) => c.trim())
               .filter(Boolean),
         allowRetry,
+        requireToken,
         updatedAt: serverTimestamp(),
       }
 
@@ -445,7 +448,7 @@ export default function LatihanForm() {
 
         {/* Jadwal & token */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-900">Jadwal & akses</h2>
+          <h2 className="text-sm font-semibold text-gray-900">Jadwal & pengaturan</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Mulai *</label>
@@ -469,26 +472,6 @@ export default function LatihanForm() {
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Token akses siswa *</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value.toUpperCase())}
-                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none font-mono tracking-wider text-sm"
-                  maxLength={12}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setToken(generateToken())}
-                  className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
-                >
-                  Acak
-                </button>
-              </div>
-            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Batas waktu (menit)</label>
               <input
@@ -518,7 +501,34 @@ export default function LatihanForm() {
               <input type="checkbox" checked={allowRetry} onChange={(e) => setAllowRetry(e.target.checked)} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
               Izinkan mengerjakan ulang
             </label>
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={requireToken} onChange={(e) => setRequireToken(e.target.checked)} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+              Wajibkan token (selain login siswa)
+            </label>
           </div>
+          {requireToken && (
+            <div className="max-w-sm">
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Token akses siswa *</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value.toUpperCase())}
+                  className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none font-mono tracking-wider text-sm"
+                  maxLength={12}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setToken(generateToken())}
+                  className="px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+                >
+                  Acak
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-1">Siswa harus memasukkan token ini selain login.</p>
+            </div>
+          )}
 
           <div className="pt-2 border-t border-gray-100 space-y-3">
             <p className="text-sm font-medium text-gray-700">Penugasan siswa</p>
@@ -530,7 +540,7 @@ export default function LatihanForm() {
                 onChange={() => setAudienceAll(true)}
                 className="text-indigo-600 focus:ring-indigo-500"
               />
-              Semua siswa (publik dengan token)
+              Semua siswa (yang login)
             </label>
             <label className="inline-flex items-center gap-2 cursor-pointer text-sm">
               <input
@@ -553,7 +563,7 @@ export default function LatihanForm() {
                   className="w-full max-w-xs px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/30"
                 />
                 <p className="text-[11px] text-gray-400 mt-1">
-                  Siswa di luar kelas ini tidak melihat paket di jadwal (token tetap diperlukan).
+                  Siswa di luar kelas ini tidak melihat paket di jadwal.
                 </p>
               </div>
             )}

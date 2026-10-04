@@ -257,6 +257,12 @@ export interface LatihanPaket {
    * Default false (dilarang). Set true hanya jika guru mengizinkan.
    */
   allowRetry?: boolean
+  /**
+   * Wajibkan token selain login.
+   * Default false: siswa login + jadwal aktif + penugasan cukup untuk masuk.
+   * true: mode lama / ujian ketat — butuh token guru.
+   */
+  requireToken?: boolean
   createdAt?: any
   updatedAt?: any
 }
@@ -322,6 +328,11 @@ export function hoursUntilEnd(paket: Pick<LatihanPaket, 'endAt'>): number | null
 /** Boleh mengerjakan ulang? Default: tidak. */
 export function canRetryPaket(paket: Pick<LatihanPaket, 'allowRetry'>): boolean {
   return paket.allowRetry === true
+}
+
+/** Perlu token? Default tidak (cukup login + jadwal + penugasan). */
+export function needsToken(paket: Pick<LatihanPaket, 'requireToken'>): boolean {
+  return paket.requireToken === true
 }
 
 export function formatDateTime(v: any): string {
