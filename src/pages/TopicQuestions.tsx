@@ -22,6 +22,7 @@ import {
   DEFAULT_CATEGORY_LABELS,
   mapTkaType,
   resolveCorrectAnswers,
+  gradeAnswer,
   type Question,
   type QuestionType,
   type Topic,
@@ -341,7 +342,7 @@ async function removeDuplicateQuestions(topicId: string) {
 function sanitizeStimulusHtml(html: string): string {
   if (!html) return ''
   const doc = new DOMParser().parseFromString(html, 'text/html')
-  const allowed = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'P', 'BR', 'SPAN', 'DIV', 'SUB', 'SUP'])
+  const allowed = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'P', 'BR', 'SPAN', 'DIV', 'SUB', 'SUP', 'BLOCKQUOTE', 'UL', 'OL', 'LI'])
   const walk = (node: Node) => {
     const children = Array.from(node.childNodes)
     for (const child of children) {
@@ -358,12 +359,16 @@ function sanitizeStimulusHtml(html: string): string {
         const fs = el.style.fontStyle
         const td = el.style.textDecoration
         const ta = el.style.textAlign
+        const ml = el.style.marginLeft
+        const pl = el.style.paddingLeft
         el.removeAttribute('style')
         if (lh) el.style.lineHeight = lh
         if (fw) el.style.fontWeight = fw
         if (fs) el.style.fontStyle = fs
         if (td) el.style.textDecoration = td
         if (ta) el.style.textAlign = ta
+        if (ml) el.style.marginLeft = ml
+        if (pl) el.style.paddingLeft = pl
         if (el.classList.contains('math-tex')) {
           el.setAttribute('class', 'math-tex')
         } else {
@@ -416,6 +421,13 @@ function StimulusToolbar({
       </button>
       <button type="button" className={btn} title="Rata kiri-kanan" onMouseDown={(e) => { e.preventDefault(); onCmd('justifyFull') }}>
         ⬌
+      </button>
+      <span className="w-px h-5 bg-gray-200 mx-0.5" />
+      <button type="button" className={btn} title="Kurangi inden (teks terpilih)" onMouseDown={(e) => { e.preventDefault(); onCmd('outdent') }}>
+        «
+      </button>
+      <button type="button" className={btn} title="Tambah inden (teks terpilih)" onMouseDown={(e) => { e.preventDefault(); onCmd('indent') }}>
+        »
       </button>
       <span className="w-px h-5 bg-gray-200 mx-0.5" />
       <button type="button" className={btn} title="Paragraf baru" onMouseDown={(e) => { e.preventDefault(); onCmd('formatBlock', 'p') }}>
@@ -648,6 +660,8 @@ export default function TopicQuestions() {
   const [imageInfo, setImageInfo] = useState('')
   const [showPreview, setShowPreview] = useState(false)
   const [showStimulusPreview, setShowStimulusPreview] = useState(false)
+  const [previewAnswers, setPreviewAnswers] = useState<number[]>([])
+  const [previewChecked, setPreviewChecked] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [checkedIds, setCheckedIds] = useState<string[]>([])
 
@@ -1501,7 +1515,15 @@ export default function TopicQuestions() {
                 <div className="flex items-center gap-1 flex-wrap">
                   <button
                     type="button"
-                    onClick={() => setShowPreview(true)}
+                    onClick={() => {
+                      setPreviewAnswers(
+                        selected.type === 'category'
+                          ? selected.options.map(() => -1)
+                          : []
+                      )
+                      setPreviewChecked(false)
+                      setShowPreview(true)
+                    }}
                     className="inline-flex items-center gap-1.5 text-sm text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition font-medium"
                   >
                     👁 Preview kuis
@@ -1631,18 +1653,24 @@ export default function TopicQuestions() {
         </div>
       )}
 
-      {/* Modal preview tampilan kuis — dari daftar soal (selected) */}
+      {/* Modal preview kuis interaktif — jawab + cek kunci (hanya di preview admin) */}
       {showPreview && selected && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="dialog">
           <div className="bg-[#F5F6FA] rounded-2xl shadow-xl max-w-3xl w-full max-h-[92vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-gray-100">
+            <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-gray-100 gap-3 flex-wrap">
               <div>
-                <p className="text-sm font-semibold text-gray-900">Preview tampilan kuis</p>
-                <p className="text-xs text-gray-500">Seperti yang dilihat siswa (tanpa timer & tanpa kunci jawaban)</p>
+                <p className="text-sm font-semibold text-gray-900">Preview kuis (uji kunci)</p>
+                <p className="text-xs text-gray-500">
+                  Jawab seperti siswa, lalu cek kunci & pembahasan — tidak terlihat saat tes siswa
+                </p>
               </div>
               <button
                 type="button"
-                onClick={() => setShowPreview(false)}
+                onClick={() => {
+                  setShowPreview(false)
+                  setPreviewChecked(false)
+                  setPreviewAnswers([])
+                }}
                 className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-sm font-medium"
               >
                 Tutup
@@ -1677,37 +1705,191 @@ export default function TopicQuestions() {
                 <p className="text-base md:text-lg font-medium text-gray-900 leading-relaxed mb-6">
                   {selected.question}
                 </p>
+
                 {selected.type === 'category' ? (
                   <div className="space-y-2">
-                    {selected.options.map((stmt, i) => (
-                      <div key={i} className="border border-gray-100 rounded-xl p-3 text-sm text-gray-800">
-                        {i + 1}. {stmt}
-                        <div className="flex gap-2 mt-2">
-                          {(selected.categoryLabels || DEFAULT_CATEGORY_LABELS).map((lab) => (
-                            <span
-                              key={lab}
-                              className="flex-1 text-center py-1.5 rounded-lg border border-gray-200 text-xs text-gray-500"
-                            >
-                              {lab}
-                            </span>
-                          ))}
+                    {selected.options.map((stmt, si) => {
+                      const labels = selected.categoryLabels || DEFAULT_CATEGORY_LABELS
+                      const val = previewAnswers[si]
+                      const correctIdx = selected.correctAnswers[si]
+                      return (
+                        <div key={si} className="border border-gray-100 rounded-xl p-3 text-sm text-gray-800">
+                          <p className="mb-2">
+                            {si + 1}. {stmt}
+                          </p>
+                          <div className="flex gap-2 flex-wrap">
+                            {labels.map((lab, li) => {
+                              const isOn = val === li
+                              let extra = ''
+                              if (previewChecked) {
+                                if (li === correctIdx) extra = ' ring-2 ring-emerald-400 bg-emerald-50 border-emerald-300'
+                                else if (isOn && li !== correctIdx) extra = ' ring-2 ring-red-300 bg-red-50 border-red-200'
+                              } else if (isOn) {
+                                extra = ' bg-indigo-600 border-indigo-600 text-white'
+                              }
+                              return (
+                                <button
+                                  key={lab}
+                                  type="button"
+                                  disabled={previewChecked}
+                                  onClick={() => {
+                                    setPreviewAnswers((prev) => {
+                                      const next = [...prev]
+                                      while (next.length < selected.options.length) next.push(-1)
+                                      next[si] = li
+                                      return next
+                                    })
+                                  }}
+                                  className={`flex-1 min-w-[4.5rem] py-1.5 rounded-lg border text-xs font-medium transition ${
+                                    isOn && !previewChecked
+                                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                                      : 'bg-white border-gray-200 text-gray-600'
+                                  }${extra}`}
+                                >
+                                  {lab}
+                                  {previewChecked && li === correctIdx ? ' ✓' : ''}
+                                </button>
+                              )
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {selected.options.map((opt, i) => (
-                      <div
-                        key={i}
-                        className="flex items-start gap-3 px-4 py-3 rounded-xl border border-gray-100 bg-gray-50 text-sm text-gray-800"
+                    {selected.type === 'multiple' && (
+                      <p className="text-xs text-gray-400 mb-1">Pilih semua yang benar</p>
+                    )}
+                    {selected.options.map((opt, oi) => {
+                      const isOn = previewAnswers.includes(oi)
+                      const isKey = selected.correctAnswers.includes(oi)
+                      let box = 'bg-gray-50 border-gray-100'
+                      if (previewChecked) {
+                        if (isKey) box = 'bg-emerald-50 border-emerald-300'
+                        else if (isOn && !isKey) box = 'bg-red-50 border-red-200'
+                      } else if (isOn) {
+                        box = 'bg-indigo-50 border-indigo-300'
+                      }
+                      return (
+                        <button
+                          key={oi}
+                          type="button"
+                          disabled={previewChecked}
+                          onClick={() => {
+                            if (selected.type === 'single') {
+                              setPreviewAnswers([oi])
+                            } else {
+                              setPreviewAnswers((prev) =>
+                                prev.includes(oi) ? prev.filter((x) => x !== oi) : [...prev, oi].sort((a, b) => a - b)
+                              )
+                            }
+                          }}
+                          className={`w-full text-left flex items-start gap-3 px-4 py-3 rounded-xl border transition ${box}`}
+                        >
+                          <span
+                            className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
+                              isOn && !previewChecked
+                                ? 'bg-indigo-600 text-white'
+                                : previewChecked && isKey
+                                ? 'bg-emerald-500 text-white'
+                                : 'bg-white border border-gray-200 text-gray-500'
+                            }`}
+                          >
+                            {String.fromCharCode(65 + oi)}
+                          </span>
+                          <span className="text-sm text-gray-800 pt-0.5 flex-1">
+                            {opt}
+                            {previewChecked && isKey && (
+                              <span className="ml-2 text-xs font-semibold text-emerald-700">Kunci</span>
+                            )}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+
+                <div className="mt-6 flex flex-wrap items-center gap-2">
+                  {!previewChecked ? (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewChecked(true)}
+                      className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700"
+                    >
+                      Cek jawaban & kunci
+                    </button>
+                  ) : (
+                    <>
+                      <span
+                        className={`text-sm font-semibold px-3 py-1.5 rounded-lg ${
+                          gradeAnswer(
+                            selected,
+                            selected.type === 'category'
+                              ? previewAnswers.map((x) => (x < 0 ? 0 : x))
+                              : previewAnswers
+                          )
+                            ? 'bg-emerald-50 text-emerald-800'
+                            : 'bg-red-50 text-red-700'
+                        }`}
                       >
-                        <span className="shrink-0 w-7 h-7 rounded-full bg-white border border-gray-200 flex items-center justify-center text-xs font-semibold text-gray-500">
-                          {String.fromCharCode(65 + i)}
-                        </span>
-                        <span className="pt-0.5">{opt}</span>
-                      </div>
-                    ))}
+                        {gradeAnswer(
+                          selected,
+                          selected.type === 'category'
+                            ? previewAnswers.map((x) => (x < 0 ? 0 : x))
+                            : previewAnswers
+                        )
+                          ? '✓ Jawaban benar'
+                          : '✗ Belum sesuai kunci'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPreviewChecked(false)
+                          setPreviewAnswers(
+                            selected.type === 'category' ? selected.options.map(() => -1) : []
+                          )
+                        }}
+                        className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        Coba lagi
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {previewChecked && (
+                  <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50/80 px-4 py-3">
+                    <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide mb-1">
+                      Kunci jawaban (hanya di preview)
+                    </p>
+                    <p className="text-sm text-amber-950 mb-2">
+                      {selected.type === 'category'
+                        ? selected.options
+                            .map((stmt, i) => {
+                              const lab =
+                                (selected.categoryLabels || DEFAULT_CATEGORY_LABELS)[
+                                  selected.correctAnswers[i] ?? 0
+                                ] || '—'
+                              return `${i + 1}. ${lab}`
+                            })
+                            .join(' · ')
+                        : selected.correctAnswers
+                            .map((i) => `${String.fromCharCode(65 + i)}. ${selected.options[i]}`)
+                            .join(' · ')}
+                    </p>
+                    {selected.explanation ? (
+                      <>
+                        <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide mb-1">
+                          Pembahasan
+                        </p>
+                        <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                          {selected.explanation}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-amber-700/80">Belum ada pembahasan pada soal ini.</p>
+                    )}
                   </div>
                 )}
               </div>
