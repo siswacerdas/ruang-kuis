@@ -101,7 +101,7 @@ export function isOptionCorrect(q: Question, optionIndex: number): boolean {
 /** Map tipe tka2026 / label bebas → QuestionType internal */
 export function mapTkaType(raw: string): QuestionType {
   const t = String(raw || '').toLowerCase().trim()
-  if (t === 'pg' || t === 'single' || t.includes('pilihan ganda') && !t.includes('kompleks') && !t.includes('kategori')) {
+  if (t === 'pg' || t === 'single' || (t.includes('pilihan ganda') && !t.includes('kompleks') && !t.includes('kategori'))) {
     return 'single'
   }
   if (t === 'pgk' || t === 'multiple' || t.includes('kompleks') || t.includes('multi')) {
@@ -119,6 +119,9 @@ export function mapTkaType(raw: string): QuestionType {
  * - multiple: array teks → indeks (urutan tidak penting)
  * - category: array "Benar"/"Salah" (atau label kolom) → indeks label per baris
  * Tetap menerima indeks angka / huruf A-D untuk kompatibilitas mundur.
+ *
+ * PENTING: cocokkan string kunci UTUH ke opsi dulu sebelum memecah di koma,
+ * agar jawaban seperti "Sabtu, 11 Oktober 2026 ..." tidak gagal import.
  */
 export function resolveCorrectAnswers(
   type: QuestionType,
@@ -132,23 +135,55 @@ export function resolveCorrectAnswers(
 
   // Sudah array angka
   if (Array.isArray(raw) && raw.every((v) => typeof v === 'number')) {
-    return (raw as number[]).filter((n) => n >= 0 && (type === 'category' ? n < categoryLabels.length : n < options.length))
+    return (raw as number[]).filter(
+      (n) => n >= 0 && (type === 'category' ? n < categoryLabels.length : n < options.length)
+    )
   }
 
-  // String tunggal atau array campuran
+  // String/number tunggal: prioritaskan cocok penuh ke opsi (jangan dipecah koma dulu)
+  if (typeof raw === 'string' || typeof raw === 'number') {
+    const full = String(raw).trim()
+    if (full && type !== 'category') {
+      const asNum = parseInt(full, 10)
+      if (!isNaN(asNum) && String(asNum) === full && asNum >= 0 && asNum < options.length) {
+        return [asNum]
+      }
+      if (full.length === 1) {
+        const u = full.toUpperCase()
+        if (u >= 'A' && u <= 'Z') {
+          const i = u.charCodeAt(0) - 65
+          if (i >= 0 && i < options.length) return [i]
+        }
+      }
+      const exact = options.findIndex((o) => norm(o) === norm(full))
+      if (exact >= 0) return [exact]
+    }
+  }
+
+  // Array atau string multi-kunci: utamakan ; dan | (koma sering ada di teks opsi BI)
   const parts: string[] = Array.isArray(raw)
     ? raw.map((v) => String(v).trim()).filter(Boolean)
     : String(raw)
-        .split(/[,;|]/)
+        .split(/[;|]/)
         .map((p) => p.trim())
         .filter(Boolean)
 
+  // Fallback: split koma hanya jika semua potongan adalah huruf/indeks pendek
+  if (parts.length === 1 && /[,]//.test(parts[0]) && type !== 'category') {
+    const maybeIdx = parts[0]
+      .split(/[,]/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+    if (maybeIdx.length > 1 && maybeIdx.every((p) => /^[A-Za-z]$|^\d+$/.test(p))) {
+      parts.length = 0
+      parts.push(...maybeIdx)
+    }
+  }
+
   if (type === 'category') {
-    // Setiap elemen = label kolom untuk baris ke-i
     return options.map((_, i) => {
       const label = parts[i]
       if (label == null) return 0
-      // angka?
       const asNum = parseInt(label, 10)
       if (!isNaN(asNum) && asNum >= 0 && asNum < categoryLabels.length) return asNum
       const idx = categoryLabels.findIndex((c) => norm(c) === norm(label))
@@ -169,12 +204,10 @@ export function resolveCorrectAnswers(
       indices.push(asNum)
       continue
     }
-    // Cocokkan teks opsi (case-insensitive, spasi dinormalisasi)
     const idx = options.findIndex((o) => norm(o) === norm(p))
     if (idx >= 0) indices.push(idx)
   }
 
-  // unique, sorted for multiple
   return [...new Set(indices)].sort((a, b) => a - b)
 }
 
@@ -194,19 +227,13 @@ export interface LatihanPaket {
   id?: string
   title: string
   description?: string
-  /** Mapel utama (opsional, untuk filter) */
   subjectKey?: SubjectKey
-  /** ID soal yang masuk paket (urutan = urutan tampil) */
   questionIds: string[]
-  /** Jumlah soal (denormalisasi) */
   questionCount: number
-  /** Jadwal pelaksanaan */
-  startAt: any // Timestamp atau string ISO
+  startAt: any
   endAt: any
-  /** Token akses siswa (kode unik) */
   token: string
   status: LatihanStatus
-  /** Batas waktu mengerjakan (menit), 0 = tanpa batas */
   timeLimitMinutes?: number
   shuffleQuestions?: boolean
   shuffleOptions?: boolean
@@ -215,7 +242,6 @@ export interface LatihanPaket {
   updatedAt?: any
 }
 
-/** Generate token 6 karakter mudah dibaca */
 export function generateToken(length = 6): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let out = ''
@@ -225,7 +251,6 @@ export function generateToken(length = 6): string {
   return out
 }
 
-/** Hitung status aktual berdasarkan waktu (client-side) */
 export function resolveLatihanStatus(
   paket: Pick<LatihanPaket, 'status' | 'startAt' | 'endAt'>
 ): LatihanStatus {
@@ -264,14 +289,10 @@ export function formatDateTime(v: any): string {
   })
 }
 
-/* ========== HASIL / RIWAYAT PENGERJAAN ========== */
-
 export interface QuestionAnswer {
   questionId: string
-  /** Jawaban siswa — format sama dengan correctAnswers */
   selected: number[]
   isCorrect: boolean
-  /** ms mengerjakan soal ini (opsional) */
   timeMs?: number
 }
 
@@ -279,25 +300,18 @@ export interface LatihanAttempt {
   id?: string
   latihanId: string
   latihanTitle: string
-  /** Nama siswa (tanpa akun) */
   studentName: string
-  /** Kelas / identitas tambahan opsional */
   studentClass?: string
   answers: QuestionAnswer[]
-  /** Jumlah benar */
   score: number
-  /** Total soal */
   total: number
-  /** Skor 0–100 */
   percent: number
-  /** Ringkasan capaian per TP: { "3.1": { correct: 2, total: 3 }, ... } */
   tpSummary?: Record<string, { correct: number; total: number }>
   startedAt: any
   finishedAt: any
   durationMs?: number
 }
 
-/** Nilai benar/salah satu soal (indeks, kompatibel data lama) */
 export function gradeAnswer(
   question: { type: QuestionType; correctAnswers: number[] },
   selected: number[]
