@@ -59,22 +59,25 @@ export default function Dashboard() {
           </p>
         </Link>
 
-        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm opacity-70">
+        <Link
+          to="/laporan"
+          className="group bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all"
+        >
           <div className="flex items-start justify-between">
-            <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center group-hover:bg-emerald-100 transition">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
             </div>
-            <span className="text-[11px] font-medium bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-              Segera
-            </span>
+            <svg className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
           </div>
-          <h3 className="mt-4 text-base font-semibold text-gray-900">Progress Siswa</h3>
+          <h3 className="mt-4 text-base font-semibold text-gray-900">Laporan</h3>
           <p className="mt-1 text-sm text-gray-500">
-            Lihat hasil latihan dan skor siswa (belum tersedia)
+            Rekap skor, capaian TP, dan progress siswa
           </p>
-        </div>
+        </Link>
 
         <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm opacity-70">
           <div className="flex items-start justify-between">

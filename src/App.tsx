@@ -10,6 +10,7 @@ import TopicQuestions from './pages/TopicQuestions'
 import LatihanSoal from './pages/LatihanSoal'
 import LatihanForm from './pages/LatihanForm'
 import LatihanHasil from './pages/LatihanHasil'
+import Laporan from './pages/Laporan'
 import KerjakanEntry from './pages/KerjakanEntry'
 import KerjakanQuiz from './pages/KerjakanQuiz'
 import KerjakanResult from './pages/KerjakanResult'
@@ -49,6 +50,7 @@ function App() {
         <Route path="/bank-soal/:subjectKey" element={user ? <SubjectTopics /> : <Navigate to="/login" />} />
         <Route path="/bank-soal/:subjectKey/:topicId" element={user ? <TopicQuestions /> : <Navigate to="/login" />} />
         <Route path="/latihan-soal" element={user ? <LatihanSoal /> : <Navigate to="/login" />} />
+        <Route path="/laporan" element={user ? <Laporan /> : <Navigate to="/login" />} />
         <Route path="/latihan-soal/baru" element={user ? <LatihanForm /> : <Navigate to="/login" />} />
         <Route path="/latihan-soal/:id/hasil" element={user ? <LatihanHasil /> : <Navigate to="/login" />} />
         <Route path="/latihan-soal/:id" element={user ? <LatihanForm /> : <Navigate to="/login" />} />

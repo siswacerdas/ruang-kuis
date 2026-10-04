@@ -34,3 +34,21 @@ ruang-kuis/
 ## Kontak
 
 Dibuat oleh Arif Azwar Anas (@siswacerdas).
+
+
+## Deploy (Firebase Hosting)
+
+Lihat panduan lengkap: [docs/DEPLOY.md](docs/DEPLOY.md)
+
+Ringkas:
+
+```bash
+npm install
+npm run build
+firebase login
+firebase use ruang-kuis
+firebase deploy --only hosting
+```
+
+URL siswa: `https://ruang-kuis.web.app/kerjakan`  
+URL admin: `https://ruang-kuis.web.app/login`
