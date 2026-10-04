@@ -67,7 +67,7 @@ export default function AiQuestionGenerator({ open, onClose, subject, topic, onA
     setDrafts([])
     setSelected(new Set())
     try {
-      const list = await generateQuestionsWithOpenAI({
+      const { drafts: list, imageWarnings } = await generateQuestionsWithOpenAI({
         subjectName: subject.name,
         subjectKey: subject.key,
         topicName: topic.name || 'Materi',
@@ -81,6 +81,14 @@ export default function AiQuestionGenerator({ open, onClose, subject, topic, onA
       })
       setDrafts(list)
       setSelected(new Set(list.map((_, i) => i)))
+      if (imageWarnings.length > 0) {
+        setError(
+          'Soal berhasil dibuat, tetapi sebagian/semua gambar gagal:\n' +
+            imageWarnings.slice(0, 5).join('\n') +
+            (imageWarnings.length > 5 ? `\n… (+${imageWarnings.length - 5})` : '') +
+            '\n\nCek: API key punya akses Images, atau nonaktifkan generate gambar lalu unggah manual.'
+        )
+      }
     } catch (e: any) {
       setError(e?.message || 'Gagal generate')
     } finally {
@@ -307,13 +315,18 @@ export default function AiQuestionGenerator({ open, onClose, subject, topic, onA
                         </span>
                       )}
                     </div>
-                    {d.stimulusImage && (
+                    {d.stimulusImage ? (
                       <img
                         src={d.stimulusImage}
                         alt=""
                         className="mb-2 max-h-28 rounded-lg border border-gray-100 object-contain bg-gray-50"
                       />
-                    )}
+                    ) : d.imagePrompt ? (
+                      <p className="mb-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1">
+                        Gambar belum tersedia. Prompt: {d.imagePrompt.slice(0, 120)}
+                        {d.imagePrompt.length > 120 ? '…' : ''}
+                      </p>
+                    ) : null}
                     {d.stimulus && (
                       <div className="mb-2 text-xs text-gray-600 bg-amber-50/80 border border-amber-100 rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">
                         {d.stimulus}

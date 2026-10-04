@@ -233,32 +233,69 @@ export function isOpenAiConfigured(): boolean {
   return Boolean(import.meta.env.VITE_OPENAI_API_KEY?.trim())
 }
 
-async function generateDalleImage(prompt: string, apiKey: string): Promise<string | undefined> {
-  try {
-    const res = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'dall-e-2',
-        prompt: `${prompt}. Children's educational illustration, simple, colorful, neutral teaching material. No text, no numbers that reveal an answer, no watermark, no circled correct option.`,
+export type GenerateAiResult = {
+  drafts: AiDraftQuestion[]
+  /** Peringatan jika soal berhasil tapi gambar gagal */
+  imageWarnings: string[]
+}
+
+async function generateDalleImage(
+  prompt: string,
+  apiKey: string
+): Promise<{ url?: string; error?: string }> {
+  const fullPrompt = [
+    prompt.trim(),
+    "Children's educational illustration, simple, colorful, neutral teaching material.",
+    'No text overlays, no watermarks, no circled answers, no explicit solution numbers.',
+  ].join(' ')
+
+  // Coba DALL·E 3 dulu, lalu DALL·E 2
+  const attempts: { model: string; size: string; quality?: string }[] = [
+    { model: 'dall-e-3', size: '1024x1024', quality: 'standard' },
+    { model: 'dall-e-2', size: '512x512' },
+  ]
+
+  const errors: string[] = []
+  for (const a of attempts) {
+    try {
+      const body: Record<string, unknown> = {
+        model: a.model,
+        prompt: fullPrompt.slice(0, 3500),
         n: 1,
-        size: '512x512',
-      }),
-    })
-    if (!res.ok) return undefined
-    const data = await res.json()
-    return data?.data?.[0]?.url as string | undefined
-  } catch {
-    return undefined
+        size: a.size,
+      }
+      if (a.quality) body.quality = a.quality
+
+      const res = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const msg =
+          data?.error?.message ||
+          data?.error?.code ||
+          `HTTP ${res.status}`
+        errors.push(`${a.model}: ${msg}`)
+        continue
+      }
+      const url = data?.data?.[0]?.url as string | undefined
+      if (url) return { url }
+      errors.push(`${a.model}: respons tanpa URL`)
+    } catch (e: any) {
+      errors.push(`${a.model}: ${e?.message || 'network error'}`)
+    }
   }
+  return { error: errors.join(' | ') || 'Gagal generate gambar' }
 }
 
 export async function generateQuestionsWithOpenAI(
   opts: GenerateAiOptions
-): Promise<AiDraftQuestion[]> {
+): Promise<GenerateAiResult> {
   const key = import.meta.env.VITE_OPENAI_API_KEY?.trim()
   if (!key) {
     throw new Error(
@@ -321,15 +358,33 @@ export async function generateQuestionsWithOpenAI(
     throw new Error('Tidak ada soal valid dari AI. Coba ubah opsi/jumlah.')
   }
 
-  // Mode gambar: coba DALL·E per soal yang punya imagePrompt
+  const imageWarnings: string[] = []
+
+  // Mode gambar: DALL·E per soal
   if (stimulusMode === 'image' && opts.generateImages !== false) {
     for (let i = 0; i < drafts.length; i++) {
-      const p = drafts[i].imagePrompt || drafts[i].stimulus
-      if (!p) continue
-      const url = await generateDalleImage(p, key)
-      if (url) drafts[i] = { ...drafts[i], stimulusImage: url }
+      let p = (drafts[i].imagePrompt || '').trim()
+      if (!p && drafts[i].stimulus) {
+        // Fallback: buat prompt dari keterangan Indonesia
+        p = `Educational scene for elementary school: ${drafts[i].stimulus}`
+        drafts[i] = { ...drafts[i], imagePrompt: p }
+      }
+      if (!p) {
+        imageWarnings.push(`Soal ${i + 1}: AI tidak memberi imagePrompt — gambar dilewati.`)
+        continue
+      }
+      const result = await generateDalleImage(p, key)
+      if (result.url) {
+        drafts[i] = { ...drafts[i], stimulusImage: result.url }
+      } else {
+        imageWarnings.push(`Soal ${i + 1}: ${result.error || 'gagal'}`)
+      }
     }
+  } else if (stimulusMode === 'image' && opts.generateImages === false) {
+    imageWarnings.push(
+      'Generate gambar dimatikan. Hanya keterangan stimulus teks yang disimpan; unggah gambar manual nanti.'
+    )
   }
 
-  return drafts
+  return { drafts, imageWarnings }
 }
