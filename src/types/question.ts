@@ -135,13 +135,47 @@ export function resolveCorrectAnswers(
     return (raw as number[]).filter((n) => n >= 0 && (type === 'category' ? n < categoryLabels.length : n < options.length))
   }
 
-  // String tunggal atau array campuran
+  // String tunggal: prioritaskan cocok penuh ke opsi (jangan dipecah koma dulu).
+  // Contoh gagal lama: "Sabtu, 11 Oktober 2026 ..." terpecah di koma → tidak match.
+  if (typeof raw === 'string' || typeof raw === 'number') {
+    const full = String(raw).trim()
+    if (full) {
+      if (type === 'category') {
+        // satu label untuk semua baris? jarang; biarkan lewat path array di bawah
+      } else {
+        const asNum = parseInt(full, 10)
+        if (!isNaN(asNum) && String(asNum) === full && asNum >= 0 && asNum < options.length) {
+          return type === 'single' ? [asNum] : [asNum]
+        }
+        if (full.length === 1) {
+          const u = full.toUpperCase()
+          if (u >= 'A' && u <= 'Z') {
+            const i = u.charCodeAt(0) - 65
+            if (i >= 0 && i < options.length) return [i]
+          }
+        }
+        const exact = options.findIndex((o) => norm(o) === norm(full))
+        if (exact >= 0) return [exact]
+      }
+    }
+  }
+
+  // Array atau string multi-kunci: pisah ; | atau koma (hanya jika bukan match penuh)
   const parts: string[] = Array.isArray(raw)
     ? raw.map((v) => String(v).trim()).filter(Boolean)
     : String(raw)
-        .split(/[,;|]/)
+        .split(/[;|]/) // utamakan ; dan | — koma sering ada di teks opsi bahasa Indonesia
         .map((p) => p.trim())
         .filter(Boolean)
+
+  // Fallback: jika masih 1 bagian dan mengandung koma, coba split koma hanya untuk huruf/indeks pendek
+  if (parts.length === 1 && /[,]/.test(parts[0]) && type !== 'category') {
+    const maybeIdx = parts[0].split(/[,]/).map((p) => p.trim()).filter(Boolean)
+    if (maybeIdx.length > 1 && maybeIdx.every((p) => /^[A-Za-z]$|^\d+$/.test(p))) {
+      parts.length = 0
+      parts.push(...maybeIdx)
+    }
+  }
 
   if (type === 'category') {
     // Setiap elemen = label kolom untuk baris ke-i
