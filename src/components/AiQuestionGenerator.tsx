@@ -24,7 +24,7 @@ type Props = {
 const STIMULUS_OPTIONS: { value: StimulusMode; label: string; hint: string }[] = [
   { value: 'none', label: 'Tanpa stimulus', hint: 'Soal mandiri' },
   { value: 'text', label: 'Stimulus teks', hint: 'Bacaan / data / situasi' },
-  { value: 'image', label: 'Stimulus gambar', hint: 'Ilustrasi + keterangan (DALL·E)' },
+  { value: 'image', label: 'Stimulus gambar', hint: 'Ilustrasi + keterangan (GPT Image)' },
 ]
 
 const KOMP_OPTIONS: { value: KompleksitasLevel; label: string }[] = [
@@ -210,7 +210,7 @@ export default function AiQuestionGenerator({ open, onClose, subject, topic, onA
                   onChange={(e) => setGenerateImages(e.target.checked)}
                   className="rounded border-gray-300 text-indigo-600"
                 />
-                Generate gambar otomatis (DALL·E) — memakai kuota image API
+                Generate gambar otomatis (GPT Image) — memakai kuota image API
               </label>
             )}
           </div>

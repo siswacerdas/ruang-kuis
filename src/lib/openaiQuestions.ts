@@ -43,7 +43,7 @@ export type GenerateAiOptions = {
   kompleksitas?: KompleksitasLevel
   extraContext?: string
   model?: string
-  /** Generate gambar DALL·E bila stimulusMode === 'image' (default true) */
+  /** Generate gambar (GPT Image) bila stimulusMode === 'image' (default true) */
   generateImages?: boolean
 }
 
@@ -239,32 +239,50 @@ export type GenerateAiResult = {
   imageWarnings: string[]
 }
 
-async function generateDalleImage(
+/**
+ * Model gambar (GPT Image family — DALL·E sudah retired di banyak akun).
+ * Default hemat: gpt-image-1-mini + quality low.
+ * Override: VITE_OPENAI_IMAGE_MODEL=gpt-image-2.5-sunburst
+ */
+function resolveImageModel(): string {
+  return (
+    import.meta.env.VITE_OPENAI_IMAGE_MODEL?.trim() ||
+    'gpt-image-1-mini'
+  )
+}
+
+async function generateOpenAiImage(
   prompt: string,
   apiKey: string
 ): Promise<{ url?: string; error?: string }> {
   const fullPrompt = [
     prompt.trim(),
-    "Children's educational illustration, simple, colorful, neutral teaching material.",
+    "Children's educational illustration for Indonesian elementary school, simple, colorful, neutral teaching material.",
     'No text overlays, no watermarks, no circled answers, no explicit solution numbers.',
   ].join(' ')
 
-  // Coba DALL·E 3 dulu, lalu DALL·E 2
-  const attempts: { model: string; size: string; quality?: string }[] = [
-    { model: 'dall-e-3', size: '1024x1024', quality: 'standard' },
-    { model: 'dall-e-2', size: '512x512' },
+  const primary = resolveImageModel()
+  // Urutan: model pilihan user → mini (hemat) → gpt-image-2
+  const attempts: { model: string; quality: string; size: string }[] = [
+    { model: primary, quality: 'low', size: '1024x1024' },
   ]
+  if (primary !== 'gpt-image-1-mini') {
+    attempts.push({ model: 'gpt-image-1-mini', quality: 'low', size: '1024x1024' })
+  }
+  if (primary !== 'gpt-image-2' && primary !== 'gpt-image-1-mini') {
+    attempts.push({ model: 'gpt-image-2', quality: 'low', size: '1024x1024' })
+  }
 
   const errors: string[] = []
   for (const a of attempts) {
     try {
       const body: Record<string, unknown> = {
         model: a.model,
-        prompt: fullPrompt.slice(0, 3500),
+        prompt: fullPrompt.slice(0, 32000),
         n: 1,
         size: a.size,
+        quality: a.quality,
       }
-      if (a.quality) body.quality = a.quality
 
       const res = await fetch('https://api.openai.com/v1/images/generations', {
         method: 'POST',
@@ -283,9 +301,15 @@ async function generateDalleImage(
         errors.push(`${a.model}: ${msg}`)
         continue
       }
-      const url = data?.data?.[0]?.url as string | undefined
-      if (url) return { url }
-      errors.push(`${a.model}: respons tanpa URL`)
+      const item = data?.data?.[0]
+      // GPT Image default: b64_json; beberapa model masih bisa url
+      if (item?.b64_json) {
+        return { url: `data:image/png;base64,${item.b64_json}` }
+      }
+      if (item?.url) {
+        return { url: item.url as string }
+      }
+      errors.push(`${a.model}: respons tanpa gambar (b64/url)`)
     } catch (e: any) {
       errors.push(`${a.model}: ${e?.message || 'network error'}`)
     }
@@ -360,7 +384,7 @@ export async function generateQuestionsWithOpenAI(
 
   const imageWarnings: string[] = []
 
-  // Mode gambar: DALL·E per soal
+  // Mode gambar: GPT Image API per soal
   if (stimulusMode === 'image' && opts.generateImages !== false) {
     for (let i = 0; i < drafts.length; i++) {
       let p = (drafts[i].imagePrompt || '').trim()
@@ -373,7 +397,7 @@ export async function generateQuestionsWithOpenAI(
         imageWarnings.push(`Soal ${i + 1}: AI tidak memberi imagePrompt — gambar dilewati.`)
         continue
       }
-      const result = await generateDalleImage(p, key)
+      const result = await generateOpenAiImage(p, key)
       if (result.url) {
         drafts[i] = { ...drafts[i], stimulusImage: result.url }
       } else {
