@@ -13,11 +13,10 @@ export interface Subject {
   key: SubjectKey
   name: string
   shortName: string
-  color: string // tailwind-ish accent for UI
-  icon: string // emoji fallback
+  color: string
+  icon: string
 }
 
-/** Daftar mata pelajaran tetap — guru tidak perlu ubah kode */
 export const SUBJECTS: Subject[] = [
   { key: 'bahasa-indonesia', name: 'Bahasa Indonesia', shortName: 'BIN', color: 'rose', icon: '📖' },
   { key: 'pendidikan-pancasila', name: 'Pendidikan Pancasila', shortName: 'PP', color: 'red', icon: '🇮🇩' },
@@ -33,7 +32,6 @@ export function getSubject(key: string): Subject | undefined {
   return SUBJECTS.find((s) => s.key === key)
 }
 
-/** Materi di bawah mata pelajaran (guru buat sendiri) */
 export interface Topic {
   id?: string
   subjectKey: SubjectKey
@@ -41,12 +39,6 @@ export interface Topic {
   createdAt?: any
 }
 
-/**
- * Tipe soal:
- * - single   : pilihan ganda (1 jawaban benar)
- * - multiple : pilihan ganda kompleks (lebih dari 1 jawaban benar)
- * - category : pilihan ganda kategori (benar-salah, sesuai-tidak sesuai, dll.)
- */
 export type QuestionType = 'single' | 'multiple' | 'category'
 
 export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
@@ -55,40 +47,112 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   category: 'Pilihan Ganda Kategori',
 }
 
-/** Label default untuk tipe kategori */
 export const DEFAULT_CATEGORY_LABELS = ['Benar', 'Salah'] as const
 
 export interface Question {
   id?: string
-  /** Materi induk */
   topicId: string
-  /** Denormalisasi agar mudah query pool per mapel (ATS / AS) */
   subjectKey: SubjectKey
   type: QuestionType
-  /** Teks pertanyaan / stem */
   question: string
-  /**
-   * Untuk single & multiple: daftar opsi jawaban.
-   * Untuk category: daftar pernyataan (statement).
-   */
   options: string[]
-  /**
-   * Index jawaban benar.
-   * - single: satu elemen, e.g. [1]
-   * - multiple: satu atau lebih, e.g. [0, 2]
-   * - category: untuk setiap statement, index label kategori (0 atau 1), e.g. [0, 1, 0]
-   */
   correctAnswers: number[]
-  /**
-   * Hanya untuk type === 'category'.
-   * Contoh: ['Benar', 'Salah'] atau ['Sesuai', 'Tidak Sesuai']
-   */
   categoryLabels?: string[]
   explanation?: string
+  /**
+   * Tujuan Pembelajaran (TP) — kode atau teks, e.g. "3.1" atau
+   * "Menganalisis komponen ekosistem". Dipakai untuk memaknai capaian.
+   */
+  tp?: string
   createdAt?: any
 }
 
-/** Helper: apakah jawaban benar untuk opsi index tertentu (single/multiple) */
 export function isOptionCorrect(q: Question, optionIndex: number): boolean {
   return q.correctAnswers.includes(optionIndex)
+}
+
+/* ========== LATIHAN SOAL (paket) ========== */
+
+export type LatihanStatus = 'draft' | 'scheduled' | 'active' | 'finished' | 'archived'
+
+export const LATIHAN_STATUS_LABELS: Record<LatihanStatus, string> = {
+  draft: 'Draf',
+  scheduled: 'Terjadwal',
+  active: 'Aktif',
+  finished: 'Selesai',
+  archived: 'Arsip',
+}
+
+export interface LatihanPaket {
+  id?: string
+  title: string
+  description?: string
+  /** Mapel utama (opsional, untuk filter) */
+  subjectKey?: SubjectKey
+  /** ID soal yang masuk paket (urutan = urutan tampil) */
+  questionIds: string[]
+  /** Jumlah soal (denormalisasi) */
+  questionCount: number
+  /** Jadwal pelaksanaan */
+  startAt: any // Timestamp atau string ISO
+  endAt: any
+  /** Token akses siswa (kode unik) */
+  token: string
+  status: LatihanStatus
+  /** Batas waktu mengerjakan (menit), 0 = tanpa batas */
+  timeLimitMinutes?: number
+  shuffleQuestions?: boolean
+  shuffleOptions?: boolean
+  showScoreImmediately?: boolean
+  createdAt?: any
+  updatedAt?: any
+}
+
+/** Generate token 6 karakter mudah dibaca */
+export function generateToken(length = 6): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let out = ''
+  for (let i = 0; i < length; i++) {
+    out += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return out
+}
+
+/** Hitung status aktual berdasarkan waktu (client-side) */
+export function resolveLatihanStatus(
+  paket: Pick<LatihanPaket, 'status' | 'startAt' | 'endAt'>
+): LatihanStatus {
+  if (paket.status === 'draft' || paket.status === 'archived') return paket.status
+  const now = Date.now()
+  const start = toMillis(paket.startAt)
+  const end = toMillis(paket.endAt)
+  if (start && now < start) return 'scheduled'
+  if (end && now > end) return 'finished'
+  if (start && end && now >= start && now <= end) return 'active'
+  return paket.status
+}
+
+function toMillis(v: any): number | null {
+  if (!v) return null
+  if (typeof v === 'number') return v
+  if (typeof v === 'string') {
+    const t = Date.parse(v)
+    return isNaN(t) ? null : t
+  }
+  if (v?.toDate) return v.toDate().getTime()
+  if (v?.seconds) return v.seconds * 1000
+  return null
+}
+
+export function formatDateTime(v: any): string {
+  const ms = toMillis(v)
+  if (!ms) return '—'
+  return new Date(ms).toLocaleString('id-ID', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
