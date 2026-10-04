@@ -43,7 +43,11 @@ export interface Topic {
   createdAt?: any
 }
 
+/** Tipe internal Ruang Kuis */
 export type QuestionType = 'single' | 'multiple' | 'category'
+
+/** Alias tipe tka2026 → internal */
+export type TkaQuestionType = 'pg' | 'pgk' | 'pgk-cat'
 
 export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   single: 'Pilihan Ganda',
@@ -53,6 +57,11 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
 
 export const DEFAULT_CATEGORY_LABELS = ['Benar', 'Salah'] as const
 
+/** Level kompleksitas (opsional, selaras tka2026) */
+export type Kompleksitas = 'L1-Pemahaman' | 'L2-Aplikasi' | 'L3-Penalaran' | string
+
+export const KOMPLEKSITAS_OPTIONS = ['L1-Pemahaman', 'L2-Aplikasi', 'L3-Penalaran'] as const
+
 export interface Question {
   id?: string
   topicId: string
@@ -60,17 +69,26 @@ export interface Question {
   type: QuestionType
   question: string
   options: string[]
+  /** Indeks opsi/pernyataan yang benar (format internal stabil) */
   correctAnswers: number[]
   categoryLabels?: string[]
   explanation?: string
   /** Konteks atau teks bacaan yang dibutuhkan untuk menjawab */
   stimulus?: string
+  /** URL atau data-URL gambar stimulus (opsional, selaras tka2026 stimulusImage) */
+  stimulusImage?: string
   /** Kode TP pertama, untuk kompatibilitas tampilan lama */
   tp?: string
   /** Satu soal boleh mengisi lebih dari satu TP */
   tpCodes?: string[]
   /** Nama materi saat impor, jika berbeda dari materi halaman */
   materialName?: string
+  /** Domain/topik (alias tipeMateri tka2026) */
+  tipeMateri?: string
+  /** Level berpikir (L1/L2/L3) */
+  kompleksitas?: Kompleksitas
+  /** Bobot skor soal (default 1) */
+  skor?: number
   /** Sidik jari soal agar impor ulang tidak menggandakan */
   importKey?: string
   createdAt?: any
@@ -78,6 +96,86 @@ export interface Question {
 
 export function isOptionCorrect(q: Question, optionIndex: number): boolean {
   return q.correctAnswers.includes(optionIndex)
+}
+
+/** Map tipe tka2026 / label bebas → QuestionType internal */
+export function mapTkaType(raw: string): QuestionType {
+  const t = String(raw || '').toLowerCase().trim()
+  if (t === 'pg' || t === 'single' || t.includes('pilihan ganda') && !t.includes('kompleks') && !t.includes('kategori')) {
+    return 'single'
+  }
+  if (t === 'pgk' || t === 'multiple' || t.includes('kompleks') || t.includes('multi')) {
+    return 'multiple'
+  }
+  if (t === 'pgk-cat' || t === 'category' || t.includes('kategori') || t.includes('benar') || t.includes('salah')) {
+    return 'category'
+  }
+  return 'single'
+}
+
+/**
+ * Ubah kunci berbasis teks opsi (pola tka2026) menjadi indeks.
+ * - single: string teks opsi → [index]
+ * - multiple: array teks → indeks (urutan tidak penting)
+ * - category: array "Benar"/"Salah" (atau label kolom) → indeks label per baris
+ * Tetap menerima indeks angka / huruf A-D untuk kompatibilitas mundur.
+ */
+export function resolveCorrectAnswers(
+  type: QuestionType,
+  raw: unknown,
+  options: string[],
+  categoryLabels: string[] = [...DEFAULT_CATEGORY_LABELS]
+): number[] {
+  if (raw == null) return type === 'category' ? options.map(() => 0) : []
+
+  const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
+
+  // Sudah array angka
+  if (Array.isArray(raw) && raw.every((v) => typeof v === 'number')) {
+    return (raw as number[]).filter((n) => n >= 0 && (type === 'category' ? n < categoryLabels.length : n < options.length))
+  }
+
+  // String tunggal atau array campuran
+  const parts: string[] = Array.isArray(raw)
+    ? raw.map((v) => String(v).trim()).filter(Boolean)
+    : String(raw)
+        .split(/[,;|]/)
+        .map((p) => p.trim())
+        .filter(Boolean)
+
+  if (type === 'category') {
+    // Setiap elemen = label kolom untuk baris ke-i
+    return options.map((_, i) => {
+      const label = parts[i]
+      if (label == null) return 0
+      // angka?
+      const asNum = parseInt(label, 10)
+      if (!isNaN(asNum) && asNum >= 0 && asNum < categoryLabels.length) return asNum
+      const idx = categoryLabels.findIndex((c) => norm(c) === norm(label))
+      return idx >= 0 ? idx : 0
+    })
+  }
+
+  const indices: number[] = []
+  for (const p of parts) {
+    const u = p.toUpperCase()
+    if (u.length === 1 && u >= 'A' && u <= 'Z') {
+      const i = u.charCodeAt(0) - 65
+      if (i >= 0 && i < options.length) indices.push(i)
+      continue
+    }
+    const asNum = parseInt(p, 10)
+    if (!isNaN(asNum) && String(asNum) === p && asNum >= 0 && asNum < options.length) {
+      indices.push(asNum)
+      continue
+    }
+    // Cocokkan teks opsi (case-insensitive, spasi dinormalisasi)
+    const idx = options.findIndex((o) => norm(o) === norm(p))
+    if (idx >= 0) indices.push(idx)
+  }
+
+  // unique, sorted for multiple
+  return [...new Set(indices)].sort((a, b) => a - b)
 }
 
 /* ========== LATIHAN SOAL (paket) ========== */
@@ -166,7 +264,6 @@ export function formatDateTime(v: any): string {
   })
 }
 
-
 /* ========== HASIL / RIWAYAT PENGERJAAN ========== */
 
 export interface QuestionAnswer {
@@ -200,7 +297,7 @@ export interface LatihanAttempt {
   durationMs?: number
 }
 
-/** Nilai benar/salah satu soal */
+/** Nilai benar/salah satu soal (indeks, kompatibel data lama) */
 export function gradeAnswer(
   question: { type: QuestionType; correctAnswers: number[] },
   selected: number[]
