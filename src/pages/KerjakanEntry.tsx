@@ -135,6 +135,14 @@ export default function KerjakanEntry() {
             </button>
           </div>
 
+          <Link
+            to="/kerjakan/riwayat"
+            className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm text-gray-700 hover:border-indigo-200 hover:bg-indigo-50/50 transition"
+          >
+            <span className="font-medium">Riwayat kuis saya</span>
+            <span className="text-indigo-600 text-xs font-semibold">Lihat →</span>
+          </Link>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-3 rounded-xl">{error}</div>
@@ -145,25 +153,21 @@ export default function KerjakanEntry() {
                 type="text"
                 value={token}
                 onChange={(e) => setToken(e.target.value.toUpperCase())}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none font-mono tracking-widest text-center text-lg"
-                placeholder="ABC123"
+                placeholder="Contoh: AB12CD"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-center text-lg font-mono tracking-widest uppercase"
                 maxLength={12}
-                autoFocus
+                autoComplete="off"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-3 rounded-xl transition"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-medium py-3 rounded-xl transition"
             >
-              {loading ? 'Memeriksa...' : 'Mulai Latihan'}
+              {loading ? 'Memeriksa...' : 'Mulai latihan'}
             </button>
           </form>
         </div>
-
-        <p className="text-center text-xs text-gray-400 mt-6">
-          <Link to="/login" className="hover:text-indigo-600">Login admin</Link>
-        </p>
       </div>
     </div>
   )

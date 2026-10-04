@@ -8,56 +8,34 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
-### Added — Dashboard live (`Dashboard.tsx`)
-- Kartu angka dari Firestore: pengerjaan kuis, siswa unik, rata skor, paket, materi, soal.
-- Daftar **pengerjaan terbaru** (8 attempt terakhir) + taut ke Laporan.
+### Added — Progress per studentId + riwayat siswa
+- Tipe `LatihanAttempt.studentId` (sudah diisi saat submit dari `rk_session`).
+- **Laporan**: agregasi per siswa memakai `studentId` bila ada, fallback nama (data lama).
+- Halaman **`/kerjakan/riwayat`**: riwayat kuis, rata-rata, terbaik, capaian TP untuk siswa login.
+- Taut **Riwayat kuis saya** di halaman token (`KerjakanEntry`).
 
-### Added — Hasil kuis siswa (`KerjakanResult.tsx`)
-- Feedback teks sesuai rentang skor; warna skor/TP; blok **Perlu dilatih lagi** (TP < 70%).
+### Added — Dashboard live & hasil siswa
+- Dashboard: angka live + pengerjaan terbaru.
+- KerjakanResult: feedback skor, warna TP, saran latihan ulang.
 
-### Added — Progress siswa di Laporan (`Laporan.tsx`)
-- Dashboard progress berbasis **attempts (kuis saja)**: kartu pengerjaan, siswa unik, rata skor, waktu pengerjaan, % paket tersentuh.
-- **Tren skor** per minggu/bulan; **waktu pengerjaan**; **perhatian TP**; profil per siswa.
+### Added — Progress di Laporan
+- Tren skor, waktu pengerjaan, perhatian TP, profil per siswa.
 
-### Changed — Daftar materi bank soal (`SubjectTopics.tsx`)
-- Layout master–detail; edit nama/tautan/TP; filter daftar.
-
-### Added
-- Lightbox stimulus di bank soal (admin).
+### Changed — Daftar materi bank soal
+- Layout master–detail; edit nama/tautan/TP.
 
 ---
 
 ## [0.3.0] — 2026-10-04
 
-### Added — Stimulus & preview (Fase C lanjut)
-- Editor stimulus kaya, preview, kompres gambar, fix import koma, hide list saat edit.
-
----
-
-## [0.2.2] — 2026-10-04
-
-### Changed
-- Template import CSV (stimulus, kompleksitas, skor).
-
----
-
-## [0.2.1] — 2026-10-04
-
-### Added (Fase B — skema)
-- Field stimulusImage, mapTkaType, resolveCorrectAnswers.
+### Added — Stimulus & preview
+- Editor stimulus, kompres gambar, preview, fix import koma.
 
 ---
 
 ## [0.2.0] — 2026-10-04
 
 ### Added
-- CHANGELOG, anti-regresi, rencana A→B→C.
-
----
-
-## [0.1.0] — 2026-10-03 / 2026-10-04
-
-### Added
-- Setup app, bank soal, latihan, alur kerjakan.
+- CHANGELOG, skema, alur kerjakan awal.
 
 ---
