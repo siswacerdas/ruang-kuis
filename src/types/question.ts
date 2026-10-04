@@ -245,6 +245,18 @@ export interface LatihanPaket {
   shuffleQuestions?: boolean
   shuffleOptions?: boolean
   showScoreImmediately?: boolean
+  /**
+   * Penugasan: kosong/undefined = semua siswa (kompatibel data lama).
+   * Jika diisi, hanya kelas tersebut yang melihat paket di jadwal.
+   */
+  assignedClasses?: string[]
+  /** Opsional: batasi ke siswa tertentu (id dokumen students) */
+  assignedStudentIds?: string[]
+  /**
+   * Izinkan mengerjakan ulang setelah ada attempt.
+   * Default false (dilarang). Set true hanya jika guru mengizinkan.
+   */
+  allowRetry?: boolean
   createdAt?: any
   updatedAt?: any
 }
@@ -283,6 +295,33 @@ function toMillis(v: any): number | null {
   if (v?.toDate) return v.toDate().getTime()
   if (v?.seconds) return v.seconds * 1000
   return null
+}
+
+
+/** Paket terlihat oleh siswa? (penugasan kelas / id). Kosong = publik. */
+export function isPaketForStudent(
+  paket: Pick<LatihanPaket, 'assignedClasses' | 'assignedStudentIds'>,
+  student: { studentId?: string; className?: string }
+): boolean {
+  const classes = (paket.assignedClasses || []).map((c) => c.trim()).filter(Boolean)
+  const ids = (paket.assignedStudentIds || []).map((c) => c.trim()).filter(Boolean)
+  if (classes.length === 0 && ids.length === 0) return true
+  if (ids.length && student.studentId && ids.includes(student.studentId)) return true
+  const cls = (student.className || '').trim().toLowerCase()
+  if (classes.length && cls && classes.some((c) => c.toLowerCase() === cls)) return true
+  return false
+}
+
+/** Jam tersisa sampai endAt (negatif = sudah lewat). null jika tidak ada endAt. */
+export function hoursUntilEnd(paket: Pick<LatihanPaket, 'endAt'>): number | null {
+  const end = toMillis(paket.endAt as any)
+  if (!end) return null
+  return (end - Date.now()) / 3_600_000
+}
+
+/** Boleh mengerjakan ulang? Default: tidak. */
+export function canRetryPaket(paket: Pick<LatihanPaket, 'allowRetry'>): boolean {
+  return paket.allowRetry === true
 }
 
 export function formatDateTime(v: any): string {

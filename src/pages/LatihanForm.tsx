@@ -137,6 +137,9 @@ export default function LatihanForm() {
   const [shuffleQuestions, setShuffleQuestions] = useState(true)
   const [shuffleOptions, setShuffleOptions] = useState(false)
   const [showScoreImmediately, setShowScoreImmediately] = useState(true)
+  const [audienceAll, setAudienceAll] = useState(true)
+  const [assignedClassesText, setAssignedClassesText] = useState('5A')
+  const [allowRetry, setAllowRetry] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
 
   // Bank
@@ -184,6 +187,11 @@ export default function LatihanForm() {
       setShuffleQuestions(!!p.shuffleQuestions)
       setShuffleOptions(!!p.shuffleOptions)
       setShowScoreImmediately(p.showScoreImmediately !== false)
+      const ac = p.assignedClasses || []
+      const hasAssign = ac.length > 0 || (p.assignedStudentIds && p.assignedStudentIds.length > 0)
+      setAudienceAll(!hasAssign)
+      setAssignedClassesText(ac.length ? ac.join(', ') : '5A')
+      setAllowRetry(p.allowRetry === true)
       setSelectedIds(p.questionIds || [])
       setBuildMode('manual')
     } catch (err) {
@@ -322,6 +330,13 @@ export default function LatihanForm() {
         shuffleQuestions,
         shuffleOptions,
         showScoreImmediately,
+        assignedClasses: audienceAll
+          ? []
+          : assignedClassesText
+              .split(/[,;]/)
+              .map((c) => c.trim())
+              .filter(Boolean),
+        allowRetry,
         updatedAt: serverTimestamp(),
       }
 
@@ -499,6 +514,49 @@ export default function LatihanForm() {
               <input type="checkbox" checked={showScoreImmediately} onChange={(e) => setShowScoreImmediately(e.target.checked)} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
               Tampilkan skor setelah selesai
             </label>
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={allowRetry} onChange={(e) => setAllowRetry(e.target.checked)} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+              Izinkan mengerjakan ulang
+            </label>
+          </div>
+
+          <div className="pt-2 border-t border-gray-100 space-y-3">
+            <p className="text-sm font-medium text-gray-700">Penugasan siswa</p>
+            <label className="inline-flex items-center gap-2 cursor-pointer text-sm">
+              <input
+                type="radio"
+                name="audience"
+                checked={audienceAll}
+                onChange={() => setAudienceAll(true)}
+                className="text-indigo-600 focus:ring-indigo-500"
+              />
+              Semua siswa (publik dengan token)
+            </label>
+            <label className="inline-flex items-center gap-2 cursor-pointer text-sm">
+              <input
+                type="radio"
+                name="audience"
+                checked={!audienceAll}
+                onChange={() => setAudienceAll(false)}
+                className="text-indigo-600 focus:ring-indigo-500"
+              />
+              Hanya kelas tertentu
+            </label>
+            {!audienceAll && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Kelas (pisahkan koma bila lebih dari satu)</label>
+                <input
+                  type="text"
+                  value={assignedClassesText}
+                  onChange={(e) => setAssignedClassesText(e.target.value)}
+                  placeholder="5A, 5B"
+                  className="w-full max-w-xs px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 text-sm outline-none focus:ring-2 focus:ring-indigo-500/30"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Siswa di luar kelas ini tidak melihat paket di jadwal (token tetap diperlukan).
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

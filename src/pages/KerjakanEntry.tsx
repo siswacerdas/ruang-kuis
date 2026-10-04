@@ -8,6 +8,9 @@ import {
   getSubject,
   resolveLatihanStatus,
   LATIHAN_STATUS_LABELS,
+  isPaketForStudent,
+  canRetryPaket,
+  hoursUntilEnd,
   type LatihanPaket,
   type LatihanAttempt,
   type LatihanStatus,
@@ -148,12 +151,26 @@ export default function KerjakanEntry() {
     }
   }
 
+  const urgentPakets = useMemo(() => {
+    if (!student) return []
+    return pakets.filter((p) => {
+      if (!isPaketForStudent(p, student)) return false
+      if (resolveLatihanStatus(p) !== 'active') return false
+      const h = hoursUntilEnd(p)
+      return h != null && h > 0 && h <= 24
+    })
+  }, [pakets, student])
+
   const schedule = useMemo(() => {
+    if (!student) return []
     const rows = pakets
+      .filter((p) => isPaketForStudent(p, student))
       .map((p) => {
         const resolved = resolveLatihanStatus(p)
         const start = toMillis(p.startAt) || 0
-        return { paket: p, resolved, start }
+        const done = p.id ? doneIds.has(p.id) : false
+        const blocked = done && !canRetryPaket(p)
+        return { paket: p, resolved, start, done, blocked }
       })
       .filter((r) => r.resolved === 'active' || r.resolved === 'scheduled' || r.resolved === 'finished')
       .sort((a, b) => {
@@ -186,7 +203,7 @@ export default function KerjakanEntry() {
         groups.push({ dayKey: key, label: formatDayLabel(ms), items })
       })
     return groups
-  }, [pakets])
+  }, [pakets, student, doneIds])
 
   const selected = selectedId ? pakets.find((p) => p.id === selectedId) : null
 
@@ -202,8 +219,14 @@ export default function KerjakanEntry() {
   }
 
   const selectPaket = (p: LatihanPaket) => {
+    const done = p.id ? doneIds.has(p.id) : false
+    const blocked = done && !canRetryPaket(p)
     setSelectedId(p.id || null)
     setError('')
+    if (blocked) {
+      setError('Kamu sudah mengerjakan paket ini. Guru tidak mengizinkan pengerjaan ulang.')
+      return
+    }
     if (resolveLatihanStatus(p) === 'active') {
       setTimeout(() => tokenRef.current?.focus(), 50)
     }
@@ -239,6 +262,16 @@ export default function KerjakanEntry() {
       }
       if (resolved === 'finished') {
         setError('Waktu latihan sudah berakhir.')
+        return
+      }
+
+      if (!isPaketForStudent(paket, student)) {
+        setError('Paket ini tidak ditugaskan untuk kelas/akun kamu.')
+        return
+      }
+
+      if (paket.id && doneIds.has(paket.id) && !canRetryPaket(paket)) {
+        setError('Kamu sudah mengerjakan paket ini. Pengerjaan ulang tidak diizinkan.')
         return
       }
 
@@ -305,6 +338,34 @@ export default function KerjakanEntry() {
           </div>
         </div>
 
+        {urgentPakets.length > 0 && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-1.5">
+            <p className="text-xs font-semibold text-amber-900 uppercase tracking-wide">
+              Segera berakhir
+            </p>
+            {urgentPakets.map((p) => {
+              const h = hoursUntilEnd(p)
+              const label =
+                h == null
+                  ? ''
+                  : h < 1
+                    ? `${Math.max(1, Math.round(h * 60))} menit lagi`
+                    : `${Math.round(h)} jam lagi`
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => selectPaket(p)}
+                  className="block w-full text-left text-sm text-amber-950 hover:underline"
+                >
+                  <span className="font-medium">{p.title}</span>
+                  <span className="text-amber-800/80"> · {label}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <h2 className="text-sm font-semibold text-gray-900 mb-1">Masuk dengan token</h2>
           <p className="text-xs text-gray-500 mb-3">
@@ -363,12 +424,11 @@ export default function KerjakanEntry() {
                     {group.label}
                   </p>
                   <div className="relative space-y-2 pl-3 border-l-2 border-gray-100">
-                    {group.items.map(({ paket: p, resolved }) => {
+                    {group.items.map(({ paket: p, resolved, done, blocked }) => {
                       const sub = p.subjectKey ? getSubject(p.subjectKey) : null
                       const subMeta = SUBJECTS.find((s) => s.key === p.subjectKey)
-                      const done = p.id ? doneIds.has(p.id) : false
                       const isSel = selectedId === p.id
-                      const canStart = resolved === 'active'
+                      const canStart = resolved === 'active' && !blocked
 
                       return (
                         <button
@@ -398,6 +458,11 @@ export default function KerjakanEntry() {
                                     Sudah dikerjakan
                                   </span>
                                 )}
+                                {blocked && (
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-100">
+                                    Tidak bisa diulang
+                                  </span>
+                                )}
                                 {sub && (
                                   <span className="text-[10px] text-gray-500">
                                     {subMeta?.icon} {sub.shortName}
@@ -414,7 +479,7 @@ export default function KerjakanEntry() {
                                   ? ` · batas ${p.timeLimitMinutes} mnt`
                                   : ''}
                                 {canStart && !done ? ' · ketuk lalu masukkan token' : ''}
-                                {canStart && done ? ' · bisa dikerjakan ulang jika diizinkan' : ''}
+                                {blocked ? ' · sudah selesai, pengerjaan ulang ditutup' : canStart && done ? ' · boleh diulang (guru mengizinkan)' : ''}
                                 {resolved === 'scheduled' ? ' · belum dibuka' : ''}
                                 {resolved === 'finished' ? ' · waktu habis' : ''}
                               </p>

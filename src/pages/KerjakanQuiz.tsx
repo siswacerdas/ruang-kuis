@@ -14,6 +14,8 @@ import { db } from '../lib/firebase'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   gradeAnswer,
+  isPaketForStudent,
+  canRetryPaket,
   type LatihanPaket,
   type Question,
   type QuestionAnswer,
@@ -150,13 +152,13 @@ export default function KerjakanQuiz() {
         return
       }
       setSession(s)
-      loadQuiz(s.latihanId)
+      loadQuiz(s.latihanId, s)
     } catch {
       navigate('/kerjakan')
     }
   }, [latihanId])
 
-  const loadQuiz = async (id: string) => {
+  const loadQuiz = async (id: string, sess?: Session) => {
     setLoading(true)
     try {
       const snap = await getDoc(doc(db, 'latihan', id))
@@ -166,6 +168,34 @@ export default function KerjakanQuiz() {
       }
       const p = { id: snap.id, ...snap.data() } as LatihanPaket
       setPaket(p)
+
+      const st = sess
+      if (st) {
+        if (!isPaketForStudent(p, { studentId: st.studentId, className: st.studentClass })) {
+          setError('Paket ini tidak ditugaskan untuk kelas/akun kamu.')
+          return
+        }
+        // Cek attempt existing → larangan ulang
+        if (!canRetryPaket(p)) {
+          try {
+            const aSnap = await getDocs(
+              query(collection(db, 'attempts'), where('latihanId', '==', id))
+            )
+            const existing = aSnap.docs.some((d) => {
+              const a = d.data()
+              if (st.studentId && a.studentId === st.studentId) return true
+              if (st.studentName && a.studentName === st.studentName) return true
+              return false
+            })
+            if (existing) {
+              setError('Kamu sudah mengerjakan latihan ini. Pengerjaan ulang tidak diizinkan.')
+              return
+            }
+          } catch (err) {
+            console.warn('cek attempt', err)
+          }
+        }
+      }
 
       if (!p.questionIds?.length) {
         setError('Paket belum memiliki soal')
