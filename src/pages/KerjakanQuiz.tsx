@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import {
   collection,
   doc,
@@ -27,7 +27,7 @@ interface Session {
   token: string
 }
 
-function shuffle<T>(arr: T[], seed?: number): T[] {
+function shuffle<T>(arr: T[]): T[] {
   const a = [...arr]
   // simple shuffle
   for (let i = a.length - 1; i > 0; i--) {

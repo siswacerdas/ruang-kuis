@@ -6,7 +6,6 @@ import Layout from '../components/Layout'
 import {
   SUBJECTS,
   getSubject,
-  formatDateTime,
   type LatihanAttempt,
   type LatihanPaket,
   type SubjectKey,

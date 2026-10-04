@@ -13,7 +13,6 @@ import { db } from '../lib/firebase'
 import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import {
-  SUBJECTS,
   getSubject,
   LATIHAN_STATUS_LABELS,
   resolveLatihanStatus,

@@ -88,7 +88,7 @@ function normalizeImportItem(item: any): Omit<Question, 'id' | 'topicId' | 'subj
         item.optionF || item.F || '',
       ]
         .map((o) => String(o).trim())
-        .filter((o, i, arr) => o || i < 2)
+        .filter((o, i) => o || i < 2)
       // keep trailing empty only if needed — filter empty from end
       while (options.length > 2 && !options[options.length - 1]) options.pop()
     }
