@@ -1,67 +1,108 @@
-# Anti-Regresi - Ruang Kuis
+# Anti-Regresi — Ruang Kuis
 
-File ini berisi daftar fitur penting yang **tidak boleh rusak** saat melakukan perubahan kode.
-Gunakan checklist ini sebelum menganggap suatu perubahan selesai.
+Checklist **wajib** sebelum dan sesudah perubahan kode.  
+Tujuan: mencegah fitur yang sudah jalan tiba-tiba rusak (regresi).
 
-Tujuan: Mencegah regresi (fitur yang sebelumnya sudah jalan tiba-tiba rusak).
-
----
-
-## Checklist Umum (selalu dicek)
-
-- [ ] Aplikasi bisa dibuka tanpa error di browser (`npm run dev`)
-- [ ] Tidak ada error di Console browser (F12 → Console)
-- [ ] Tampilan tidak rusak di desktop dan mobile (responsive)
-- [ ] `git pull` berhasil tanpa konflik besar
+Referensi pola pengemasan & kuis: proyek tka2026 (stimulus, tiga tipe soal, gate token/waktu).
 
 ---
 
-## Fitur yang Harus Tetap Berfungsi
+## Checklist umum (selalu)
 
-### 1. Halaman Login Admin
-- [ ] Form login muncul dengan baik di `/login`
-- [ ] Validasi email & password bekerja
-- [ ] Login berhasil mengarahkan ke `/dashboard`
-- [ ] Login gagal menampilkan pesan error yang jelas
-- [ ] User yang sudah login tidak bisa mengakses `/login` lagi (redirect ke dashboard)
-
-### 2. Dashboard Admin
-- [ ] Halaman `/dashboard` hanya bisa diakses setelah login
-- [ ] Tombol **Logout** berfungsi dan mengarahkan ke `/login`
-- [ ] Tombol **Tambah Soal** mengarah ke `/questions`
-- [ ] User yang belum login dilempar ke `/login` jika membuka `/dashboard`
-
-### 3. Halaman Kelola Soal (`/questions`)
-- [ ] Daftar soal muncul dari Firestore
-- [ ] Tombol **+ Tambah Soal** membuka form
-- [ ] Form tambah soal berhasil menyimpan ke Firestore
-- [ ] Tombol **Edit** mengisi form dengan data soal yang dipilih
-- [ ] Tombol **Update Soal** berhasil mengubah data di Firestore
-- [ ] Tombol **Hapus** berhasil menghapus soal (dengan konfirmasi)
-- [ ] Tombol **Import Soal** menerima file `.json`, `.csv`, `.xlsx`
-- [ ] Import berhasil menambahkan soal ke Firestore dan refresh daftar
-- [ ] Navigasi “← Dashboard” kembali ke halaman dashboard
-
-### 4. Firebase Connection
-- [ ] Koneksi ke Firebase Authentication berhasil
-- [ ] Koneksi ke Firestore berhasil
-- [ ] Auth state (login/logout) terdeteksi dengan benar di seluruh aplikasi
-- [ ] Data soal tersimpan di collection `questions`
-
-### 5. Routing & Proteksi
-- [ ] `/` redirect ke `/dashboard` (jika login) atau `/login` (jika belum)
-- [ ] `/questions` dilindungi (hanya user login)
-- [ ] Tidak ada halaman 404 untuk route yang sudah didefinisikan
+- [ ] `npm run dev` / build tanpa error
+- [ ] Tidak ada error merah di Console browser
+- [ ] Tampilan desktop + mobile tetap rapi
+- [ ] CHANGELOG.md sudah diisi untuk perubahan ini
 
 ---
 
-## Cara Menggunakan File Ini
+## Area sensitif (uji ulang jika disentuh)
 
-1. Sebelum commit / push perubahan besar, buka file ini.
-2. Cek ulang checklist yang relevan.
-3. Jika ada yang rusak, perbaiki dulu sebelum lanjut.
-4. Tambahkan checklist baru jika ada fitur baru yang penting.
+| Area | File / koleksi utama |
+|------|----------------------|
+| Skema soal & kunci | `src/types/question.ts`, collection `questions` |
+| Import bank soal | `TopicQuestions.tsx` (normalizeImportItem) |
+| UI kuis siswa | `KerjakanQuiz.tsx`, `KerjakanEntry.tsx` |
+| Paket latihan | `LatihanForm.tsx`, `LatihanSoal.tsx`, collection `latihan` |
+| Penilaian & hasil | `gradeAnswer`, collection `attempts` |
+| Auth & routing | `Login.tsx`, `App.tsx`, Firestore rules |
 
 ---
 
-*Update terakhir: 2026-10-03*
+## 1. Login & dashboard admin
+
+- [ ] `/login` form + validasi
+- [ ] Login sukses → `/dashboard`; gagal → pesan jelas
+- [ ] User login tidak bisa buka `/login` lagi
+- [ ] Logout berfungsi
+- [ ] Route admin dilindungi (belum login → `/login`)
+
+---
+
+## 2. Bank soal (mapel → materi → soal)
+
+- [ ] Daftar mapel & materi muncul
+- [ ] CRUD soal: tambah, edit, hapus (konfirmasi)
+- [ ] Tiga tipe: **single** (radio), **multiple** (checkbox), **category** (per pernyataan)
+- [ ] Field stimulus, explanation, TP / tpCodes tersimpan
+- [ ] Preview / daftar soal menampilkan cuplikan benar
+
+### Import
+
+- [ ] Terima `.json`, `.csv`, `.xlsx`
+- [ ] `correctAnswers` menerima indeks **atau** huruf A/B/C **atau** teks opsi (setelah migrasi)
+- [ ] Soal masuk ke materi aktif / dibuat materi baru dari kolom materi
+- [ ] Duplikat (importKey) tidak digandakan
+- [ ] Import gagal menampilkan pesan yang jelas, tidak merusak data lama
+
+---
+
+## 3. Paket latihan (`latihan`)
+
+- [ ] Buat / edit paket: judul, soal terpilih, token, jadwal, time limit
+- [ ] Status: draft / scheduled / active / finished / archived (otomatis dari waktu)
+- [ ] `questionIds` urutan = urutan tampil di kuis
+- [ ] **Jangan** ubah `questionIds` paket yang sudah punya attempt tanpa konfirmasi
+- [ ] Token 6 karakter generate & salin
+
+---
+
+## 4. Kuis siswa (`/kerjakan`)
+
+- [ ] Masuk dengan token valid + nama siswa
+- [ ] Satu soal per layar; navigasi nomor; timer jika `timeLimitMinutes` > 0
+- [ ] **single** → pilih satu; **multiple** → multi; **category** → label per pernyataan
+- [ ] Stimulus teks tampil (jika ada)
+- [ ] Kirim jawaban → simpan `attempts` → halaman hasil
+- [ ] Auto-submit saat waktu habis
+- [ ] Skor & ringkasan TP benar (bandingkan `correctAnswers`)
+
+### Setelah upgrade penyajian (Fase C)
+
+- [ ] Gambar stimulus (jika ada) dalam frame terbatas + lightbox
+- [ ] Lightbox tidak menutup saat klik backdrop (hanya Tutup / Esc)
+- [ ] Tabel kategori (pgk-cat style) terbaca di mobile
+- [ ] Ganti soal (prev/next) tidak merusak state jawaban / timer
+
+---
+
+## 5. Firebase
+
+- [ ] Auth state konsisten di seluruh app
+- [ ] Collection: `questions`, `topics`, `latihan`, `attempts`, `students` (jika dipakai)
+- [ ] Rules: siswa tidak bisa baca kunci jawaban mentah / ubah attempt orang lain
+- [ ] Query `documentId in` batch ≤ 30 per request
+
+---
+
+## 6. Definition of Done
+
+- [ ] Skenario normal + edge case relevan lulus
+- [ ] Tidak merusak fitur existing (checklist di atas)
+- [ ] CHANGELOG diupdate
+- [ ] Catatan anti-regresi ditambah jika pola baru muncul
+- [ ] Hard-refresh / deploy diverifikasi jika menyentuh hosting
+
+---
+
+*Update terakhir: 2026-10-04 — selaras pola tka2026 (bank soal + kuis)*

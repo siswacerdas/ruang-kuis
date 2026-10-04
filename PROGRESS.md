@@ -1,35 +1,36 @@
-# Catatan Progress - Ruang Kuis
+# Catatan Progress — Ruang Kuis
+
+---
+
+## 2026-10-04 — Fase A: Dokumentasi (selaras tka2026)
+
+- [x] `CHANGELOG.md` (Keep a Changelog)
+- [x] `docs/ANTI_REGRESSION.md` diperluas (bank soal, import, paket, kuis, scoring)
+- [x] Rencana migrasi: A (docs) → B (skema + import) → C (UI penyajian kuis)
+
+### Selanjutnya (B → C)
+- [ ] Skema soal kompatibel tka2026 (stimulus, skor, kompleksitas; kunci teks opsi opsional)
+- [ ] Import Excel/JSON template selaras tka2026
+- [ ] UI kuis: frame gambar stimulus, lightbox, tabel kategori, gaya LMS
 
 ---
 
 ## 2026-10-04 — Import + TP + Latihan Soal
 
 ### Import & Tujuan Pembelajaran
-- [x] Field **TP (Tujuan Pembelajaran)** pada soal (editor + import + preview)
-- [x] Import soal disesuaikan schema baru (type, correctAnswers[], categoryLabels, tp, explanation)
-- [x] Import masuk ke materi aktif (topic) dan pool mapel
-- [x] Format JSON/CSV/Excel didokumentasikan di UI (details)
+- [x] Field **TP** pada soal (editor + import + preview)
+- [x] Import schema: type, correctAnswers[], categoryLabels, tp, explanation, stimulus
+- [x] Import ke materi aktif / pool mapel
 
 ### Latihan Soal (paket)
-- [x] Collection Firestore `latihan`
-- [x] Field: judul, deskripsi, subjectKey, questionIds, jadwal start/end, token, status, timeLimit, shuffle, showScore
-- [x] Halaman daftar dengan tab: Semua / Draf / Terjadwal / Aktif / Selesai / Arsip
-- [x] Status otomatis berdasarkan waktu (scheduled → active → finished)
-- [x] Form buat/edit: pilih soal dari pool mapel, filter materi, generate acak 10/20
-- [x] Token 6 karakter + tombol acak & salin
-- [x] Navigasi sidebar + kartu Dashboard
+- [x] Collection `latihan`
+- [x] Field: judul, deskripsi, subjectKey, questionIds, jadwal, token, status, timeLimit, shuffle, showScore
+- [x] Tab status + form buat/edit + generate acak
+- [x] Alur siswa: token → kerjakan → hasil (+ tpSummary)
 
-### Route baru
-- `/latihan-soal` — daftar paket
-- `/latihan-soal/baru` — buat
-- `/latihan-soal/:id` — edit
-
-### Selanjutnya
-- [ ] Halaman siswa masuk dengan token + kerjakan soal
-- [ ] Simpan jawaban & skor (per TP untuk capaian)
-- [ ] Laporan progress guru
-- [ ] Firestore Security Rules
-- [ ] Deploy Firebase Hosting
+### Route
+- `/latihan-soal`, `/latihan-soal/baru`, `/latihan-soal/:id`
+- `/kerjakan`, `/kerjakan/:latihanId`, `/kerjakan/hasil`
 
 ---
 
@@ -37,6 +38,6 @@
 - Mapel → Materi → Soal (3 tipe), subjectKey denormalized
 
 ## 2026-10-03 — UI refresh & setup awal
-- Layout, login, CRUD flat, Firebase
+- Layout, login, CRUD, Firebase
 
 *Update terakhir: 2026-10-04*
