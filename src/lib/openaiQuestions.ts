@@ -80,7 +80,12 @@ Setiap elemen questions:
 3b. Pilihan ganda kompleks (type "multiple"): WAJIB tepat 4 opsi dan TEPAT 2 jawaban benar (correctAnswers berisi tepat 2 indeks berbeda). Dua opsi lainnya harus salah. Dilarang menandai 3 atau 4 opsi sebagai benar.
 4. Jika ada stimulus: pertanyaan HARUS bergantung pada stimulus (tidak bisa dijawab tanpa membacanya).
 5. Stimulus teks: 2–6 kalimat atau data singkat (tabel ASCII sederhana boleh).
-6. Stimulus gambar: isi imagePrompt (English, simple illustration, no text in image if possible) DAN stimulus berisi keterangan singkat berbahasa Indonesia untuk siswa (apa yang digambarkan).
+6. Stimulus gambar — WAJIB netral terhadap kunci jawaban:
+   - imagePrompt (English): ilustrasi sederhana, ramah anak, SEBAIKNYA tanpa teks/angka/label yang langsung menunjuk jawaban.
+   - JANGAN menggambar kunci jawaban secara eksplisit (contoh: jangan lingkari opsi benar, jangan tulis "jawaban: 3", jangan hanya menampilkan angka/hasil akhir yang sama dengan kunci).
+   - Gambar harus memberi DATA atau KONTEKS untuk dianalisis (diagram, benda dihitung, situasi, peta sederhana, grafik kasar) sehingga siswa menafsirkan sendiri.
+   - Field stimulus (Indonesia): keterangan netral 1–3 kalimat (apa yang terlihat), TANPA menyimpulkan jawaban soal.
+   - Pertanyaan mengarahkan siswa mengolah informasi dari gambar; opsi pengecoh masuk akal dari interpretasi yang salah.
 7. Sesuaikan kompleksitas:
    - L1-Pemahaman: mengingat/mengidentifikasi fakta dari stimulus atau konsep dasar
    - L2-Aplikasi: memakai konsep pada situasi baru
@@ -108,9 +113,10 @@ function buildUserPrompt(opts: GenerateAiOptions): string {
 - imagePrompt = null.
 - Pertanyaan dan opsi harus merujuk pada stimulus tersebut.`
         : `Stimulus: WAJIB berbasis gambar untuk SETIAP soal.
-- Isi "imagePrompt" (English, clear scene for illustration, age-appropriate, no scary content).
-- Isi "stimulus" dengan keterangan singkat Indonesia yang mendampingi gambar (1–3 kalimat).
-- Pertanyaan harus mengandalkan informasi visual yang digambarkan (mis. menghitung objek, membaca situasi di gambar).`
+- Isi "imagePrompt" (English): scene netral, age-appropriate, no scary content. JANGAN menyertakan teks jawaban, angka kunci, atau penanda opsi benar di dalam gambar.
+- Gambar = bahan analisis (objek dihitung, situasi, diagram), BUKAN spanduk jawaban.
+- Isi "stimulus" (Indonesia) 1–3 kalimat keterangan netral; jangan tulis jawaban di sana.
+- Pertanyaan memaksa siswa menginterpretasi gambar; kunci tidak boleh terbaca langsung hanya dari melihat gambar tanpa berpikir.`
 
   const kompInstr =
     komp === 'campuran'
@@ -237,7 +243,7 @@ async function generateDalleImage(prompt: string, apiKey: string): Promise<strin
       },
       body: JSON.stringify({
         model: 'dall-e-2',
-        prompt: `${prompt}. Children's educational illustration, simple, colorful, no text, no watermark.`,
+        prompt: `${prompt}. Children's educational illustration, simple, colorful, neutral teaching material. No text, no numbers that reveal an answer, no watermark, no circled correct option.`,
         n: 1,
         size: '512x512',
       }),
