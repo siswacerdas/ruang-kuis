@@ -423,10 +423,16 @@ function StimulusToolbar({
         ⬌
       </button>
       <span className="w-px h-5 bg-gray-200 mx-0.5" />
-      <button type="button" className={btn} title="Kurangi inden (teks terpilih)" onMouseDown={(e) => { e.preventDefault(); onCmd('outdent') }}>
+      <button type="button" className={btn} title="Bullet list" onMouseDown={(e) => { e.preventDefault(); onCmd('insertUnorderedList') }}>
+        •≡
+      </button>
+      <button type="button" className={btn} title="Numbered list" onMouseDown={(e) => { e.preventDefault(); onCmd('insertOrderedList') }}>
+        1.
+      </button>
+      <button type="button" className={btn} title="Kurangi inden / naik level list" onMouseDown={(e) => { e.preventDefault(); onCmd('outdent') }}>
         «
       </button>
-      <button type="button" className={btn} title="Tambah inden (teks terpilih)" onMouseDown={(e) => { e.preventDefault(); onCmd('indent') }}>
+      <button type="button" className={btn} title="Tambah inden / turun level list" onMouseDown={(e) => { e.preventDefault(); onCmd('indent') }}>
         »
       </button>
       <span className="w-px h-5 bg-gray-200 mx-0.5" />
@@ -585,14 +591,14 @@ function StimulusRichEditor({
         contentEditable
         role="textbox"
         aria-label="Stimulus"
-        className="w-full min-h-[120px] max-h-[320px] overflow-y-auto px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-sm text-gray-800 leading-relaxed"
+        className="stimulus-editor w-full min-h-[120px] max-h-[320px] overflow-y-auto px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-sm text-gray-800 leading-relaxed [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:my-1 [&_li]:my-0.5"
         style={{ lineHeight: 1.7 }}
         onInput={emit}
         onBlur={emit}
         data-placeholder="Teks bacaan, konteks, atau petunjuk sebelum pertanyaan..."
       />
       <p className="text-[11px] text-gray-400 mt-1">
-        Format: tebal, miring, garis bawah, paragraf, jarak baris, persamaan (LaTeX). Disimpan sebagai HTML aman.
+        Format: B/I/U, perataan, bullet/nomor, inden, paragraf, spasi baris, persamaan (LaTeX). Inden pada list = naik/turun level.
       </p>
     </div>
   )
@@ -633,7 +639,7 @@ function StimulusHtmlView({ html, className }: { html: string; className?: strin
   return (
     <div
       ref={ref}
-      className={className}
+      className={(className || '') + ' [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:my-0.5'}
       dangerouslySetInnerHTML={{ __html: sanitizeStimulusHtml(html) }}
     />
   )
