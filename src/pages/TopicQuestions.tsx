@@ -670,6 +670,8 @@ export default function TopicQuestions() {
   const [previewChecked, setPreviewChecked] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [checkedIds, setCheckedIds] = useState<string[]>([])
+  const [lightbox, setLightbox] = useState<{ img?: string; text?: string } | null>(null)
+  const [lbScale, setLbScale] = useState(1)
 
   useEffect(() => {
     if (!subject || !topicId) {
@@ -678,6 +680,16 @@ export default function TopicQuestions() {
     }
     loadData()
   }, [subjectKey, topicId])
+
+  // Tutup lightbox hanya dengan Esc atau tombol Tutup (bukan klik backdrop)
+  useEffect(() => {
+    if (!lightbox) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightbox(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [lightbox])
 
   const loadData = async () => {
     if (!topicId || !subjectKey) return
@@ -1546,12 +1558,24 @@ export default function TopicQuestions() {
                 {(selected.stimulus || selected.stimulusImage) ? (
                   <div className="mb-4 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
                     {selected.stimulusImage && (
-                      <div className="px-3 pt-3 flex justify-center bg-white/60">
-                        <img
-                          src={selected.stimulusImage}
-                          alt="Stimulus"
-                          className="max-h-48 max-w-full object-contain rounded-lg"
-                        />
+                      <div className="px-3 pt-3">
+                        <div className="flex justify-center bg-white/60 rounded-lg">
+                          <img
+                            src={selected.stimulusImage}
+                            alt="Stimulus"
+                            className="max-h-48 max-w-full object-contain rounded-lg"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLbScale(1)
+                            setLightbox({ img: selected.stimulusImage, text: selected.stimulus })
+                          }}
+                          className="mt-2 mb-1 text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                        >
+                          🔍 Lihat lebih besar
+                        </button>
                       </div>
                     )}
                     {selected.stimulus && (
@@ -1641,8 +1665,20 @@ export default function TopicQuestions() {
             <div className="overflow-y-auto p-5">
               <div className="rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
                 {form.stimulusImage && (
-                  <div className="px-3 pt-3 flex justify-center">
-                    <img src={form.stimulusImage} alt="" className="max-h-48 max-w-full object-contain" />
+                  <div className="px-3 pt-3">
+                    <div className="flex justify-center">
+                      <img src={form.stimulusImage} alt="" className="max-h-48 max-w-full object-contain" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLbScale(1)
+                        setLightbox({ img: form.stimulusImage, text: form.stimulus })
+                      }}
+                      className="mt-2 mb-1 text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                    >
+                      🔍 Lihat lebih besar
+                    </button>
                   </div>
                 )}
                 {form.stimulus ? (
@@ -1692,12 +1728,24 @@ export default function TopicQuestions() {
                 {(selected.stimulus || selected.stimulusImage) && (
                   <div className="mb-4 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
                     {selected.stimulusImage && (
-                      <div className="px-3 pt-3 flex justify-center">
-                        <img
-                          src={selected.stimulusImage}
-                          alt=""
-                          className="max-h-[min(38vh,240px)] max-w-full object-contain"
-                        />
+                      <div className="px-3 pt-3">
+                        <div className="flex justify-center">
+                          <img
+                            src={selected.stimulusImage}
+                            alt=""
+                            className="max-h-[min(38vh,240px)] max-w-full object-contain"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLbScale(1)
+                            setLightbox({ img: selected.stimulusImage, text: selected.stimulus })
+                          }}
+                          className="mt-2 mb-1 text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                        >
+                          🔍 Lihat lebih besar
+                        </button>
                       </div>
                     )}
                     {selected.stimulus && (
@@ -1900,6 +1948,75 @@ export default function TopicQuestions() {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox stimulus — hanya tutup lewat tombol Tutup / Esc (bukan klik backdrop) */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Pratinjau stimulus"
+        >
+          <div className="relative bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-auto p-4 md:p-6">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setLbScale((s) => Math.min(3, Math.round((s + 0.25) * 100) / 100))}
+                  className="px-2.5 py-1 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLbScale((s) => Math.max(0.5, Math.round((s - 0.25) * 100) / 100))}
+                  className="px-2.5 py-1 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLbScale(1)}
+                  className="px-2.5 py-1 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50"
+                >
+                  100%
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLightbox(null)}
+                className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-sm font-medium hover:bg-gray-800"
+              >
+                Tutup
+              </button>
+            </div>
+            {lightbox.img && (
+              <div className="overflow-auto flex justify-center mb-3">
+                <img
+                  src={lightbox.img}
+                  alt="Stimulus"
+                  style={{ transform: `scale(${lbScale})`, transformOrigin: 'center top' }}
+                  className="max-w-full transition-transform"
+                />
+              </div>
+            )}
+            {lightbox.text && (
+              looksLikeHtml(lightbox.text) ? (
+                <div className="border-t border-gray-100 pt-3">
+                  <StimulusHtmlView
+                    html={lightbox.text}
+                    className="text-sm text-gray-700 leading-relaxed"
+                  />
+                </div>
+              ) : (
+                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap border-t border-gray-100 pt-3">
+                  {lightbox.text}
+                </p>
+              )
+            )}
           </div>
         </div>
       )}
