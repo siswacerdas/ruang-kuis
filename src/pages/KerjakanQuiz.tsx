@@ -210,9 +210,9 @@ export default function KerjakanQuiz() {
 
       const tpSummary: Record<string, { correct: number; total: number }> = {}
       questions.forEach((q, i) => {
-        const own = (q.tp || '').trim()
+        const own = [q.tpCodes, q.tp].flat().flatMap((v) => String(v || '').split(/[,;|]/)).map((s) => s.trim()).filter(Boolean)
         const fromTopic = topicTp.current[q.topicId] || []
-        const codes = own ? [own] : fromTopic
+        const codes = [...new Set(own.length ? own : fromTopic)]
         const targets = codes.length ? codes : ['Lainnya']
         targets.forEach((tp) => {
           if (!tpSummary[tp]) tpSummary[tp] = { correct: 0, total: 0 }

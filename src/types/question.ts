@@ -63,11 +63,12 @@ export interface Question {
   correctAnswers: number[]
   categoryLabels?: string[]
   explanation?: string
-  /**
-   * Tujuan Pembelajaran (TP) — kode atau teks, e.g. "3.1" atau
-   * "Menganalisis komponen ekosistem". Dipakai untuk memaknai capaian.
-   */
+  /** Kode TP pertama, untuk kompatibilitas tampilan lama */
   tp?: string
+  /** Satu soal boleh mengisi lebih dari satu TP */
+  tpCodes?: string[]
+  /** Nama materi saat impor, jika berbeda dari materi halaman */
+  materialName?: string
   createdAt?: any
 }
 

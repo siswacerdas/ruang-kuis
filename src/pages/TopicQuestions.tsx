@@ -34,6 +34,8 @@ const emptyForm = () => ({
   categoryLabels: [...DEFAULT_CATEGORY_LABELS] as string[],
   explanation: '',
   tp: '',
+  tpCodes: '',
+  materialName: '',
 })
 
 function parseCorrectAnswers(value: any, type: QuestionType, optionCount: number): number[] {
@@ -61,6 +63,26 @@ function parseCorrectAnswers(value: any, type: QuestionType, optionCount: number
       .filter((n) => n >= 0 && n < Math.max(optionCount, 10))
   }
   return type === 'category' ? Array(optionCount).fill(0) : []
+}
+
+function parseTpCodes(value: any): string[] {
+  if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean)
+  return String(value || '')
+    .split(/[,;|]/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+}
+
+function downloadTemplate() {
+  const header = 'materi,tp,type,question,optionA,optionB,optionC,optionD,correctAnswers,explanation'
+  const row = 'Ekosistem,"IPAS-2.1, IPAS-2.2",single,Komponen berikut yang termasuk abiotik adalah...,Cahaya matahari,Pohon,Burung,Jamur,0,Abiotik adalah komponen tak hidup.'
+  const blob = new Blob([`${header}\n${row}\n`], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'template_import_soal.csv'
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 function normalizeImportItem(item: any): Omit<Question, 'id' | 'topicId' | 'subjectKey' | 'createdAt'> | null {
@@ -120,7 +142,8 @@ function normalizeImportItem(item: any): Omit<Question, 'id' | 'topicId' | 'subj
       while (correctAnswers.length < options.length) correctAnswers.push(0)
     }
 
-    const tp = String(item.tp || item.TP || item.tujuanPembelajaran || item.tujuan || '').trim() || undefined
+    const tpCodes = parseTpCodes(item.tpCodes ?? item.tp ?? item.TP ?? item.tujuanPembelajaran ?? item.tujuan)
+    const materialName = String(item.materi || item.material || item.topic || item.namaMateri || '').trim() || undefined
     const explanation = String(item.explanation || item.pembahasan || item.Pembahasan || '').trim() || undefined
 
     return {
@@ -130,11 +153,40 @@ function normalizeImportItem(item: any): Omit<Question, 'id' | 'topicId' | 'subj
       correctAnswers,
       categoryLabels,
       explanation,
-      tp,
+      tp: tpCodes[0],
+      tpCodes,
+      materialName,
     }
   } catch {
     return null
   }
+}
+
+async function resolveTopicId(
+  subjectKey: string,
+  fallbackId: string,
+  materialName: string | undefined,
+  cache: Map<string, string>,
+  current: Topic | null
+) {
+  const name = (materialName || current?.name || '').trim()
+  if (!name) return fallbackId
+  const key = name.toLowerCase()
+  if (cache.has(key)) return cache.get(key)!
+  const snap = await getDocs(query(collection(db, 'topics'), where('subjectKey', '==', subjectKey)))
+  const found = snap.docs.find((d) => String(d.data().name || '').trim().toLowerCase() === key)
+  if (found) {
+    cache.set(key, found.id)
+    return found.id
+  }
+  const created = await addDoc(collection(db, 'topics'), {
+    subjectKey,
+    name,
+    tpCodes: current?.tpCodes || [],
+    createdAt: serverTimestamp(),
+  })
+  cache.set(key, created.id)
+  return created.id
 }
 
 export default function TopicQuestions() {
@@ -214,7 +266,9 @@ export default function TopicQuestions() {
       correctAnswers: [...q.correctAnswers],
       categoryLabels: q.categoryLabels ? [...q.categoryLabels] : [...DEFAULT_CATEGORY_LABELS],
       explanation: q.explanation || '',
-      tp: q.tp || '',
+      tp: q.tp || (q.tpCodes || []).join(', '),
+      tpCodes: (q.tpCodes || (q.tp ? [q.tp] : [])).join(', '),
+      materialName: q.materialName || topic?.name || '',
     })
     setError('')
     setShowEditor(true)
@@ -335,7 +389,9 @@ export default function TopicQuestions() {
         options: form.options.map((o) => o.trim()),
         correctAnswers: form.correctAnswers,
         explanation: form.explanation.trim() || null,
-        tp: form.tp.trim() || null,
+        tp: parseTpCodes(form.tpCodes || form.tp)[0] || null,
+        tpCodes: parseTpCodes(form.tpCodes || form.tp),
+        materialName: form.materialName.trim() || topic?.name || null,
       }
       if (form.type === 'category') {
         payload.categoryLabels = form.categoryLabels.map((l) => l.trim())
@@ -409,11 +465,18 @@ export default function TopicQuestions() {
       }
 
       let success = 0
+      const topicCache = new Map<string, string>()
+      if (topicId) topicCache.set((topic?.name || '').toLowerCase(), topicId)
       for (const q of valid) {
         try {
+          const targetTopicId = await resolveTopicId(subjectKey, topicId, q.materialName, topicCache, topic)
+          const codes = q.tpCodes?.length ? q.tpCodes : topic?.tpCodes || []
           await addDoc(collection(db, 'questions'), {
             ...q,
-            topicId,
+            tp: codes[0] || null,
+            tpCodes: codes,
+            materialName: q.materialName || topic?.name || null,
+            topicId: targetTopicId,
             subjectKey,
             createdAt: serverTimestamp(),
           })
@@ -488,7 +551,8 @@ export default function TopicQuestions() {
           Format import soal (JSON / CSV / Excel)
         </summary>
         <div className="px-4 pb-4 text-xs text-gray-600 space-y-2 border-t border-gray-50 pt-3">
-          <p>Kolom/field: <code className="bg-gray-100 px-1 rounded">question</code>, <code className="bg-gray-100 px-1 rounded">type</code> (single|multiple|category), <code className="bg-gray-100 px-1 rounded">optionA–D</code> atau <code className="bg-gray-100 px-1 rounded">options[]</code>, <code className="bg-gray-100 px-1 rounded">correctAnswers</code> (contoh: <code>0</code> atau <code>0,2</code> atau <code>A,C</code>), <code className="bg-gray-100 px-1 rounded">tp</code>, <code className="bg-gray-100 px-1 rounded">explanation</code>, <code className="bg-gray-100 px-1 rounded">categoryLabelA/B</code> (untuk tipe kategori).</p>
+          <p>Kolom: <code className="bg-gray-100 px-1 rounded">materi</code>, <code className="bg-gray-100 px-1 rounded">tp</code> (boleh beberapa, pisahkan koma), <code className="bg-gray-100 px-1 rounded">type</code>, <code className="bg-gray-100 px-1 rounded">question</code>, <code className="bg-gray-100 px-1 rounded">optionA–D</code>, <code className="bg-gray-100 px-1 rounded">correctAnswers</code>, <code className="bg-gray-100 px-1 rounded">explanation</code>. Materi yang belum ada akan dibuat di mapel ini.</p>
+          <button type="button" onClick={downloadTemplate} className="mt-2 text-indigo-700 font-medium">Unduh template CSV</button>
           <p>Soal yang diimpor otomatis masuk ke materi ini dan pool mapel <strong>{subject.shortName}</strong>.</p>
         </div>
       </details>
@@ -537,17 +601,15 @@ export default function TopicQuestions() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  TP <span className="text-gray-400 font-normal">(Tujuan Pembelajaran)</span>
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">TP (boleh lebih dari satu, pisahkan koma)</label>
                 <input
                   type="text"
-                  value={form.tp}
-                  onChange={(e) => setForm({ ...form, tp: e.target.value })}
+                  value={form.tpCodes}
+                  onChange={(e) => setForm({ ...form, tpCodes: e.target.value, tp: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-sm"
-                  placeholder="Contoh: 3.1 atau teks TP"
+                  placeholder="IPAS-2.1, IPAS-2.2"
                 />
-                <p className="text-xs text-gray-400 mt-1">Untuk memaknai capaian belajar</p>
+                <p className="text-xs text-gray-400 mt-1">Kosongkan untuk memakai TP materi ini: {(topic?.tpCodes || []).join(', ') || 'belum ada'}</p>
               </div>
             </div>
 
@@ -720,7 +782,7 @@ export default function TopicQuestions() {
                     <p className="text-sm text-gray-800 line-clamp-2 leading-snug">{q.question}</p>
                     <p className="text-[11px] text-gray-400 mt-1">
                       {QUESTION_TYPE_LABELS[q.type] || q.type}
-                      {q.tp ? ` · TP ${q.tp}` : ''}
+                      {(q.tpCodes || (q.tp ? [q.tp] : [])).join(', ') ? ` · TP ${(q.tpCodes || [q.tp]).filter(Boolean).join(', ')}` : ''}
                     </p>
                   </div>
                 </button>
