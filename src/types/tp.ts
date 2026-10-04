@@ -16,7 +16,6 @@ export interface LearningObjective {
   element: string
   order: number
   statement: string
-  jp?: number
   weight: number
   active: boolean
   className: string

@@ -1,18 +1,23 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  collection,
-  doc,
-  getDocs,
-  query,
-  serverTimestamp,
-  writeBatch,
-} from 'firebase/firestore'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { collection, doc, getDocs, serverTimestamp, writeBatch } from 'firebase/firestore'
 import Layout from '../components/Layout'
 import { db } from '../lib/firebase'
 import { SUBJECTS, getSubject } from '../types/question'
-import type { BookMaterial, LearningObjective, TpSeedFile } from '../types/tp'
+import type { BookMaterial, LearningObjective, SubjectKey, TpSeedFile } from '../types/tp'
 
 type Tab = 'tp' | 'materi'
+
+const emptyTp = (): LearningObjective => ({
+  code: '',
+  subjectKey: 'bahasa-indonesia',
+  element: '',
+  order: 1,
+  statement: '',
+  weight: 1,
+  active: true,
+  className: '5A',
+  phase: 'C',
+})
 
 export default function TujuanPembelajaran() {
   const [tab, setTab] = useState<Tab>('tp')
@@ -21,10 +26,12 @@ export default function TujuanPembelajaran() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [subjectFilter, setSubjectFilter] = useState<string>('semua')
+  const [subjectFilter, setSubjectFilter] = useState('semua')
   const [queryText, setQueryText] = useState('')
-  const [savingCode, setSavingCode] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
+  const [editor, setEditor] = useState<LearningObjective | null>(null)
+  const [materialEditor, setMaterialEditor] = useState<BookMaterial | null>(null)
+  const [saving, setSaving] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const load = async () => {
@@ -32,19 +39,21 @@ export default function TujuanPembelajaran() {
     setError('')
     try {
       const [tpSnap, matSnap] = await Promise.all([
-        getDocs(query(collection(db, 'learningObjectives'))),
-        getDocs(query(collection(db, 'bookMaterials'))),
+        getDocs(collection(db, 'learningObjectives')),
+        getDocs(collection(db, 'bookMaterials')),
       ])
-      const tp = tpSnap.docs
-        .map((d) => ({ id: d.id, ...(d.data() as Omit<LearningObjective, 'id'>) }))
-        .sort((a, b) => a.subjectKey.localeCompare(b.subjectKey) || a.order - b.order)
-      const mats = matSnap.docs
-        .map((d) => ({ id: d.id, ...(d.data() as Omit<BookMaterial, 'id'>) }))
-        .sort((a, b) => a.subjectKey.localeCompare(b.subjectKey) || a.title.localeCompare(b.title, 'id'))
-      setItems(tp)
-      setMaterials(mats)
+      setItems(
+        tpSnap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<LearningObjective, 'id'>) }))
+          .sort((a, b) => a.subjectKey.localeCompare(b.subjectKey) || a.order - b.order || a.code.localeCompare(b.code))
+      )
+      setMaterials(
+        matSnap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<BookMaterial, 'id'>) }))
+          .sort((a, b) => a.subjectKey.localeCompare(b.subjectKey) || a.title.localeCompare(b.title, 'id'))
+      )
     } catch (e: any) {
-      setError(e?.message || 'Gagal memuat data TP.')
+      setError(e?.message || 'Gagal memuat data.')
     } finally {
       setLoading(false)
     }
@@ -54,74 +63,45 @@ export default function TujuanPembelajaran() {
     load()
   }, [])
 
-  const filtered = useMemo(() => {
+  const filteredTp = useMemo(() => {
     const q = queryText.trim().toLowerCase()
     return items.filter((t) => {
       if (subjectFilter !== 'semua' && t.subjectKey !== subjectFilter) return false
       if (!q) return true
-      return (
-        t.code.toLowerCase().includes(q) ||
-        t.statement.toLowerCase().includes(q) ||
-        (t.element || '').toLowerCase().includes(q)
-      )
+      return [t.code, t.statement, t.element].some((v) => (v || '').toLowerCase().includes(q))
     })
   }, [items, subjectFilter, queryText])
 
-  const counts = useMemo(() => {
-    const map = new Map<string, number>()
-    items.forEach((t) => map.set(t.subjectKey, (map.get(t.subjectKey) || 0) + 1))
-    return map
-  }, [items])
+  const groupedTp = useMemo(() => {
+    const groups: { subjectKey: string; element: string; rows: LearningObjective[] }[] = []
+    filteredTp.forEach((row) => {
+      const last = groups[groups.length - 1]
+      if (last && last.subjectKey === row.subjectKey && last.element === row.element) last.rows.push(row)
+      else groups.push({ subjectKey: row.subjectKey, element: row.element || 'Umum', rows: [row] })
+    })
+    return groups
+  }, [filteredTp])
 
-  const saveTp = async (item: LearningObjective) => {
-    if (!item.id) return
-    setSavingCode(item.code)
-    setError('')
-    try {
-      const batch = writeBatch(db)
-      batch.set(
-        doc(db, 'learningObjectives', item.id),
-        {
-          code: item.code,
-          subjectKey: item.subjectKey,
-          element: item.element,
-          order: Number(item.order) || 0,
-          statement: item.statement.trim(),
-          jp: item.jp ?? null,
-          weight: Number(item.weight) || 1,
-          active: !!item.active,
-          className: item.className || '5A',
-          phase: item.phase || 'C',
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      )
-      await batch.commit()
-      setNotice(`TP ${item.code} disimpan.`)
-    } catch (e: any) {
-      setError(e?.message || 'Gagal menyimpan.')
-    } finally {
-      setSavingCode(null)
-    }
-  }
+  const filteredMaterials = useMemo(() => {
+    const q = queryText.trim().toLowerCase()
+    return materials.filter((m) => {
+      if (subjectFilter !== 'semua' && m.subjectKey !== subjectFilter) return false
+      if (!q) return true
+      return [m.title, m.summary, ...(m.suggestedTpCodes || [])].some((v) => (v || '').toLowerCase().includes(q))
+    })
+  }, [materials, subjectFilter, queryText])
 
   const importJson = async (file: File) => {
     setImporting(true)
     setError('')
     setNotice('')
     try {
-      const text = await file.text()
-      const data = JSON.parse(text) as TpSeedFile
-      if (!Array.isArray(data.tp) || data.tp.length === 0) {
-        throw new Error('File tidak berisi array tp.')
-      }
+      const data = JSON.parse(await file.text()) as TpSeedFile
+      if (!Array.isArray(data.tp) || data.tp.length === 0) throw new Error('File tidak berisi array tp.')
       let tpCount = 0
-      let matCount = 0
-      const chunks: typeof data.tp[] = []
-      for (let i = 0; i < data.tp.length; i += 400) chunks.push(data.tp.slice(i, i + 400))
-      for (const chunk of chunks) {
+      for (let i = 0; i < data.tp.length; i += 400) {
         const batch = writeBatch(db)
-        chunk.forEach((raw) => {
+        data.tp.slice(i, i + 400).forEach((raw) => {
           const code = String(raw.code || '').trim()
           if (!code || !raw.statement || !raw.subjectKey) return
           batch.set(
@@ -132,7 +112,6 @@ export default function TujuanPembelajaran() {
               element: raw.element || '',
               order: Number(raw.order) || 0,
               statement: String(raw.statement).trim(),
-              jp: raw.jp ?? null,
               weight: Number(raw.weight) || 1,
               active: raw.active !== false,
               className: raw.className || data.className || '5A',
@@ -150,9 +129,8 @@ export default function TujuanPembelajaran() {
       for (let i = 0; i < mats.length; i += 400) {
         const batch = writeBatch(db)
         mats.slice(i, i + 400).forEach((m) => {
-          const id = `${m.subjectKey}__${slug(m.title)}`
           batch.set(
-            doc(db, 'bookMaterials', id),
+            doc(db, 'bookMaterials', `${m.subjectKey}__${slug(m.title)}`),
             {
               subjectKey: m.subjectKey,
               title: m.title,
@@ -163,11 +141,10 @@ export default function TujuanPembelajaran() {
             },
             { merge: true }
           )
-          matCount += 1
         })
         await batch.commit()
       }
-      setNotice(`Impor selesai: ${tpCount} TP dan ${matCount} materi buku. Kode yang sama ditimpa, tidak diduplikasi.`)
+      setNotice(`Impor langsung tersimpan: ${tpCount} TP dan ${mats.length} materi.`)
       await load()
     } catch (e: any) {
       setError(e?.message || 'Gagal membaca JSON.')
@@ -177,19 +154,100 @@ export default function TujuanPembelajaran() {
     }
   }
 
+  const saveTp = async () => {
+    if (!editor) return
+    const code = editor.code.trim()
+    if (!code || !editor.statement.trim()) {
+      setError('Kode dan rumusan wajib diisi.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const batch = writeBatch(db)
+      batch.set(
+        doc(db, 'learningObjectives', code),
+        {
+          code,
+          subjectKey: editor.subjectKey,
+          element: editor.element.trim(),
+          order: Number(editor.order) || 0,
+          statement: editor.statement.trim(),
+          weight: Number(editor.weight) || 1,
+          active: !!editor.active,
+          className: editor.className || '5A',
+          phase: editor.phase || 'C',
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      )
+      await batch.commit()
+      setEditor(null)
+      setNotice(`TP ${code} disimpan.`)
+      await load()
+    } catch (e: any) {
+      setError(e?.message || 'Gagal menyimpan TP.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const saveMaterial = async () => {
+    if (!materialEditor) return
+    if (!materialEditor.title.trim()) {
+      setError('Judul materi wajib diisi.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const id = materialEditor.id || `${materialEditor.subjectKey}__${slug(materialEditor.title)}`
+      const batch = writeBatch(db)
+      batch.set(
+        doc(db, 'bookMaterials', id),
+        {
+          subjectKey: materialEditor.subjectKey,
+          title: materialEditor.title.trim(),
+          summary: materialEditor.summary.trim(),
+          suggestedTpCodes: materialEditor.suggestedTpCodes,
+          linkNote: materialEditor.linkNote || '',
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      )
+      await batch.commit()
+      setMaterialEditor(null)
+      setNotice('Materi disimpan.')
+      await load()
+    } catch (e: any) {
+      setError(e?.message || 'Gagal menyimpan materi.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <Layout
       title="Tujuan Pembelajaran"
-      subtitle="Master TP Kelas 5. Kode tetap; rumusan boleh diubah."
+      subtitle="Master TP dan materi buku. Impor langsung tersimpan; ubah lewat Edit kapan saja."
       actions={
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          disabled={importing}
-          className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-60"
-        >
-          {importing ? 'Mengimpor...' : 'Impor JSON'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => (tab === 'tp' ? setEditor(emptyTp()) : setMaterialEditor({ subjectKey: 'ipas', title: '', summary: '', suggestedTpCodes: [] }))}
+            className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700"
+          >
+            Tambah
+          </button>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={importing}
+            className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-60"
+          >
+            {importing ? 'Mengimpor...' : 'Impor JSON'}
+          </button>
+        </div>
       }
     >
       <input
@@ -203,162 +261,204 @@ export default function TujuanPembelajaran() {
         }}
       />
 
-      {error && (
-        <div className="mb-4 rounded-xl bg-red-50 text-red-700 text-sm px-4 py-3">{error}</div>
-      )}
-      {notice && (
-        <div className="mb-4 rounded-xl bg-emerald-50 text-emerald-700 text-sm px-4 py-3">{notice}</div>
-      )}
+      {error && <div className="mb-4 rounded-xl bg-red-50 text-red-700 text-sm px-4 py-3">{error}</div>}
+      {notice && <div className="mb-4 rounded-xl bg-emerald-50 text-emerald-700 text-sm px-4 py-3">{notice}</div>}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+      <div className="bg-white rounded-2xl border border-gray-100 p-3 mb-4 flex flex-wrap gap-2">
+        <FilterChip active={subjectFilter === 'semua'} onClick={() => setSubjectFilter('semua')} label={`Semua (${items.length})`} />
         {SUBJECTS.map((s) => (
-          <button
+          <FilterChip
             key={s.key}
-            type="button"
-            onClick={() => setSubjectFilter(subjectFilter === s.key ? 'semua' : s.key)}
-            className={`rounded-2xl border px-3 py-3 text-left ${
-              subjectFilter === s.key ? 'border-indigo-300 bg-indigo-50' : 'border-gray-100 bg-white'
-            }`}
-          >
-            <p className="text-xs text-gray-500">{s.shortName}</p>
-            <p className="text-lg font-semibold text-gray-900">{counts.get(s.key) || 0}</p>
-          </button>
+            active={subjectFilter === s.key}
+            onClick={() => setSubjectFilter(s.key)}
+            label={`${s.shortName} (${items.filter((t) => t.subjectKey === s.key).length})`}
+          />
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-2 mb-4">
-        <button
-          type="button"
-          onClick={() => setTab('tp')}
-          className={`px-4 py-2 rounded-xl text-sm font-medium ${tab === 'tp' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
-        >
-          Daftar TP ({items.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('materi')}
-          className={`px-4 py-2 rounded-xl text-sm font-medium ${tab === 'materi' ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
-        >
-          Materi buku ({materials.length})
-        </button>
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <TabButton active={tab === 'tp'} onClick={() => setTab('tp')} label="Tujuan Pembelajaran" />
+        <TabButton active={tab === 'materi'} onClick={() => setTab('materi')} label="Materi buku" />
         <input
           value={queryText}
           onChange={(e) => setQueryText(e.target.value)}
-          placeholder="Cari kode atau rumusan"
-          className="ml-auto w-full sm:w-64 rounded-xl border border-gray-200 px-3 py-2 text-sm"
+          placeholder="Cari kode, rumusan, atau materi"
+          className="ml-auto w-full sm:w-72 rounded-xl border border-gray-200 px-3 py-2 text-sm"
         />
       </div>
 
       {loading ? (
         <p className="text-sm text-gray-500">Memuat...</p>
       ) : tab === 'tp' ? (
-        filtered.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">
-            Belum ada TP. Impor file tp-kelas5-seed.json.
-          </div>
+        groupedTp.length === 0 ? (
+          <Empty text="Belum ada TP. Impor tp-kelas5-seed.json — data langsung tersimpan." />
         ) : (
-          <div className="space-y-3">
-            {filtered.map((item) => (
-              <article key={item.id} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className="text-xs font-semibold px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700">{item.code}</span>
-                  <span className="text-xs text-gray-500">{getSubject(item.subjectKey)?.name}</span>
-                  <span className="text-xs text-gray-400">{item.element}</span>
-                  <label className="ml-auto flex items-center gap-2 text-xs text-gray-600">
-                    <input
-                      type="checkbox"
-                      checked={item.active}
-                      onChange={(e) =>
-                        setItems((prev) => prev.map((p) => (p.id === item.id ? { ...p, active: e.target.checked } : p)))
-                      }
-                    />
-                    Aktif
-                  </label>
+          <div className="space-y-4">
+            {groupedTp.map((group) => (
+              <section key={`${group.subjectKey}-${group.element}`} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                <header className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-gray-500">{getSubject(group.subjectKey)?.name}</p>
+                    <h3 className="text-sm font-semibold text-gray-900">{group.element}</h3>
+                  </div>
+                  <span className="text-xs text-gray-400">{group.rows.length} TP</span>
+                </header>
+                <div className="divide-y divide-gray-100">
+                  {group.rows.map((row) => (
+                    <div key={row.id} className="px-4 py-3 flex gap-3 items-start">
+                      <span className="shrink-0 mt-0.5 text-xs font-semibold px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700">{row.code}</span>
+                      <p className={`flex-1 text-sm leading-relaxed ${row.active ? 'text-gray-800' : 'text-gray-400 line-through'}`}>{row.statement}</p>
+                      <button type="button" onClick={() => setEditor(row)} className="shrink-0 text-sm font-medium text-indigo-600 hover:text-indigo-800">
+                        Edit
+                      </button>
+                    </div>
+                  ))}
                 </div>
-                <textarea
-                  value={item.statement}
-                  onChange={(e) =>
-                    setItems((prev) => prev.map((p) => (p.id === item.id ? { ...p, statement: e.target.value } : p)))
-                  }
-                  rows={3}
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
-                />
-                <div className="mt-3 flex flex-wrap items-end gap-3">
-                  <label className="text-xs text-gray-500">
-                    Bobot
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.1}
-                      value={item.weight}
-                      onChange={(e) =>
-                        setItems((prev) =>
-                          prev.map((p) => (p.id === item.id ? { ...p, weight: Number(e.target.value) } : p))
-                        )
-                      }
-                      className="mt-1 block w-24 rounded-xl border border-gray-200 px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <label className="text-xs text-gray-500">
-                    JP
-                    <input
-                      type="number"
-                      min={0}
-                      value={item.jp ?? ''}
-                      onChange={(e) =>
-                        setItems((prev) =>
-                          prev.map((p) => (p.id === item.id ? { ...p, jp: Number(e.target.value) } : p))
-                        )
-                      }
-                      className="mt-1 block w-24 rounded-xl border border-gray-200 px-3 py-2 text-sm"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => saveTp(item)}
-                    disabled={savingCode === item.code}
-                    className="px-4 py-2 rounded-xl bg-gray-900 text-white text-sm disabled:opacity-60"
-                  >
-                    {savingCode === item.code ? 'Menyimpan...' : 'Simpan'}
-                  </button>
-                </div>
-              </article>
+              </section>
             ))}
           </div>
         )
+      ) : filteredMaterials.length === 0 ? (
+        <Empty text="Belum ada materi buku." />
       ) : (
-        <div className="space-y-3">
-          {materials.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">
-              Belum ada materi buku. Ikut terimpor dari seed JSON.
-            </div>
-          ) : (
-            materials
-              .filter((m) => subjectFilter === 'semua' || m.subjectKey === subjectFilter)
-              .filter((m) => {
-                const q = queryText.trim().toLowerCase()
-                if (!q) return true
-                return m.title.toLowerCase().includes(q) || m.summary.toLowerCase().includes(q)
-              })
-              .map((m) => (
-                <article key={m.id} className="bg-white rounded-2xl border border-gray-100 p-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {filteredMaterials.map((m) => (
+            <article key={m.id} className="bg-white rounded-2xl border border-gray-100 p-4 flex flex-col">
+              <div className="flex items-start justify-between gap-3">
+                <div>
                   <p className="text-xs text-gray-500">{getSubject(m.subjectKey)?.name}</p>
                   <h3 className="font-semibold text-gray-900">{m.title}</h3>
-                  <p className="text-sm text-gray-600 mt-1">{m.summary}</p>
-                  <p className="text-xs text-indigo-700 mt-2">TP terkait: {(m.suggestedTpCodes || []).join(', ') || '—'}</p>
-                </article>
-              ))
-          )}
+                </div>
+                <button type="button" onClick={() => setMaterialEditor(m)} className="text-sm font-medium text-indigo-600">
+                  Edit
+                </button>
+              </div>
+              <p className="text-sm text-gray-600 mt-2 flex-1">{m.summary || '—'}</p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {(m.suggestedTpCodes || []).length === 0 ? (
+                  <span className="text-xs text-gray-400">Belum dikaitkan ke TP</span>
+                ) : (
+                  m.suggestedTpCodes.map((code) => (
+                    <span key={code} className="text-xs px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700">{code}</span>
+                  ))
+                )}
+              </div>
+            </article>
+          ))}
         </div>
       )}
+
+      {editor && (
+        <Modal title={editor.id ? `Edit ${editor.code}` : 'Tambah TP'} onClose={() => setEditor(null)}>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Kode">
+              <input value={editor.code} disabled={!!editor.id} onChange={(e) => setEditor({ ...editor, code: e.target.value.toUpperCase() })} className="field" />
+            </Field>
+            <Field label="Mapel">
+              <select value={editor.subjectKey} onChange={(e) => setEditor({ ...editor, subjectKey: e.target.value as SubjectKey })} className="field">
+                {SUBJECTS.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Elemen / tema">
+              <input value={editor.element} onChange={(e) => setEditor({ ...editor, element: e.target.value })} className="field" />
+            </Field>
+            <Field label="Urutan">
+              <input type="number" value={editor.order} onChange={(e) => setEditor({ ...editor, order: Number(e.target.value) })} className="field" />
+            </Field>
+            <Field label="Bobot nilai">
+              <input type="number" min={0} step={0.1} value={editor.weight} onChange={(e) => setEditor({ ...editor, weight: Number(e.target.value) })} className="field" />
+            </Field>
+            <Field label="Status">
+              <select value={editor.active ? 'ya' : 'tidak'} onChange={(e) => setEditor({ ...editor, active: e.target.value === 'ya' })} className="field">
+                <option value="ya">Aktif</option>
+                <option value="tidak">Nonaktif</option>
+              </select>
+            </Field>
+          </div>
+          <Field label="Rumusan">
+            <textarea value={editor.statement} onChange={(e) => setEditor({ ...editor, statement: e.target.value })} rows={4} className="field" />
+          </Field>
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={() => setEditor(null)} className="px-4 py-2 rounded-xl text-sm text-gray-600">Batal</button>
+            <button type="button" onClick={saveTp} disabled={saving} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm disabled:opacity-60">{saving ? 'Menyimpan...' : 'Simpan'}</button>
+          </div>
+        </Modal>
+      )}
+
+      {materialEditor && (
+        <Modal title="Edit materi" onClose={() => setMaterialEditor(null)}>
+          <Field label="Mapel">
+            <select value={materialEditor.subjectKey} onChange={(e) => setMaterialEditor({ ...materialEditor, subjectKey: e.target.value as SubjectKey })} className="field">
+              {SUBJECTS.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Judul">
+            <input value={materialEditor.title} onChange={(e) => setMaterialEditor({ ...materialEditor, title: e.target.value })} className="field" />
+          </Field>
+          <Field label="Ringkas isi">
+            <textarea value={materialEditor.summary} onChange={(e) => setMaterialEditor({ ...materialEditor, summary: e.target.value })} rows={3} className="field" />
+          </Field>
+          <Field label="Kode TP terkait (pisahkan koma)">
+            <input
+              value={(materialEditor.suggestedTpCodes || []).join(', ')}
+              onChange={(e) => setMaterialEditor({ ...materialEditor, suggestedTpCodes: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
+              className="field"
+            />
+          </Field>
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={() => setMaterialEditor(null)} className="px-4 py-2 rounded-xl text-sm text-gray-600">Batal</button>
+            <button type="button" onClick={saveMaterial} disabled={saving} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm disabled:opacity-60">{saving ? 'Menyimpan...' : 'Simpan'}</button>
+          </div>
+        </Modal>
+      )}
+      <style>{`.field{width:100%;border:1px solid #e5e7eb;border-radius:12px;padding:8px 12px;font-size:14px;background:white}`}</style>
     </Layout>
   )
 }
 
+function FilterChip({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button type="button" onClick={onClick} className={`px-3 py-1.5 rounded-xl text-xs font-medium ${active ? 'bg-indigo-600 text-white' : 'bg-gray-50 text-gray-600'}`}>
+      {label}
+    </button>
+  )
+}
+
+function TabButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button type="button" onClick={onClick} className={`px-4 py-2 rounded-xl text-sm font-medium ${active ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>
+      {label}
+    </button>
+  )
+}
+
+function Empty({ text }: { text: string }) {
+  return <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">{text}</div>
+}
+
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold text-gray-900">{title}</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 text-sm">Tutup</button>
+        </div>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block text-xs text-gray-500 space-y-1">
+      <span>{label}</span>
+      {children}
+    </label>
+  )
+}
+
 function slug(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 80)
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80)
 }
