@@ -8,41 +8,41 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
-### Planned — Selaras tka2026
+### Fixed (segera)
+- **TopicQuestions.tsx**: file sempat terpotong saat push besar; UI bank soal perlu dipulihkan penuh dari salinan lokal (Fase B import tka2026).
 
-- **Skema soal**: mapping tipe `single`/`multiple`/`category` ↔ `pg`/`pgk`/`pgk-cat`; dukungan kunci berbasis teks opsi (kompatibel dengan indeks lama).
-- **Import bank soal**: template Excel/JSON selaras tka2026 (stimulus, skor, kompleksitas, rows/cols untuk kategori).
-- **Penyajian kuis**: stimulus + gambar terbingkai, lightbox, tabel pgk-cat, navigasi nomor LMS-style.
-- **Scoring aman (bertahap)**: hash kunci (opsional) tanpa merusak attempt lama.
+### Planned — Fase C
+- Penyajian kuis: stimulus + gambar terbingkai, lightbox, tabel kategori, gaya LMS.
+
+---
+
+## [0.2.1] — 2026-10-04
+
+### Added (Fase B — skema)
+- Field opsional pada `Question`: `stimulusImage`, `tipeMateri`, `kompleksitas`, `skor`.
+- Helper `mapTkaType()` — mapping `pg`/`pgk`/`pgk-cat` → `single`/`multiple`/`category`.
+- Helper `resolveCorrectAnswers()` — kunci **teks opsi** (pola tka2026) atau indeks/huruf A–D → `number[]` internal.
+- Label kompleksitas L1/L2/L3.
+
+### Tidak Berubah
+- Format internal `correctAnswers: number[]` (kompatibel attempt & gradeAnswer lama).
+- Collection `questions` / `topics` / `latihan`.
 
 ---
 
 ## [0.2.0] — 2026-10-04
 
 ### Added
-- **Dokumentasi anti-regresi** diperluas (area sensitif bank soal, kuis siswa, paket latihan, scoring).
-- **CHANGELOG.md** (file ini) untuk jejak upgrade/perbaikan.
-- Rencana migrasi pengemasan & penyajian soal mengacu pola tka2026.
+- **CHANGELOG.md**, anti-regresi diperluas, rencana migrasi tka2026 (A→B→C).
 
 ### Changed
-- `docs/ANTI_REGRESSION.md` dan `PROGRESS.md` diperbarui mengikuti status fitur terkini (bank hierarkis, import TP, latihan soal, halaman kerjakan).
-
-### Tidak Berubah
-- Skema Firestore `questions` / `topics` / `latihan` / `attempts` yang sudah dipakai production.
-- Penilaian berbasis indeks `correctAnswers` (masih valid).
+- `docs/ANTI_REGRESSION.md`, `PROGRESS.md`.
 
 ---
 
 ## [0.1.0] — 2026-10-03 / 2026-10-04
 
 ### Added
-- Setup React + Vite + Firebase (Auth + Firestore).
-- Login admin, dashboard, layout sidebar.
-- Bank soal hierarkis: Mapel → Materi (topics) → Soal.
-- Tiga tipe soal: `single`, `multiple`, `category`.
-- Import soal JSON / CSV / XLSX + field TP (Tujuan Pembelajaran).
-- Paket latihan (`latihan`): token, jadwal, status, time limit, shuffle.
-- Alur siswa: masuk token → kerjakan → hasil + ringkasan TP.
-- Laporan admin dasar.
+- React + Vite + Firebase; bank soal hierarkis; 3 tipe soal; import; paket latihan; alur siswa kerjakan.
 
 ---
