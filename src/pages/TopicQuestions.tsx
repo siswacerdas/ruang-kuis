@@ -336,6 +336,234 @@ async function removeDuplicateQuestions(topicId: string) {
   return extra.length
 }
 
+
+/** Sanitasi HTML stimulus (allowlist sederhana) */
+function sanitizeStimulusHtml(html: string): string {
+  if (!html) return ''
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  const allowed = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'P', 'BR', 'SPAN', 'DIV', 'SUB', 'SUP'])
+  const walk = (node: Node) => {
+    const children = Array.from(node.childNodes)
+    for (const child of children) {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const el = child as HTMLElement
+        if (!allowed.has(el.tagName)) {
+          while (el.firstChild) el.parentNode?.insertBefore(el.firstChild, el)
+          el.remove()
+          continue
+        }
+        // keep style line-height, font-style, font-weight, text-decoration only
+        const lh = el.style.lineHeight
+        const fw = el.style.fontWeight
+        const fs = el.style.fontStyle
+        const td = el.style.textDecoration
+        el.removeAttribute('style')
+        if (lh) el.style.lineHeight = lh
+        if (fw) el.style.fontWeight = fw
+        if (fs) el.style.fontStyle = fs
+        if (td) el.style.textDecoration = td
+        if (el.classList.contains('math-tex')) {
+          el.setAttribute('class', 'math-tex')
+        } else {
+          el.removeAttribute('class')
+        }
+        Array.from(el.attributes).forEach((a) => {
+          if (!['style', 'class', 'data-latex'].includes(a.name)) el.removeAttribute(a.name)
+        })
+        walk(el)
+      }
+    }
+  }
+  walk(doc.body)
+  return doc.body.innerHTML
+}
+
+function StimulusToolbar({
+  onCmd,
+  onEquation,
+  onLineHeight,
+}: {
+  onCmd: (cmd: string, val?: string) => void
+  onEquation: () => void
+  onLineHeight: (v: string) => void
+}) {
+  const btn =
+    'px-2 py-1 rounded border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 bg-white'
+  return (
+    <div className="flex flex-wrap items-center gap-1 mb-1.5">
+      <button type="button" className={btn} title="Tebal" onMouseDown={(e) => { e.preventDefault(); onCmd('bold') }}>
+        <span className="font-bold">B</span>
+      </button>
+      <button type="button" className={btn} title="Miring" onMouseDown={(e) => { e.preventDefault(); onCmd('italic') }}>
+        <span className="italic">I</span>
+      </button>
+      <button type="button" className={btn} title="Garis bawah" onMouseDown={(e) => { e.preventDefault(); onCmd('underline') }}>
+        <span className="underline">U</span>
+      </button>
+      <span className="w-px h-5 bg-gray-200 mx-0.5" />
+      <button type="button" className={btn} title="Paragraf" onMouseDown={(e) => { e.preventDefault(); onCmd('formatBlock', 'p') }}>
+        ¶
+      </button>
+      <select
+        className="text-xs border border-gray-200 rounded px-1.5 py-1 bg-white"
+        title="Jarak baris"
+        defaultValue=""
+        onMouseDown={(e) => e.stopPropagation()}
+        onChange={(e) => {
+          if (e.target.value) onLineHeight(e.target.value)
+          e.target.value = ''
+        }}
+      >
+        <option value="" disabled>
+          Spasi baris
+        </option>
+        <option value="1.4">Rapat (1.4)</option>
+        <option value="1.7">Normal (1.7)</option>
+        <option value="2">Longgar (2.0)</option>
+        <option value="2.4">Sangat longgar (2.4)</option>
+      </select>
+      <button
+        type="button"
+        className={btn + ' text-indigo-700 border-indigo-200'}
+        title="Sisipkan persamaan (LaTeX)"
+        onMouseDown={(e) => {
+          e.preventDefault()
+          onEquation()
+        }}
+      >
+        ƒx
+      </button>
+    </div>
+  )
+}
+
+function StimulusRichEditor({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (html: string) => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const skip = useRef(false)
+
+  useEffect(() => {
+    if (!ref.current) return
+    if (skip.current) {
+      skip.current = false
+      return
+    }
+    if (ref.current.innerHTML !== (value || '')) {
+      ref.current.innerHTML = value || ''
+    }
+  }, [value])
+
+  const emit = () => {
+    if (!ref.current) return
+    skip.current = true
+    onChange(sanitizeStimulusHtml(ref.current.innerHTML))
+  }
+
+  const run = (cmd: string, val?: string) => {
+    ref.current?.focus()
+    document.execCommand(cmd, false, val)
+    emit()
+  }
+
+  const setLineHeight = (lh: string) => {
+    ref.current?.focus()
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+      document.execCommand('styleWithCSS', false, 'true')
+      // wrap via surround or apply to block
+      document.execCommand('formatBlock', false, 'p')
+    }
+    if (ref.current) {
+      ref.current.style.lineHeight = lh
+      const paragraphs = ref.current.querySelectorAll('p, div')
+      paragraphs.forEach((p) => {
+        ;(p as HTMLElement).style.lineHeight = lh
+      })
+      emit()
+    }
+  }
+
+  const insertEquation = () => {
+    const latex = window.prompt(
+      'Tulis persamaan LaTeX (contoh: x^2 + y^2 = z^2 atau \\\\frac{a}{b})',
+      ''
+    )
+    if (latex == null || !latex.trim()) return
+    ref.current?.focus()
+    const safe = latex.trim().replace(/</g, '\\lt ')
+    const html = ` <span class="math-tex" data-latex="${safe.replace(/"/g, '&quot;')}">\\(${safe}\\)</span> `
+    document.execCommand('insertHTML', false, html)
+    emit()
+  }
+
+  return (
+    <div>
+      <StimulusToolbar onCmd={run} onEquation={insertEquation} onLineHeight={setLineHeight} />
+      <div
+        ref={ref}
+        contentEditable
+        role="textbox"
+        aria-label="Stimulus"
+        className="w-full min-h-[120px] max-h-[320px] overflow-y-auto px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-sm text-gray-800 leading-relaxed"
+        style={{ lineHeight: 1.7 }}
+        onInput={emit}
+        onBlur={emit}
+        data-placeholder="Teks bacaan, konteks, atau petunjuk sebelum pertanyaan..."
+      />
+      <p className="text-[11px] text-gray-400 mt-1">
+        Format: tebal, miring, garis bawah, paragraf, jarak baris, persamaan (LaTeX). Disimpan sebagai HTML aman.
+      </p>
+    </div>
+  )
+}
+
+function looksLikeHtml(s: string) {
+  return /<\/?[a-z][\s\S]*>/i.test(s)
+}
+
+function StimulusHtmlView({ html, className }: { html: string; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!ref.current) return
+    const root = ref.current
+    // Render KaTeX if available on window or skip
+    const nodes = root.querySelectorAll('.math-tex, .math')
+    nodes.forEach(async (el) => {
+      const latex = el.getAttribute('data-latex') || el.textContent || ''
+      try {
+        // @ts-expect-error optional global
+        if (window.katex) {
+          // @ts-expect-error optional global
+          window.katex.render(latex.replace(/^\\\(|\\\)$/g, '').replace(/^\$+|\$+$/g, ''), el as HTMLElement, {
+            throwOnError: false,
+            displayMode: false,
+          })
+        }
+      } catch {
+        /* keep text */
+      }
+    })
+  }, [html])
+
+  if (!html) return null
+  if (!looksLikeHtml(html)) {
+    return <div className={className} style={{ whiteSpace: 'pre-wrap' }}>{html}</div>
+  }
+  return (
+    <div
+      ref={ref}
+      className={className}
+      dangerouslySetInnerHTML={{ __html: sanitizeStimulusHtml(html) }}
+    />
+  )
+}
+
+
 export default function TopicQuestions() {
   const { subjectKey, topicId } = useParams<{ subjectKey: string; topicId: string }>()
   const navigate = useNavigate()
@@ -354,6 +582,7 @@ export default function TopicQuestions() {
   const [error, setError] = useState('')
   const [imageBusy, setImageBusy] = useState(false)
   const [imageInfo, setImageInfo] = useState('')
+  const [showPreview, setShowPreview] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [checkedIds, setCheckedIds] = useState<string[]>([])
 
@@ -885,12 +1114,9 @@ export default function TopicQuestions() {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Stimulus / bacaan <span className="text-gray-400 font-normal">(opsional)</span>
                 </label>
-                <textarea
+                <StimulusRichEditor
                   value={form.stimulus}
-                  onChange={(e) => setForm({ ...form, stimulus: e.target.value })}
-                  rows={4}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-sm"
-                  placeholder="Teks bacaan, konteks, atau petunjuk sebelum pertanyaan..."
+                  onChange={(html) => setForm({ ...form, stimulus: html })}
                 />
               </div>
               <div>
@@ -997,26 +1223,6 @@ export default function TopicQuestions() {
                 </select>
               </div>
             </div>
-
-            {/* Preview ringkas seperti kuis */}
-            {(form.stimulus || form.stimulusImage || form.question) && (
-              <div className="rounded-xl border border-dashed border-indigo-200 bg-indigo-50/40 p-4">
-                <p className="text-xs font-semibold text-indigo-700 mb-2">Preview tampilan kuis</p>
-                {form.stimulusImage && (
-                  <img
-                    src={form.stimulusImage}
-                    alt=""
-                    className="max-h-28 mb-2 rounded-lg object-contain bg-white border border-gray-100"
-                  />
-                )}
-                {form.stimulus && (
-                  <p className="text-xs text-gray-600 whitespace-pre-wrap mb-2 bg-white/80 rounded-lg px-3 py-2 border border-gray-100">
-                    {form.stimulus}
-                  </p>
-                )}
-                <p className="text-sm font-medium text-gray-900">{form.question || '…'}</p>
-              </div>
-            )}
 
             {form.type === 'category' && (
               <div>
@@ -1197,7 +1403,7 @@ export default function TopicQuestions() {
                     <p className="text-sm text-gray-800 line-clamp-2 leading-snug">{q.question}</p>
                     <p className="text-[11px] text-gray-400 mt-1">
                       {QUESTION_TYPE_LABELS[q.type] || q.type}
-                      {!q.stimulus ? ' · tanpa stimulus' : ''}
+                      {q.stimulusImage ? ' · 🖼' : ''}{!q.stimulus && !q.stimulusImage ? ' · tanpa stimulus' : q.stimulus ? ' · stimulus' : ''}
                       {(q.tpCodes || (q.tp ? [q.tp] : [])).join(', ') ? ` · TP ${(q.tpCodes || [q.tp]).filter(Boolean).join(', ')}` : ''}
                     </p>
                   </button>
@@ -1225,7 +1431,14 @@ export default function TopicQuestions() {
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(true)}
+                    className="inline-flex items-center gap-1.5 text-sm text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition font-medium"
+                  >
+                    👁 Preview kuis
+                  </button>
                   <button onClick={() => openEdit(selected)} className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition">
                     Edit
                   </button>
@@ -1235,10 +1448,26 @@ export default function TopicQuestions() {
                 </div>
               </div>
               <div className="p-6">
-                {selected.stimulus ? (
-                  <div className="mb-4 rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 text-sm text-gray-700 whitespace-pre-wrap">{selected.stimulus}</div>
+                {(selected.stimulus || selected.stimulusImage) ? (
+                  <div className="mb-4 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
+                    {selected.stimulusImage && (
+                      <div className="px-3 pt-3 flex justify-center bg-white/60">
+                        <img
+                          src={selected.stimulusImage}
+                          alt="Stimulus"
+                          className="max-h-48 max-w-full object-contain rounded-lg"
+                        />
+                      </div>
+                    )}
+                    {selected.stimulus && (
+                      <StimulusHtmlView
+                        html={selected.stimulus}
+                        className="px-4 py-3 text-sm text-gray-700 leading-relaxed"
+                      />
+                    )}
+                  </div>
                 ) : (
-                  <p className="mb-4 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">Soal ini belum punya stimulus. Tambahkan jika jawaban bergantung pada teks.</p>
+                  <p className="mb-4 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">Soal ini belum punya stimulus atau gambar. Tambahkan lewat Edit jika diperlukan.</p>
                 )}
                 <p className="text-base font-medium text-gray-900 leading-relaxed mb-5">{selected.question}</p>
                 {selected.type === 'category' ? (
@@ -1293,6 +1522,92 @@ export default function TopicQuestions() {
           )}
         </div>
       </div>
+
+      {/* Modal preview tampilan kuis — dari daftar soal (selected) */}
+      {showPreview && selected && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="dialog">
+          <div className="bg-[#F5F6FA] rounded-2xl shadow-xl max-w-3xl w-full max-h-[92vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-gray-100">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Preview tampilan kuis</p>
+                <p className="text-xs text-gray-500">Seperti yang dilihat siswa (tanpa timer & tanpa kunci jawaban)</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPreview(false)}
+                className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-sm font-medium"
+              >
+                Tutup
+              </button>
+            </div>
+            <div className="overflow-y-auto p-4 md:p-6">
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 md:p-7">
+                <p className="text-xs font-medium text-gray-400 mb-2">
+                  Soal {selectedIndex + 1}
+                  {selected.tp ? ` · TP ${selected.tp}` : ''}
+                  {selected.skor != null ? ` · Skor ${selected.skor}` : ''}
+                </p>
+                {(selected.stimulus || selected.stimulusImage) && (
+                  <div className="mb-4 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
+                    {selected.stimulusImage && (
+                      <div className="px-3 pt-3 flex justify-center">
+                        <img
+                          src={selected.stimulusImage}
+                          alt=""
+                          className="max-h-[min(38vh,240px)] max-w-full object-contain"
+                        />
+                      </div>
+                    )}
+                    {selected.stimulus && (
+                      <StimulusHtmlView
+                        html={selected.stimulus}
+                        className="px-4 py-3 text-sm text-gray-700 leading-relaxed"
+                      />
+                    )}
+                  </div>
+                )}
+                <p className="text-base md:text-lg font-medium text-gray-900 leading-relaxed mb-6">
+                  {selected.question}
+                </p>
+                {selected.type === 'category' ? (
+                  <div className="space-y-2">
+                    {selected.options.map((stmt, i) => (
+                      <div key={i} className="border border-gray-100 rounded-xl p-3 text-sm text-gray-800">
+                        {i + 1}. {stmt}
+                        <div className="flex gap-2 mt-2">
+                          {(selected.categoryLabels || DEFAULT_CATEGORY_LABELS).map((lab) => (
+                            <span
+                              key={lab}
+                              className="flex-1 text-center py-1.5 rounded-lg border border-gray-200 text-xs text-gray-500"
+                            >
+                              {lab}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {selected.options.map((opt, i) => (
+                      <div
+                        key={i}
+                        className="flex items-start gap-3 px-4 py-3 rounded-xl border border-gray-100 bg-gray-50 text-sm text-gray-800"
+                      >
+                        <span className="shrink-0 w-7 h-7 rounded-full bg-white border border-gray-200 flex items-center justify-center text-xs font-semibold text-gray-500">
+                          {String.fromCharCode(65 + i)}
+                        </span>
+                        <span className="pt-0.5">{opt}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </Layout>
   )
 }

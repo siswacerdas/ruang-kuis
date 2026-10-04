@@ -20,6 +20,72 @@ import {
   DEFAULT_CATEGORY_LABELS,
 } from '../types/question'
 
+
+function sanitizeStimulusHtml(html: string): string {
+  if (!html) return ''
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    const allowed = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'P', 'BR', 'SPAN', 'DIV', 'SUB', 'SUP'])
+    const walk = (node: Node) => {
+      for (const child of Array.from(node.childNodes)) {
+        if (child.nodeType === Node.ELEMENT_NODE) {
+          const el = child as HTMLElement
+          if (!allowed.has(el.tagName)) {
+            while (el.firstChild) el.parentNode?.insertBefore(el.firstChild, el)
+            el.remove()
+            continue
+          }
+          const lh = el.style.lineHeight
+          el.removeAttribute('style')
+          if (lh) el.style.lineHeight = lh
+          if (el.classList.contains('math-tex')) el.setAttribute('class', 'math-tex')
+          else el.removeAttribute('class')
+          walk(el)
+        }
+      }
+    }
+    walk(doc.body)
+    return doc.body.innerHTML
+  } catch {
+    return html.replace(/</g, '&lt;')
+  }
+}
+
+function StimulusBlock({ html }: { html: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const root = ref.current
+    if (!root) return
+    root.querySelectorAll('.math-tex').forEach((el) => {
+      const latex = (el.getAttribute('data-latex') || el.textContent || '')
+        .replace(/^\\\(|\\\)$/g, '')
+        .replace(/^\$+|\$+$/g, '')
+      try {
+        // @ts-expect-error optional
+        if (window.katex) {
+          // @ts-expect-error optional
+          window.katex.render(latex, el as HTMLElement, { throwOnError: false })
+        }
+      } catch { /* keep */ }
+    })
+  }, [html])
+  if (!html) return null
+  if (!/<[a-z][\s\S]*>/i.test(html)) {
+    return (
+      <div className="px-4 py-3 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+        {html}
+      </div>
+    )
+  }
+  return (
+    <div
+      ref={ref}
+      className="px-4 py-3 text-sm text-gray-700 leading-relaxed"
+      dangerouslySetInnerHTML={{ __html: sanitizeStimulusHtml(html) }}
+    />
+  )
+}
+
 interface Session {
   latihanId: string
   studentName: string
@@ -402,11 +468,7 @@ export default function KerjakanQuiz() {
                     </button>
                   </div>
                 )}
-              {q.stimulus && (
-                <div className="px-4 py-3 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                  {q.stimulus}
-                </div>
-              )}
+              {q.stimulus && <StimulusBlock html={q.stimulus} />}
             </div>
           )}
           <div className="flex items-start justify-between gap-2 mb-6">
