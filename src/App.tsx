@@ -9,6 +9,10 @@ import SubjectTopics from './pages/SubjectTopics'
 import TopicQuestions from './pages/TopicQuestions'
 import LatihanSoal from './pages/LatihanSoal'
 import LatihanForm from './pages/LatihanForm'
+import LatihanHasil from './pages/LatihanHasil'
+import KerjakanEntry from './pages/KerjakanEntry'
+import KerjakanQuiz from './pages/KerjakanQuiz'
+import KerjakanResult from './pages/KerjakanResult'
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -33,6 +37,12 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Publik — siswa */}
+        <Route path="/kerjakan" element={<KerjakanEntry />} />
+        <Route path="/kerjakan/hasil" element={<KerjakanResult />} />
+        <Route path="/kerjakan/:latihanId" element={<KerjakanQuiz />} />
+
+        {/* Admin */}
         <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login />} />
         <Route path="/dashboard" element={user ? <Dashboard /> : <Navigate to="/login" />} />
         <Route path="/bank-soal" element={user ? <BankSoal /> : <Navigate to="/login" />} />
@@ -40,9 +50,10 @@ function App() {
         <Route path="/bank-soal/:subjectKey/:topicId" element={user ? <TopicQuestions /> : <Navigate to="/login" />} />
         <Route path="/latihan-soal" element={user ? <LatihanSoal /> : <Navigate to="/login" />} />
         <Route path="/latihan-soal/baru" element={user ? <LatihanForm /> : <Navigate to="/login" />} />
+        <Route path="/latihan-soal/:id/hasil" element={user ? <LatihanHasil /> : <Navigate to="/login" />} />
         <Route path="/latihan-soal/:id" element={user ? <LatihanForm /> : <Navigate to="/login" />} />
         <Route path="/questions" element={<Navigate to="/bank-soal" replace />} />
-        <Route path="/" element={<Navigate to={user ? '/dashboard' : '/login'} />} />
+        <Route path="/" element={<Navigate to={user ? '/dashboard' : '/kerjakan'} />} />
       </Routes>
     </BrowserRouter>
   )

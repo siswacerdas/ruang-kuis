@@ -268,6 +268,12 @@ export default function LatihanSoal() {
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <Link
+                      to={`/latihan-soal/${paket.id}/hasil`}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium text-emerald-600 hover:bg-emerald-50 transition"
+                    >
+                      Hasil
+                    </Link>
+                    <Link
                       to={`/latihan-soal/${paket.id}`}
                       className="px-3 py-1.5 rounded-lg text-sm font-medium text-indigo-600 hover:bg-indigo-50 transition"
                     >

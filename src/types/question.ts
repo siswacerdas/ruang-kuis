@@ -156,3 +156,48 @@ export function formatDateTime(v: any): string {
     minute: '2-digit',
   })
 }
+
+
+/* ========== HASIL / RIWAYAT PENGERJAAN ========== */
+
+export interface QuestionAnswer {
+  questionId: string
+  /** Jawaban siswa — format sama dengan correctAnswers */
+  selected: number[]
+  isCorrect: boolean
+  /** ms mengerjakan soal ini (opsional) */
+  timeMs?: number
+}
+
+export interface LatihanAttempt {
+  id?: string
+  latihanId: string
+  latihanTitle: string
+  /** Nama siswa (tanpa akun) */
+  studentName: string
+  /** Kelas / identitas tambahan opsional */
+  studentClass?: string
+  answers: QuestionAnswer[]
+  /** Jumlah benar */
+  score: number
+  /** Total soal */
+  total: number
+  /** Skor 0–100 */
+  percent: number
+  /** Ringkasan capaian per TP: { "3.1": { correct: 2, total: 3 }, ... } */
+  tpSummary?: Record<string, { correct: number; total: number }>
+  startedAt: any
+  finishedAt: any
+  durationMs?: number
+}
+
+/** Nilai benar/salah satu soal */
+export function gradeAnswer(
+  question: { type: QuestionType; correctAnswers: number[] },
+  selected: number[]
+): boolean {
+  const correct = [...question.correctAnswers].sort((a, b) => a - b)
+  const sel = [...selected].sort((a, b) => a - b)
+  if (correct.length !== sel.length) return false
+  return correct.every((v, i) => v === sel[i])
+}
