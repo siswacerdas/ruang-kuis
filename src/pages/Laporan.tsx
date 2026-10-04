@@ -231,6 +231,7 @@ export default function Laporan() {
       {
         key: string
         name: string
+        studentId?: string
         class?: string
         attempts: number
         avgPercent: number
@@ -254,7 +255,7 @@ export default function Laporan() {
         totalQ: 0,
         totalMs: 0,
         lastAt: null as number | null,
-        tp: {},
+        tp: {} as Record<string, { correct: number; total: number }>,
       }
       cur.attempts += 1
       cur.totalScore += a.score || 0
