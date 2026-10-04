@@ -8,71 +8,50 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Added — Dashboard live (`Dashboard.tsx`)
+- Kartu angka dari Firestore: pengerjaan kuis, siswa unik, rata skor, paket, materi, soal.
+- Daftar **pengerjaan terbaru** (8 attempt terakhir) + taut ke Laporan.
+
+### Added — Hasil kuis siswa (`KerjakanResult.tsx`)
+- Feedback teks sesuai rentang skor; warna skor/TP; blok **Perlu dilatih lagi** (TP < 70%).
+
 ### Added — Progress siswa di Laporan (`Laporan.tsx`)
 - Dashboard progress berbasis **attempts (kuis saja)**: kartu pengerjaan, siswa unik, rata skor, waktu pengerjaan, % paket tersentuh.
-- **Tren skor** per minggu/bulan (bar chart CSS).
-- **Waktu pengerjaan** per periode (velocity menit kuis — bukan jam belajar mandiri).
-- **Perhatian TP**: capaian TP terendah untuk prioritas remedial.
-- Tab **Per siswa**: klik baris → panel profil (ringkas, capaian TP, riwayat kuis).
-- Ringkasan: taut Profil + detail paket; filter mapel/paket tetap.
+- **Tren skor** per minggu/bulan; **waktu pengerjaan**; **perhatian TP**; profil per siswa.
 
 ### Changed — Daftar materi bank soal (`SubjectTopics.tsx`)
-- **Redesign layout master–detail** (bukan polesan visual): daftar kiri + panel kelola kanan, pola sama dengan bank soal per materi.
-- **Edit materi**: ubah nama, tautan ke materi buku, dan kode TP dalam satu form Simpan.
-- **Pilih TP dari master** `learningObjectives` (mapel yang sama, aktif saja): multi-select + pencarian kode/elemen/rumusan; chip terpilih bisa dilepas.
-- **Tautan materi buku**: select dengan cegah double-link; tampil ringkas + usulan TP; tombol “Ambil usulan dari materi buku”.
-- Filter daftar: Semua / Tertaut / Belum + pencarian nama/tautan/TP.
-- Aksi jelas: Kelola soal →, Edit, Hapus; taut ke halaman Master TP & materi buku.
-- Perilaku lama dipertahankan: salin materi buku, auto-link nama mirip, ensureTopics non-destruktif.
+- Layout master–detail; edit nama/tautan/TP; filter daftar.
 
 ### Added
-- **Lightbox gambar stimulus di bank soal (admin)** — `TopicQuestions.tsx`: tombol 🔍 Lihat lebih besar pada panel detail, preview stimulus, dan preview kuis. Zoom +/− / 100%. Tutup **hanya** lewat tombol Tutup atau Esc (klik backdrop tidak menutup). Pola sama dengan `KerjakanQuiz` siswa.
-
-### Fixed (manual push UI besar)
-- **`src/pages/TopicQuestions.tsx`** & **`KerjakanQuiz.tsx`**: pastikan file patch terbaru sudah di repo lokal sebelum deploy (lihat patch zip di chat).
+- Lightbox stimulus di bank soal (admin).
 
 ---
 
 ## [0.3.0] — 2026-10-04
 
 ### Added — Stimulus & preview (Fase C lanjut)
-- Editor stimulus kaya fitur: **tebal, miring, garis bawah**, paragraf, **rata kiri/tengah/kanan/kiri-kanan**, jarak baris (per paragraf terpilih bila ada seleksi), sisip **persamaan LaTeX** (opsional KaTeX di `index.html`).
-- **Preview stimulus** di form edit (hanya bacaan + gambar stimulus).
-- **Preview kuis** di **daftar soal** (panel detail): tampilan ala siswa termasuk stimulus HTML + gambar, tanpa kunci jawaban.
-- Panel detail daftar soal menampilkan **stimulus terformat + gambar** (sebelumnya hanya teks polos / tanpa gambar).
-- Unggah gambar stimulus: **kompres & resize otomatis** (maks ~1200px, target ~450 KB) — tidak menolak file >1,5 MB.
-
-### Fixed
-- Import soal gagal jika kunci jawaban teks mengandung **koma** (contoh: `Sabtu, 11 Oktober…`) — `resolveCorrectAnswers` mencocokkan string utuh dulu; pemisah multi-kunci mengutamakan `;` / `|`.
-- Saat **edit soal**, daftar soal tidak lagi tampil di bawah form (hanya form editor).
-
-### Changed
-- Form edit: preview cuplikan di dalam form dihapus; preview penuh dipindah ke daftar soal.
+- Editor stimulus kaya, preview, kompres gambar, fix import koma, hide list saat edit.
 
 ---
 
 ## [0.2.2] — 2026-10-04
 
 ### Changed
-- `docs/template_import_soal.csv`: kolom `stimulus`, `kompleksitas`, `skor`; contoh kunci teks opsi; tipe `pg`/`pgk`.
+- Template import CSV (stimulus, kompleksitas, skor).
 
 ---
 
 ## [0.2.1] — 2026-10-04
 
 ### Added (Fase B — skema)
-- Field opsional: `stimulusImage`, `tipeMateri`, `kompleksitas`, `skor`.
-- `mapTkaType()`, `resolveCorrectAnswers()` (kunci teks opsi / indeks / A–D).
-
-### Tidak Berubah
-- `correctAnswers: number[]`, scoring, collection Firestore existing.
+- Field stimulusImage, mapTkaType, resolveCorrectAnswers.
 
 ---
 
 ## [0.2.0] — 2026-10-04
 
 ### Added
-- CHANGELOG, anti-regresi diperluas, rencana A→B→C (selaras tka2026).
+- CHANGELOG, anti-regresi, rencana A→B→C.
 
 ---
 
