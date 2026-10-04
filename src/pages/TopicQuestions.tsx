@@ -1872,7 +1872,7 @@ export default function TopicQuestions() {
                     <p className="text-sm text-amber-950 mb-2">
                       {selected.type === 'category'
                         ? selected.options
-                            .map((stmt, i) => {
+                            .map((_stmt, i) => {
                               const lab =
                                 (selected.categoryLabels || DEFAULT_CATEGORY_LABELS)[
                                   selected.correctAnswers[i] ?? 0
