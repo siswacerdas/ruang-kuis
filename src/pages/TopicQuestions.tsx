@@ -224,6 +224,73 @@ function cleanPayload(data: Record<string, any>) {
   return Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined))
 }
 
+
+/** Kompres & resize gambar stimulus ke ukuran optimal untuk kuis (keterbacaan + loading). */
+function compressStimulusImage(file: File): Promise<{ dataUrl: string; width: number; height: number; bytesApprox: number }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(new Error('Gagal membaca file'))
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '')
+      const img = new Image()
+      img.onerror = () => reject(new Error('File bukan gambar yang valid'))
+      img.onload = () => {
+        // Lebar ideal untuk teks pengumuman/infografis di layar siswa
+        const MAX_W = 1200
+        const MAX_H = 1200
+        let w = img.width
+        let h = img.height
+        const scale = Math.min(1, MAX_W / w, MAX_H / h)
+        w = Math.max(1, Math.round(w * scale))
+        h = Math.max(1, Math.round(h * scale))
+
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          reject(new Error('Canvas tidak tersedia'))
+          return
+        }
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, w, h)
+        ctx.drawImage(img, 0, 0, w, h)
+
+        // Target ~450 KB data-URL (Firestore doc limit & loading kuis)
+        const TARGET = 450_000
+        let quality = 0.88
+        let out = canvas.toDataURL('image/jpeg', quality)
+        while (out.length > TARGET && quality > 0.45) {
+          quality = Math.round((quality - 0.08) * 100) / 100
+          out = canvas.toDataURL('image/jpeg', quality)
+        }
+        // Jika masih terlalu besar, turunkan resolusi bertahap
+        let cw = w
+        let ch = h
+        while (out.length > TARGET && cw > 480) {
+          cw = Math.round(cw * 0.85)
+          ch = Math.round(ch * 0.85)
+          canvas.width = cw
+          canvas.height = ch
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, cw, ch)
+          ctx.drawImage(img, 0, 0, cw, ch)
+          out = canvas.toDataURL('image/jpeg', 0.75)
+        }
+        resolve({
+          dataUrl: out,
+          width: canvas.width,
+          height: canvas.height,
+          bytesApprox: Math.round((out.length * 3) / 4),
+        })
+      }
+      img.src = dataUrl
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
+
 async function resolveTopicId(
   subjectKey: string,
   fallbackId: string,
@@ -285,6 +352,8 @@ export default function TopicQuestions() {
   const [form, setForm] = useState(emptyForm())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [imageBusy, setImageBusy] = useState(false)
+  const [imageInfo, setImageInfo] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [checkedIds, setCheckedIds] = useState<string[]>([])
 
@@ -826,7 +895,7 @@ export default function TopicQuestions() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Gambar stimulus <span className="text-gray-400 font-normal">(URL atau unggah)</span>
+                  Gambar stimulus <span className="text-gray-400 font-normal">(URL atau unggah — otomatis diperkecil)</span>
                 </label>
                 <input
                   type="url"
@@ -838,47 +907,48 @@ export default function TopicQuestions() {
                 <input
                   type="file"
                   accept="image/*"
-                  className="block w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 file:font-medium"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
+                  disabled={imageBusy}
+                  className="block w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 file:font-medium disabled:opacity-50"
+                  onChange={async (e) => {
+                    const input = e.target
+                    const file = input.files?.[0]
                     if (!file) return
-                    if (file.size > 1_500_000) {
-                      alert('Gambar terlalu besar (maks ~1,5 MB). Kompres dulu atau gunakan URL.')
+                    if (!file.type.startsWith('image/')) {
+                      alert('Pilih file gambar (JPG, PNG, WebP, dll.)')
+                      input.value = ''
                       return
                     }
-                    const reader = new FileReader()
-                    reader.onload = () => {
-                      const dataUrl = String(reader.result || '')
-                      // optional resize via canvas for large images
-                      const img = new Image()
-                      img.onload = () => {
-                        const maxW = 900
-                        let w = img.width
-                        let h = img.height
-                        if (w > maxW) {
-                          h = Math.round((h * maxW) / w)
-                          w = maxW
-                        }
-                        const canvas = document.createElement('canvas')
-                        canvas.width = w
-                        canvas.height = h
-                        const ctx = canvas.getContext('2d')
-                        if (ctx) {
-                          ctx.drawImage(img, 0, 0, w, h)
-                          setForm((prev) => ({
-                            ...prev,
-                            stimulusImage: canvas.toDataURL('image/jpeg', 0.82),
-                          }))
-                        } else {
-                          setForm((prev) => ({ ...prev, stimulusImage: dataUrl }))
-                        }
-                      }
-                      img.onerror = () => setForm((prev) => ({ ...prev, stimulusImage: dataUrl }))
-                      img.src = dataUrl
+                    // Batas sangat longgar hanya untuk mencegah browser hang (~40 MB)
+                    if (file.size > 40_000_000) {
+                      alert('File terlalu ekstrem (>40 MB). Pilih file lain atau gunakan URL.')
+                      input.value = ''
+                      return
                     }
-                    reader.readAsDataURL(file)
+                    setImageBusy(true)
+                    setImageInfo('Mengompres & menyesuaikan ukuran…')
+                    try {
+                      const result = await compressStimulusImage(file)
+                      setForm((prev) => ({ ...prev, stimulusImage: result.dataUrl }))
+                      const kb = Math.round(result.bytesApprox / 1024)
+                      setImageInfo(
+                        `Siap: ${result.width}×${result.height}px · ~${kb} KB (otomatis dioptimalkan)`
+                      )
+                    } catch (err) {
+                      console.error(err)
+                      alert('Gagal memproses gambar. Coba format JPG/PNG atau gunakan URL.')
+                      setImageInfo('')
+                    } finally {
+                      setImageBusy(false)
+                      input.value = ''
+                    }
                   }}
                 />
+                {imageBusy && (
+                  <p className="text-xs text-indigo-600 mt-1.5">⏳ {imageInfo || 'Memproses…'}</p>
+                )}
+                {!imageBusy && imageInfo && form.stimulusImage && (
+                  <p className="text-xs text-emerald-700 mt-1.5">{imageInfo}</p>
+                )}
                 {form.stimulusImage && (
                   <div className="mt-2 relative">
                     <img
@@ -888,7 +958,10 @@ export default function TopicQuestions() {
                     />
                     <button
                       type="button"
-                      onClick={() => setForm({ ...form, stimulusImage: '' })}
+                      onClick={() => {
+                        setForm({ ...form, stimulusImage: '' })
+                        setImageInfo('')
+                      }}
                       className="absolute top-1 right-1 text-xs bg-white/90 border border-gray-200 rounded px-1.5 py-0.5 text-red-600"
                     >
                       Hapus
