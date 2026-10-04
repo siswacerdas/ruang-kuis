@@ -82,6 +82,7 @@ export default function KerjakanRiwayat() {
         }
       }
 
+      // Fallback data lama (tanpa studentId) — cocokkan nama
       try {
         const snap = await getDocs(
           query(collection(db, 'attempts'), where('studentName', '==', s.fullName))

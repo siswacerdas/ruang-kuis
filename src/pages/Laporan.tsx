@@ -76,6 +76,15 @@ function formatShortDate(ms: number) {
   })
 }
 
+
+/** Kunci stabil: studentId bila ada, else nama (data lama). */
+function studentKey(a: { studentId?: string | null; studentName: string }) {
+  const id = (a.studentId || '').trim()
+  if (id) return `id:${id}`
+  return `name:${a.studentName.trim().toLowerCase()}`
+}
+
+
 function weekKey(ms: number) {
   const d = new Date(ms)
   // ISO-ish: year-Wxx based on Thursday of week
@@ -163,7 +172,7 @@ export default function Laporan() {
     const list = filteredAttempts
     const n = list.length
     const avg = n ? Math.round(list.reduce((s, a) => s + (a.percent || 0), 0) / n) : 0
-    const uniqueStudents = new Set(list.map((a) => a.studentName.toLowerCase().trim())).size
+    const uniqueStudents = new Set(list.map((a) => studentKey(a))).size
     const uniqueLatihan = new Set(list.map((a) => a.latihanId)).size
     const totalMs = list.reduce((s, a) => s + (a.durationMs || 0), 0)
     const pass = list.filter((a) => (a.percent || 0) >= 70).length
@@ -233,10 +242,11 @@ export default function Laporan() {
       }
     >()
     filteredAttempts.forEach((a) => {
-      const key = a.studentName.trim().toLowerCase()
+      const key = studentKey(a)
       const cur = map.get(key) || {
         key,
         name: a.studentName.trim(),
+        studentId: a.studentId || undefined,
         class: a.studentClass,
         attempts: 0,
         avgPercent: 0,
@@ -278,7 +288,7 @@ export default function Laporan() {
   const studentAttempts = useMemo(() => {
     if (!selectedStudentKey) return []
     return filteredAttempts
-      .filter((a) => a.studentName.trim().toLowerCase() === selectedStudentKey)
+      .filter((a) => studentKey(a) === selectedStudentKey)
       .sort((a, b) => {
         const ta = toMillis(a.finishedAt) || 0
         const tb = toMillis(b.finishedAt) || 0
@@ -626,7 +636,7 @@ export default function Laporan() {
                   <button
                     type="button"
                     onClick={() => {
-                      setSelectedStudentKey(a.studentName.trim().toLowerCase())
+                      setSelectedStudentKey(studentKey(a))
                       setTab('siswa')
                     }}
                     className="text-xs text-indigo-600 hover:underline shrink-0"

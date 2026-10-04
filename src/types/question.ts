@@ -313,8 +313,10 @@ export interface LatihanAttempt {
   id?: string
   latihanId: string
   latihanTitle: string
-  /** Nama siswa (tanpa akun) */
+  /** Nama siswa */
   studentName: string
+  /** ID dokumen students (kunci stabil progress; opsional data lama) */
+  studentId?: string | null
   /** Kelas / identitas tambahan opsional */
   studentClass?: string
   answers: QuestionAnswer[]

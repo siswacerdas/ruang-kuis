@@ -153,21 +153,25 @@ export default function KerjakanEntry() {
                 type="text"
                 value={token}
                 onChange={(e) => setToken(e.target.value.toUpperCase())}
-                placeholder="Contoh: AB12CD"
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-center text-lg font-mono tracking-widest uppercase"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none font-mono tracking-widest text-center text-lg"
+                placeholder="ABC123"
                 maxLength={12}
-                autoComplete="off"
+                autoFocus
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-medium py-3 rounded-xl transition"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-3 rounded-xl transition"
             >
-              {loading ? 'Memeriksa...' : 'Mulai latihan'}
+              {loading ? 'Memeriksa...' : 'Mulai Latihan'}
             </button>
           </form>
         </div>
+
+        <p className="text-center text-xs text-gray-400 mt-6">
+          <Link to="/login" className="hover:text-indigo-600">Login admin</Link>
+        </p>
       </div>
     </div>
   )
