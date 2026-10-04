@@ -1,3 +1,4 @@
-materi,tp,type,question,optionA,optionB,optionC,optionD,correctAnswers,explanation
-Ekosistem,"IPAS-2.1, IPAS-2.2",single,Komponen berikut yang termasuk abiotik adalah...,Cahaya matahari,Pohon,Burung,Jamur,0,Abiotik adalah komponen tak hidup.
-Sistem Pernapasan Manusia,IPAS-1.2,single,Organ yang menukar oksigen dan karbon dioksida adalah...,Paru-paru,Jantung,Lambung,Hati,0,Paru-paru adalah organ pertukaran gas.
+materi,tp,type,question,stimulus,optionA,optionB,optionC,optionD,correctAnswers,explanation,kompleksitas,skor
+Ekosistem,"IPAS-2.1, IPAS-2.2",single,Komponen berikut yang termasuk abiotik adalah...,,Cahaya matahari,Pohon,Burung,Jamur,Cahaya matahari,Abiotik adalah komponen tak hidup.,L1-Pemahaman,1
+Bilangan,MTK-1.1,pg,Hasil dari 12 + 8 adalah …,,18,20,22,24,20,,L1-Pemahaman,1
+Bilangan,MTK-1.2,pgk,Manakah yang termasuk bilangan genap?,,3,4,7,10,"4;10",,L2-Aplikasi,2

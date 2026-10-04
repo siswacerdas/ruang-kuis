@@ -8,11 +8,18 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
-### Fixed (segera)
-- **TopicQuestions.tsx**: file sempat terpotong saat push besar; UI bank soal perlu dipulihkan penuh dari salinan lokal (Fase B import tka2026).
+### Fixed (manual push diperlukan)
+- **`src/pages/TopicQuestions.tsx`** — file di GitHub masih stub; unduh patch zip / file tunggal lalu push manual (lihat pesan chat).
 
 ### Planned — Fase C
 - Penyajian kuis: stimulus + gambar terbingkai, lightbox, tabel kategori, gaya LMS.
+
+---
+
+## [0.2.2] — 2026-10-04
+
+### Changed
+- `docs/template_import_soal.csv`: kolom `stimulus`, `kompleksitas`, `skor`; contoh kunci **teks opsi**; tipe `pg`/`pgk` didukung import.
 
 ---
 
