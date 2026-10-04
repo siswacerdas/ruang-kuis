@@ -39,6 +39,14 @@
         { "fieldPath": "latihanId", "order": "ASCENDING" },
         { "fieldPath": "finishedAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "learningObjectives",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "subjectKey", "order": "ASCENDING" },
+        { "fieldPath": "order", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

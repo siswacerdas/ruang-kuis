@@ -43,6 +43,15 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
       ),
     },
     {
+      path: '/tujuan-pembelajaran',
+      label: 'Tujuan Pembelajaran',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12h6m-6 4h6M7 4h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" />
+        </svg>
+      ),
+    },
+    {
       path: '/latihan-soal',
       label: 'Latihan Soal',
       icon: (

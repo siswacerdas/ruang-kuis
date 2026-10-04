@@ -1,0 +1,1029 @@
+{
+  "version": "2026-10-04",
+  "className": "5A",
+  "phase": "C",
+  "note": "Kode TP stabil untuk referensi soal dan nilai. Field statement boleh diubah guru di website. Al-Islam dan Bahasa Inggris belum ada.",
+  "subjects": [
+    {
+      "key": "bahasa-indonesia",
+      "name": "Bahasa Indonesia"
+    },
+    {
+      "key": "ipas",
+      "name": "IPAS"
+    },
+    {
+      "key": "matematika",
+      "name": "Matematika"
+    },
+    {
+      "key": "pendidikan-pancasila",
+      "name": "Pendidikan Pancasila"
+    },
+    {
+      "key": "seni-musik",
+      "name": "Seni Musik"
+    },
+    {
+      "key": "seni-rupa",
+      "name": "Seni Rupa"
+    }
+  ],
+  "tp": [
+    {
+      "code": "BIN-S.1",
+      "subjectKey": "bahasa-indonesia",
+      "element": "Menyimak",
+      "order": 1,
+      "jp": 8,
+      "statement": "Mengidentifikasi dan mencatat informasi penting dari teks nonsastra aural sederhana (pengumuman, berita pendek, percakapan) yang dibacakan atau diperdengarkan, dengan respons yang tepat.",
+      "id": "BIN-S.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "BIN-S.2",
+      "subjectKey": "bahasa-indonesia",
+      "element": "Menyimak",
+      "order": 2,
+      "jp": 8,
+      "statement": "Menjelaskan hubungan antarbagian informasi (sebab-akibat atau urutan kejadian) dari teks aural yang diperdengarkan.",
+      "id": "BIN-S.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "BIN-B.1",
+      "subjectKey": "bahasa-indonesia",
+      "element": "Membaca dan Memirsa",
+      "order": 3,
+      "jp": 6,
+      "statement": "Membaca lancar kata-kata dengan pola kombinasi huruf yang kompleks (gabungan konsonan, kata serapan) dari teks tertulis otentik berbahasa Indonesia.",
+      "id": "BIN-B.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "BIN-B.2",
+      "subjectKey": "bahasa-indonesia",
+      "element": "Membaca dan Memirsa",
+      "order": 4,
+      "jp": 10,
+      "statement": "Menganalisis informasi dan nilai-nilai dalam teks nonsastra dan sastra berbentuk visual dan/atau audiovisual.",
+      "id": "BIN-B.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "BIN-P.1",
+      "subjectKey": "bahasa-indonesia",
+      "element": "Berbicara dan Mempresentasikan",
+      "order": 5,
+      "jp": 10,
+      "statement": "Mempresentasikan gagasan dari satu jenis teks (laporan pengamatan sederhana atau hasil diskusi kelompok) secara efektif dan santun di depan kelas.",
+      "id": "BIN-P.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "BIN-P.2",
+      "subjectKey": "bahasa-indonesia",
+      "element": "Berbicara dan Mempresentasikan",
+      "order": 6,
+      "jp": 8,
+      "statement": "Menyampaikan perasaan dan imajinasi secara lisan dalam bentuk sastra sederhana (pembacaan cerita atau puisi pendek karya sendiri) dengan diksi sederhana.",
+      "id": "BIN-P.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "BIN-T.1",
+      "subjectKey": "bahasa-indonesia",
+      "element": "Menulis",
+      "order": 7,
+      "jp": 10,
+      "statement": "Menulis laporan hasil pengamatan sederhana terhadap objek atau peristiwa nyata di sekitar, dengan urutan yang sistematis dan kalimat majemuk dasar.",
+      "id": "BIN-T.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "BIN-T.2",
+      "subjectKey": "bahasa-indonesia",
+      "element": "Menulis",
+      "order": 8,
+      "jp": 8,
+      "statement": "Menulis cerita pendek berdasarkan pengalaman pribadi dengan struktur awal-tengah-akhir yang jelas dan rangkaian kalimat yang bervariasi.",
+      "id": "BIN-T.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "BIN-T.3",
+      "subjectKey": "bahasa-indonesia",
+      "element": "Menulis",
+      "order": 9,
+      "jp": 8,
+      "statement": "Menulis cerita imajinatif pendek dengan tokoh, latar, dan alur sederhana, menggunakan minimal satu contoh kosakata bermakna konotatif.",
+      "id": "BIN-T.3",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "BIN-T.4",
+      "subjectKey": "bahasa-indonesia",
+      "element": "Menulis",
+      "order": 10,
+      "jp": 6,
+      "statement": "Menulis teks berisi gagasan atau pendapat sederhana tentang suatu topik dengan alasan pendukung, menggunakan kalimat majemuk (karena, sehingga, meskipun).",
+      "id": "BIN-T.4",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "IPAS-1.1",
+      "subjectKey": "ipas",
+      "element": "Sistem Organ Tubuh dan Kesehatan",
+      "order": 1,
+      "jp": 8,
+      "statement": "Mengukur dan membandingkan respons tubuh (detak jantung, frekuensi napas) sebelum dan sesudah aktivitas fisik, lalu merefleksikan kaitannya dengan kebiasaan menjaga kesehatan diri sendiri.",
+      "id": "IPAS-1.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "IPAS-1.2",
+      "subjectKey": "ipas",
+      "element": "Sistem Organ Tubuh dan Kesehatan",
+      "order": 2,
+      "jp": 4,
+      "statement": "Menjelaskan struktur dan fungsi dasar organ-organ utama tubuh manusia (jantung, paru-paru, organ pencernaan) menggunakan model atau diagram sebagai pengetahuan pendukung.",
+      "id": "IPAS-1.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "IPAS-2.1",
+      "subjectKey": "ipas",
+      "element": "Ekosistem",
+      "order": 3,
+      "jp": 6,
+      "statement": "Mengamati komponen biotik dan abiotik di satu area lingkungan serta mengidentifikasi kemungkinan hubungan atau pengaruh antarkomponen tersebut.",
+      "id": "IPAS-2.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "IPAS-2.2",
+      "subjectKey": "ipas",
+      "element": "Ekosistem",
+      "order": 4,
+      "jp": 16,
+      "statement": "Merencanakan dan melaksanakan percobaan sederhana untuk menguji pengaruh satu faktor lingkungan terhadap pertumbuhan tanaman, dengan panduan yang dikurangi secara bertahap menuju kemandirian.",
+      "id": "IPAS-2.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "IPAS-3.1",
+      "subjectKey": "ipas",
+      "element": "Gelombang Bunyi dan Cahaya",
+      "order": 5,
+      "jp": 8,
+      "statement": "Melakukan eksperimen tentang perambatan bunyi dan pemantulan cahaya pada berbagai bahan atau permukaan, lalu menjelaskan kaitannya dengan fenomena sehari-hari.",
+      "id": "IPAS-3.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "IPAS-4.1",
+      "subjectKey": "ipas",
+      "element": "Letak Geografis Indonesia",
+      "order": 6,
+      "jp": 6,
+      "statement": "Menjelaskan letak dan kondisi geografis Indonesia (posisi antara dua benua dan dua samudra, bentang kepulauan) menggunakan peta konvensional atau digital.",
+      "id": "IPAS-4.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "IPAS-5.1",
+      "subjectKey": "ipas",
+      "element": "Sejarah dan Keragaman Budaya",
+      "order": 7,
+      "jp": 4,
+      "statement": "Menumbuhkan rasa ingin tahu terhadap sejarah perjuangan dan keragaman budaya di lingkungan sekitar tempat tinggal, dengan merujuk pembelajaran pada Pendidikan Pancasila.",
+      "id": "IPAS-5.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "IPAS-6.1",
+      "subjectKey": "ipas",
+      "element": "Kegiatan Ekonomi Masyarakat",
+      "order": 8,
+      "jp": 6,
+      "statement": "Mengamati dan mengklasifikasikan jenis-jenis kegiatan ekonomi (produksi, distribusi, konsumsi) di lingkungan sekitar rumah atau sekolah.",
+      "id": "IPAS-6.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-B.1",
+      "subjectKey": "matematika",
+      "element": "Bilangan",
+      "order": 1,
+      "jp": 6,
+      "statement": "Membaca, menulis, menentukan nilai tempat, serta membandingkan dan mengurutkan bilangan cacah sampai 100.000.",
+      "id": "MTK-B.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-B.2",
+      "subjectKey": "matematika",
+      "element": "Bilangan",
+      "order": 2,
+      "jp": 8,
+      "statement": "Melakukan operasi pengurangan bersusun dengan peminjaman berganda secara konsisten dan akurat.",
+      "id": "MTK-B.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-B.3",
+      "subjectKey": "matematika",
+      "element": "Bilangan",
+      "order": 3,
+      "jp": 10,
+      "statement": "Melakukan operasi pembagian bersusun dengan pembagi lebih dari satu digit secara konsisten dan akurat.",
+      "id": "MTK-B.3",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-B.4",
+      "subjectKey": "matematika",
+      "element": "Bilangan",
+      "order": 4,
+      "jp": 10,
+      "statement": "Menyelesaikan masalah sehari-hari yang berkaitan dengan KPK dan FPB.",
+      "id": "MTK-B.4",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-B.5",
+      "subjectKey": "matematika",
+      "element": "Bilangan",
+      "order": 5,
+      "jp": 6,
+      "statement": "Menyelesaikan masalah sehari-hari yang berkaitan dengan uang (transaksi, kembalian, perbandingan harga) menggunakan operasi hitung bilangan cacah.",
+      "id": "MTK-B.5",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-B.6",
+      "subjectKey": "matematika",
+      "element": "Bilangan",
+      "order": 6,
+      "jp": 8,
+      "statement": "Membandingkan, mengurutkan, dan mengoperasikan penjumlahan serta pengurangan pecahan, termasuk pecahan campuran.",
+      "id": "MTK-B.6",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-B.7",
+      "subjectKey": "matematika",
+      "element": "Bilangan",
+      "order": 7,
+      "jp": 6,
+      "statement": "Melakukan operasi perkalian dan pembagian pecahan dengan bilangan asli, serta mengubah pecahan ke bentuk pecahan lain yang setara.",
+      "id": "MTK-B.7",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-A.1",
+      "subjectKey": "matematika",
+      "element": "Aljabar",
+      "order": 8,
+      "jp": 6,
+      "statement": "Memahami simbol kesetaraan sebagai hubungan antara dua nilai, bukan sekadar penanda hasil.",
+      "id": "MTK-A.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-A.2",
+      "subjectKey": "matematika",
+      "element": "Aljabar",
+      "order": 9,
+      "jp": 10,
+      "statement": "Menemukan nilai yang belum diketahui dalam kalimat matematika yang melibatkan keempat operasi hitung pada bilangan cacah sampai 1.000.",
+      "id": "MTK-A.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-A.3",
+      "subjectKey": "matematika",
+      "element": "Aljabar",
+      "order": 10,
+      "jp": 8,
+      "statement": "Mengidentifikasi, meniru, dan mengembangkan pola bilangan membesar dan mengecil yang melibatkan perkalian dan pembagian.",
+      "id": "MTK-A.3",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-A.4",
+      "subjectKey": "matematika",
+      "element": "Aljabar",
+      "order": 11,
+      "jp": 6,
+      "statement": "Bernalar secara proporsional untuk menyelesaikan masalah sehari-hari dengan rasio satuan sederhana.",
+      "id": "MTK-A.4",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-U.1",
+      "subjectKey": "matematika",
+      "element": "Pengukuran",
+      "order": 12,
+      "jp": 10,
+      "statement": "Menentukan keliling dan luas persegi, persegi panjang, dan segitiga melalui pemahaman konsep pengukuran, bukan rumus hafalan.",
+      "id": "MTK-U.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-U.2",
+      "subjectKey": "matematika",
+      "element": "Pengukuran",
+      "order": 13,
+      "jp": 8,
+      "statement": "Menentukan keliling dan luas segi banyak sederhana serta bangun gabungan dari bangun-bangun dasar.",
+      "id": "MTK-U.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-U.3",
+      "subjectKey": "matematika",
+      "element": "Pengukuran",
+      "order": 14,
+      "jp": 6,
+      "statement": "Menghitung durasi waktu termasuk konversi antarsatuan dan situasi lintas tengah malam.",
+      "id": "MTK-U.3",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-U.4",
+      "subjectKey": "matematika",
+      "element": "Pengukuran",
+      "order": 15,
+      "jp": 6,
+      "statement": "Mengukur besar sudut pada bangun datar dan mengklasifikasikan jenis sudut (lancip, siku-siku, tumpul).",
+      "id": "MTK-U.4",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-G.1",
+      "subjectKey": "matematika",
+      "element": "Geometri",
+      "order": 16,
+      "jp": 10,
+      "statement": "Mengonstruksi dan mengurai bangun ruang (kubus dan balok) melalui manipulasi fisik, serta mengenali visualisasi spasial dari berbagai sisi.",
+      "id": "MTK-G.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-G.2",
+      "subjectKey": "matematika",
+      "element": "Geometri",
+      "order": 17,
+      "jp": 6,
+      "statement": "Membandingkan karakteristik antarbangun datar dan antarbangun ruang berdasarkan jumlah sisi, rusuk, dan titik sudut.",
+      "id": "MTK-G.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-G.3",
+      "subjectKey": "matematika",
+      "element": "Geometri",
+      "order": 18,
+      "jp": 6,
+      "statement": "Menentukan lokasi pada peta atau bidang yang menggunakan sistem berpetak (koordinat sederhana).",
+      "id": "MTK-G.3",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-D.1",
+      "subjectKey": "matematika",
+      "element": "Analisis Data dan Peluang",
+      "order": 19,
+      "jp": 8,
+      "statement": "Mengurutkan, membandingkan, dan menyajikan data hasil pengukuran atau pengamatan dalam bentuk piktogram, diagram batang, dan tabel frekuensi.",
+      "id": "MTK-D.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-D.2",
+      "subjectKey": "matematika",
+      "element": "Analisis Data dan Peluang",
+      "order": 20,
+      "jp": 6,
+      "statement": "Mengenal secara informal konsep nilai rata-rata, nilai tengah, dan nilai yang paling sering muncul dari sekumpulan data sederhana.",
+      "id": "MTK-D.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MTK-D.3",
+      "subjectKey": "matematika",
+      "element": "Analisis Data dan Peluang",
+      "order": 21,
+      "jp": 6,
+      "statement": "Menentukan kejadian dengan kemungkinan lebih besar atau lebih kecil melalui eksplorasi konkret.",
+      "id": "MTK-D.3",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "PP-1.1",
+      "subjectKey": "pendidikan-pancasila",
+      "element": "Pancasila",
+      "order": 1,
+      "jp": 8,
+      "statement": "Menceritakan kronologi sejarah kelahiran Pancasila secara berurutan menggunakan kata-kata sendiri.",
+      "id": "PP-1.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "PP-1.2",
+      "subjectKey": "pendidikan-pancasila",
+      "element": "Pancasila",
+      "order": 2,
+      "jp": 10,
+      "statement": "Menunjukkan perilaku yang meneladani satu sikap spesifik tokoh perumus Pancasila secara konsisten dalam keseharian di sekolah.",
+      "id": "PP-1.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "PP-1.3",
+      "subjectKey": "pendidikan-pancasila",
+      "element": "Pancasila",
+      "order": 3,
+      "jp": 8,
+      "statement": "Mengenali kehadiran nilai-nilai kelima sila secara bersamaan dalam satu situasi sosial yang akrab dengan keseharian siswa.",
+      "id": "PP-1.3",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "PP-2.1",
+      "subjectKey": "pendidikan-pancasila",
+      "element": "UUD 1945",
+      "order": 4,
+      "jp": 8,
+      "statement": "Menjelaskan gagasan pokok pada setiap alinea Pembukaan UUD 1945 dengan kata-kata sendiri.",
+      "id": "PP-2.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "PP-2.2",
+      "subjectKey": "pendidikan-pancasila",
+      "element": "UUD 1945",
+      "order": 5,
+      "jp": 8,
+      "statement": "Mengidentifikasi contoh norma, hak, dan kewajiban dalam lingkup keluarga dan sekolah sebagai dasar menjadi warga negara yang baik.",
+      "id": "PP-2.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "PP-2.3",
+      "subjectKey": "pendidikan-pancasila",
+      "element": "UUD 1945",
+      "order": 6,
+      "jp": 10,
+      "statement": "Mempraktikkan musyawarah untuk membuat kesepakatan dan aturan bersama di lingkungan kelas, serta menerapkannya secara konsisten.",
+      "id": "PP-2.3",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "PP-3.1",
+      "subjectKey": "pendidikan-pancasila",
+      "element": "Bhinneka Tunggal Ika",
+      "order": 7,
+      "jp": 10,
+      "statement": "Mengumpulkan dan menyajikan informasi tentang keberagaman budaya asal keluarga teman-teman sekelas.",
+      "id": "PP-3.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "PP-3.2",
+      "subjectKey": "pendidikan-pancasila",
+      "element": "Bhinneka Tunggal Ika",
+      "order": 8,
+      "jp": 8,
+      "statement": "Menunjukkan sikap menghormati dan menjaga keberagaman budaya yang ditemukan di lingkungan sekitar melalui perilaku konkret sehari-hari.",
+      "id": "PP-3.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "PP-3.3",
+      "subjectKey": "pendidikan-pancasila",
+      "element": "Bhinneka Tunggal Ika",
+      "order": 9,
+      "jp": 4,
+      "statement": "Menunjukkan rasa ingin tahu terhadap sejarah lingkungan tempat tinggal sebagai bagian dari keberagaman dan dinamika sejarah bangsa.",
+      "id": "PP-3.3",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "PP-4.1",
+      "subjectKey": "pendidikan-pancasila",
+      "element": "NKRI",
+      "order": 10,
+      "jp": 6,
+      "statement": "Mengenal letak kabupaten atau kota dan provinsi tempat tinggal sebagai bagian dari wilayah Negara Kesatuan Republik Indonesia menggunakan peta.",
+      "id": "PP-4.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "PP-4.2",
+      "subjectKey": "pendidikan-pancasila",
+      "element": "NKRI",
+      "order": 11,
+      "jp": 6,
+      "statement": "Menunjukkan perilaku gotong royong yang menjaga persatuan di lingkungan sekolah melalui kegiatan nyata.",
+      "id": "PP-4.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MUS-1.1",
+      "subjectKey": "seni-musik",
+      "element": "Semester 1 — Fondasi Irama",
+      "order": 1,
+      "jp": 6,
+      "statement": "Mengenali dan menirukan pola irama sederhana menggunakan anggota tubuh dan alat musik ritmis yang tersedia di sekolah.",
+      "id": "MUS-1.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MUS-1.2",
+      "subjectKey": "seni-musik",
+      "element": "Semester 1 — Fondasi Irama",
+      "order": 2,
+      "jp": 6,
+      "statement": "Mengenal istilah musik dasar (tempo, dinamika, ritme) melalui pengalaman langsung.",
+      "id": "MUS-1.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MUS-1.3",
+      "subjectKey": "seni-musik",
+      "element": "Semester 1 — Fondasi Irama",
+      "order": 3,
+      "jp": 4,
+      "statement": "Memberikan umpan balik sederhana terhadap penampilan musik teman menggunakan istilah dasar yang telah dikenal.",
+      "id": "MUS-1.3",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MUS-2.1",
+      "subjectKey": "seni-musik",
+      "element": "Semester 2 — Notasi dan Penciptaan",
+      "order": 4,
+      "jp": 6,
+      "statement": "Mengenal simbol notasi musik paling dasar (not panjang dan pendek) sebagai pengantar literasi musik bertahap.",
+      "id": "MUS-2.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MUS-2.2",
+      "subjectKey": "seni-musik",
+      "element": "Semester 2 — Notasi dan Penciptaan",
+      "order": 5,
+      "jp": 6,
+      "statement": "Mengeksplorasi bunyi dari material sederhana di lingkungan sekitar untuk menemukan variasi bunyi.",
+      "id": "MUS-2.2",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MUS-2.3",
+      "subjectKey": "seni-musik",
+      "element": "Semester 2 — Notasi dan Penciptaan",
+      "order": 6,
+      "jp": 10,
+      "statement": "Membuat dan mengembangkan pola irama sederhana berdasarkan idiom musik dari daerah asal keluarga masing-masing siswa.",
+      "id": "MUS-2.3",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "MUS-2.4",
+      "subjectKey": "seni-musik",
+      "element": "Semester 2 — Notasi dan Penciptaan",
+      "order": 7,
+      "jp": 4,
+      "statement": "Menunjukkan minat dan rasa ingin tahu dalam kegiatan bermusik sebagai indikator keberhasilan proses, bukan vonis bakat individual.",
+      "id": "MUS-2.4",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "RUP-1.1",
+      "subjectKey": "seni-rupa",
+      "element": "Proyek 1 — Tekstur dan Lingkungan",
+      "order": 1,
+      "jp": 12,
+      "statement": "Menjelaskan unsur rupa dan prinsip desain yang ditemukan pada benda nyata di sekitar sekolah, lalu mengapresiasi, menguji teknik, menciptakan, dan memajang karya berdasarkan pengamatan langsung.",
+      "id": "RUP-1.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    },
+    {
+      "code": "RUP-2.1",
+      "subjectKey": "seni-rupa",
+      "element": "Proyek 2 — Warna dan Ekspresi",
+      "order": 2,
+      "jp": 12,
+      "statement": "Menguji coba variasi teknik penggunaan alat dan bahan untuk membuat karya yang mewakili pengalaman atau perasaan pribadi melalui rangkaian mengalami, mengapresiasi, dan berpikir artistik.",
+      "id": "RUP-2.1",
+      "className": "5A",
+      "phase": "C",
+      "active": true,
+      "weight": 1,
+      "source": "Dokumen 2 Kelas 5 Fase C, 2026"
+    }
+  ],
+  "materiBuku": [
+    {
+      "subjectKey": "bahasa-indonesia",
+      "title": "1. Informasi",
+      "summary": "Pengertian, cara memperoleh, memilah, dan menyampaikan informasi",
+      "suggestedTpCodes": [
+        "BIN-S.1",
+        "BIN-B.2"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    },
+    {
+      "subjectKey": "bahasa-indonesia",
+      "title": "2. Teks Eksplanasi",
+      "summary": "Konsep, ciri, fakta-opini, sebab-akibat, struktur, menulis",
+      "suggestedTpCodes": [
+        "BIN-S.2",
+        "BIN-T.1",
+        "BIN-T.4"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    },
+    {
+      "subjectKey": "bahasa-indonesia",
+      "title": "3. Teks Deskripsi",
+      "summary": "Menggambarkan objek dan kejadian, kata sifat, struktur, menulis",
+      "suggestedTpCodes": [
+        "BIN-T.1",
+        "BIN-B.2"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    },
+    {
+      "subjectKey": "bahasa-indonesia",
+      "title": "4. Teks Narasi",
+      "summary": "Unsur dan struktur narasi, menulis cerita",
+      "suggestedTpCodes": [
+        "BIN-T.2",
+        "BIN-T.3",
+        "BIN-P.2"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    },
+    {
+      "subjectKey": "bahasa-indonesia",
+      "title": "5. Teks Prosedur",
+      "summary": "Urutan informasi, kalimat perintah, ciri, menulis prosedur",
+      "suggestedTpCodes": [
+        "BIN-S.2",
+        "BIN-T.1"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    },
+    {
+      "subjectKey": "bahasa-indonesia",
+      "title": "6. Eksposisi (pengenalan)",
+      "summary": "Menjelaskan gagasan dengan data dan perspektif siswa — belum tuntas kelas 5",
+      "suggestedTpCodes": [
+        "BIN-T.4",
+        "BIN-P.1"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    },
+    {
+      "subjectKey": "ipas",
+      "title": "Sistem Pernapasan Manusia",
+      "summary": "Organ, proses, gangguan, cara menjaga, pernapasan hewan",
+      "suggestedTpCodes": [
+        "IPAS-1.1",
+        "IPAS-1.2"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    },
+    {
+      "subjectKey": "ipas",
+      "title": "Sistem Pencernaan Manusia",
+      "summary": "Organ, proses mekanik-kimiawi, gangguan, gizi",
+      "suggestedTpCodes": [
+        "IPAS-1.2",
+        "IPAS-1.1"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    },
+    {
+      "subjectKey": "ipas",
+      "title": "Ekosistem",
+      "summary": "Biotik-abiotik, individu-populasi-komunitas, rantai dan jaring makanan, projek tanaman",
+      "suggestedTpCodes": [
+        "IPAS-2.1",
+        "IPAS-2.2"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    },
+    {
+      "subjectKey": "ipas",
+      "title": "Gelombang Bunyi dan Cahaya",
+      "summary": "Sifat, organ pendengar dan penglihat, pemanfaatan",
+      "suggestedTpCodes": [
+        "IPAS-3.1"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    },
+    {
+      "subjectKey": "ipas",
+      "title": "Mengenal Bumi",
+      "summary": "Bentuk permukaan, lempeng, siklus air",
+      "suggestedTpCodes": [
+        "IPAS-4.1"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    },
+    {
+      "subjectKey": "ipas",
+      "title": "Kondisi Geografis Indonesia",
+      "summary": "Letak, batas, kenampakan, iklim, flora-fauna, agraris-maritim",
+      "suggestedTpCodes": [
+        "IPAS-4.1"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    },
+    {
+      "subjectKey": "ipas",
+      "title": "Warisan Budaya",
+      "summary": "Sejarah dan jenis warisan budaya daerah, cara menjaga",
+      "suggestedTpCodes": [
+        "IPAS-5.1"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    },
+    {
+      "subjectKey": "ipas",
+      "title": "Kondisi Perekonomian Daerah",
+      "summary": "Aktivitas ekonomi, sumber daya, kebanggaan daerah",
+      "suggestedTpCodes": [
+        "IPAS-6.1"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    },
+    {
+      "subjectKey": "ipas",
+      "title": "Gaya Magnet dan Energi Listrik",
+      "summary": "Belum punya TP langsung di daftar resmi; bersinggungan pengamatan fenomena",
+      "suggestedTpCodes": [
+        "IPAS-3.1"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    },
+    {
+      "subjectKey": "ipas",
+      "title": "Perubahan Kondisi Alam",
+      "summary": "Bencana alam dan dampak perilaku manusia; kaitan longgar ke geografi dan ekonomi",
+      "suggestedTpCodes": [
+        "IPAS-4.1",
+        "IPAS-6.1"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    },
+    {
+      "subjectKey": "pendidikan-pancasila",
+      "title": "Pelaksanaan Hak dan Kewajiban",
+      "summary": "Norma, aturan, hak-kewajiban, tanggung jawab, musyawarah, kantin kejujuran",
+      "suggestedTpCodes": [
+        "PP-2.2",
+        "PP-2.3",
+        "PP-1.3"
+      ],
+      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+    }
+  ]
+}

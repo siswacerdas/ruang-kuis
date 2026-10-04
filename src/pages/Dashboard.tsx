@@ -13,11 +13,11 @@ export default function Dashboard() {
           Selamat datang, Admin!
         </h2>
         <p className="text-indigo-100 text-sm md:text-base">
-          Kelola soal latihan, pantau data, dan siapkan materi untuk siswa dari sini.
+          Kelola soal, siswa kelas 5A, paket latihan, dan laporan dari satu tempat.
         </p>
       </div>
 
-      {/* Stats / quick cards */}
+      {/* Quick cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-8">
         <Link
           to="/bank-soal"
@@ -55,7 +55,47 @@ export default function Dashboard() {
           </div>
           <h3 className="mt-4 text-base font-semibold text-gray-900">Latihan Soal</h3>
           <p className="mt-1 text-sm text-gray-500">
-            Paket latihan dengan jadwal, token, dan soal dari bank
+            Buat paket manual/otomatis, atur token & jadwal
+          </p>
+        </Link>
+
+        <Link
+          to="/siswa"
+          className="group bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all"
+        >
+          <div className="flex items-start justify-between">
+            <div className="w-11 h-11 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center group-hover:bg-sky-100 transition">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+            </div>
+            <svg className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+          <h3 className="mt-4 text-base font-semibold text-gray-900">Daftar Siswa</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Data kelas 5A, import CSV, dan buat akun login (email + NISN)
+          </p>
+        </Link>
+
+        <Link
+          to="/tujuan-pembelajaran"
+          className="group bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all"
+        >
+          <div className="flex items-start justify-between">
+            <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:bg-amber-100 transition">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12h6m-6 4h6M7 4h7l5 5v11a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" />
+              </svg>
+            </div>
+            <svg className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+          <h3 className="mt-4 text-base font-semibold text-gray-900">Tujuan Pembelajaran</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Master TP per mapel, impor JSON, dan ubah rumusan secara manual
           </p>
         </Link>
 
@@ -78,23 +118,6 @@ export default function Dashboard() {
             Rekap skor, capaian TP, dan progress siswa
           </p>
         </Link>
-
-        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm opacity-70">
-          <div className="flex items-start justify-between">
-            <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-            </div>
-            <span className="text-[11px] font-medium bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-              Segera
-            </span>
-          </div>
-          <h3 className="mt-4 text-base font-semibold text-gray-900">Keamanan</h3>
-          <p className="mt-1 text-sm text-gray-500">
-            Atur Firestore rules & role admin/siswa (belum tersedia)
-          </p>
-        </div>
       </div>
 
       {/* Tips */}
@@ -108,15 +131,15 @@ export default function Dashboard() {
         <ul className="space-y-2 text-sm text-gray-600">
           <li className="flex gap-2">
             <span className="text-indigo-500 font-medium">1.</span>
-            Gunakan menu <strong>Bank Soal</strong> untuk menambah soal manual atau import dari file.
+            Import siswa di <strong>Daftar Siswa</strong>, lalu klik <strong>Buat akun login</strong> (password = NISN).
           </li>
           <li className="flex gap-2">
             <span className="text-indigo-500 font-medium">2.</span>
-            Format import yang didukung: JSON, CSV, dan Excel (.xlsx / .xls).
+            Isi <strong>Bank Soal</strong>, lalu buat paket di <strong>Latihan Soal</strong> (dapat token).
           </li>
           <li className="flex gap-2">
             <span className="text-indigo-500 font-medium">3.</span>
-            Fitur siswa mengerjakan soal dan laporan skor akan ditambahkan pada tahap berikutnya.
+            Siswa buka <code className="bg-gray-100 px-1 rounded text-xs">/kerjakan</code> → login email + NISN → masukkan token.
           </li>
         </ul>
       </div>

@@ -13,6 +13,7 @@ import LatihanForm from './pages/LatihanForm'
 import LatihanHasil from './pages/LatihanHasil'
 import Laporan from './pages/Laporan'
 import SiswaList from './pages/SiswaList'
+import TujuanPembelajaran from './pages/TujuanPembelajaran'
 import SiswaLogin from './pages/SiswaLogin'
 import KerjakanEntry from './pages/KerjakanEntry'
 import KerjakanQuiz from './pages/KerjakanQuiz'
@@ -81,6 +82,7 @@ function App() {
         <Route path="/latihan-soal/:id" element={isAdmin ? <LatihanForm /> : <Navigate to="/login" />} />
         <Route path="/laporan" element={isAdmin ? <Laporan /> : <Navigate to="/login" />} />
         <Route path="/siswa" element={isAdmin ? <SiswaList /> : <Navigate to="/login" />} />
+        <Route path="/tujuan-pembelajaran" element={isAdmin ? <TujuanPembelajaran /> : <Navigate to="/login" />} />
 
         <Route path="/questions" element={<Navigate to="/bank-soal" replace />} />
         <Route
