@@ -36,6 +36,10 @@ export interface Topic {
   id?: string
   subjectKey: SubjectKey
   name: string
+  /** ID dokumen bookMaterials, jika ditautkan */
+  bookMaterialId?: string
+  /** Kode TP dari materi buku (denormalisasi, bisa diubah) */
+  tpCodes?: string[]
   createdAt?: any
 }
 
