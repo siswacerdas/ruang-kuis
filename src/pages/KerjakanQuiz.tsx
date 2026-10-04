@@ -350,6 +350,11 @@ export default function KerjakanQuiz() {
             Soal {current + 1} dari {questions.length}
             {q.tp ? ` · TP ${q.tp}` : ''}
           </p>
+          {q.stimulus && (
+            <div className="mb-4 rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+              {q.stimulus}
+            </div>
+          )}
           <p className="text-base md:text-lg font-medium text-gray-900 leading-relaxed mb-6">{q.question}</p>
 
           {/* Options */}

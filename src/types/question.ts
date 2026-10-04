@@ -63,12 +63,16 @@ export interface Question {
   correctAnswers: number[]
   categoryLabels?: string[]
   explanation?: string
+  /** Konteks atau teks bacaan yang dibutuhkan untuk menjawab */
+  stimulus?: string
   /** Kode TP pertama, untuk kompatibilitas tampilan lama */
   tp?: string
   /** Satu soal boleh mengisi lebih dari satu TP */
   tpCodes?: string[]
   /** Nama materi saat impor, jika berbeda dari materi halaman */
   materialName?: string
+  /** Sidik jari soal agar impor ulang tidak menggandakan */
+  importKey?: string
   createdAt?: any
 }
 

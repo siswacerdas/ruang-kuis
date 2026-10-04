@@ -11,6 +11,7 @@ import {
   orderBy,
   serverTimestamp,
   getDoc,
+  writeBatch,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { Link, useParams, useNavigate } from 'react-router-dom'
@@ -145,21 +146,36 @@ function normalizeImportItem(item: any): Omit<Question, 'id' | 'topicId' | 'subj
     const tpCodes = parseTpCodes(item.tpCodes ?? item.tp ?? item.TP ?? item.tujuanPembelajaran ?? item.tujuan)
     const materialName = String(item.materi || item.material || item.topic || item.namaMateri || '').trim() || undefined
     const explanation = String(item.explanation || item.pembahasan || item.Pembahasan || '').trim() || undefined
+    const stimulus = String(item.stimulus || item.Stimulus || item.konteks || '').trim() || undefined
 
     return {
       type,
       question,
       options,
       correctAnswers,
-      categoryLabels,
-      explanation,
-      tp: tpCodes[0],
+      ...(type === 'category' ? { categoryLabels } : {}),
+      ...(explanation ? { explanation } : {}),
+      ...(stimulus ? { stimulus } : {}),
+      ...(tpCodes[0] ? { tp: tpCodes[0] } : {}),
       tpCodes,
-      materialName,
+      ...(materialName ? { materialName } : {}),
+      importKey: questionKey(question, type, options),
     }
   } catch {
     return null
   }
+}
+
+function questionKey(question: string, type: string, options: string[]) {
+  const text = `${type}|${question}|${options.join('|')}`
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+  return text
+}
+
+function cleanPayload(data: Record<string, any>) {
+  return Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined))
 }
 
 async function resolveTopicId(
@@ -187,6 +203,24 @@ async function resolveTopicId(
   })
   cache.set(key, created.id)
   return created.id
+}
+
+async function removeDuplicateQuestions(topicId: string) {
+  const snap = await getDocs(query(collection(db, 'questions'), where('topicId', '==', topicId)))
+  const seen = new Map<string, string>()
+  const extra: string[] = []
+  snap.docs.forEach((d) => {
+    const data = d.data()
+    const key = String(data.importKey || questionKey(data.question || '', data.type || '', data.options || []))
+    if (seen.has(key)) extra.push(d.id)
+    else seen.set(key, d.id)
+  })
+  for (let i = 0; i < extra.length; i += 400) {
+    const batch = writeBatch(db)
+    extra.slice(i, i + 400).forEach((id) => batch.delete(doc(db, 'questions', id)))
+    await batch.commit()
+  }
+  return extra.length
 }
 
 export default function TopicQuestions() {
@@ -446,7 +480,8 @@ export default function TopicQuestions() {
       } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
         const data = await file.arrayBuffer()
         const workbook = XLSX.read(data)
-        const sheet = workbook.Sheets[workbook.SheetNames[0]]
+        const sheetName = workbook.SheetNames.find((n) => n.toLowerCase() === 'soal') || workbook.SheetNames[0]
+        const sheet = workbook.Sheets[sheetName]
         rawData = XLSX.utils.sheet_to_json(sheet)
       } else {
         alert('Format tidak didukung. Gunakan .json, .csv, atau .xlsx')
@@ -463,27 +498,44 @@ export default function TopicQuestions() {
       }
 
       let success = 0
+      let skipped = 0
       const topicCache = new Map<string, string>()
       if (topicId) topicCache.set((topic?.name || '').toLowerCase(), topicId)
+      const removed = await removeDuplicateQuestions(topicId)
+      const existingSnap = await getDocs(query(collection(db, 'questions'), where('subjectKey', '==', subjectKey)))
+      const seen = new Set(
+        existingSnap.docs.map((d) => String(d.data().importKey || questionKey(d.data().question || '', d.data().type || '', d.data().options || [])))
+      )
+      const pending: Record<string, any>[] = []
       for (const q of valid) {
-        try {
-          const targetTopicId = await resolveTopicId(subjectKey, topicId, q.materialName, topicCache, topic)
-          const codes = q.tpCodes?.length ? q.tpCodes : topic?.tpCodes || []
-          await addDoc(collection(db, 'questions'), {
-            ...q,
-            tp: codes[0] || null,
-            tpCodes: codes,
-            materialName: q.materialName || topic?.name || null,
-            topicId: targetTopicId,
-            subjectKey,
-            createdAt: serverTimestamp(),
-          })
-          success++
-        } catch (err) {
-          console.error(err)
+        const key = q.importKey || questionKey(q.question, q.type, q.options)
+        if (seen.has(key)) {
+          skipped++
+          continue
         }
+        seen.add(key)
+        const targetTopicId = await resolveTopicId(subjectKey, topicId, q.materialName, topicCache, topic)
+        const codes = q.tpCodes?.length ? q.tpCodes : topic?.tpCodes || []
+        pending.push(cleanPayload({
+          ...q,
+          importKey: key,
+          tp: codes[0] || null,
+          tpCodes: codes,
+          materialName: q.materialName || topic?.name || null,
+          topicId: targetTopicId,
+          subjectKey,
+          createdAt: serverTimestamp(),
+        }))
       }
-      alert(`Berhasil mengimpor ${success} dari ${valid.length} soal ke materi ini.`)
+      for (let i = 0; i < pending.length; i += 400) {
+        const batch = writeBatch(db)
+        pending.slice(i, i + 400).forEach((payload) => {
+          batch.set(doc(collection(db, 'questions')), payload)
+        })
+        await batch.commit()
+        success += Math.min(400, pending.length - i)
+      }
+      alert(`Impor selesai: ${success} soal baru, ${skipped} dilewati karena sudah ada${removed ? `, ${removed} duplikat lama dihapus` : ''}.`)
       await loadData()
     } catch (err) {
       console.error(err)
@@ -491,6 +543,21 @@ export default function TopicQuestions() {
     } finally {
       setImporting(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const cleanDuplicates = async () => {
+    if (!topicId) return
+    setImporting(true)
+    try {
+      const removed = await removeDuplicateQuestions(topicId)
+      alert(removed ? `${removed} soal duplikat dihapus. Satu salinan setiap soal tetap disimpan.` : 'Tidak ada duplikat pada materi ini.')
+      await loadData()
+    } catch (err) {
+      console.error(err)
+      alert('Gagal membersihkan duplikat.')
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -509,6 +576,14 @@ export default function TopicQuestions() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
         </svg>
         {importing ? 'Mengimpor...' : 'Import'}
+      </button>
+      <button
+        type="button"
+        onClick={cleanDuplicates}
+        disabled={importing}
+        className="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 text-gray-700 px-3.5 py-2 rounded-xl text-sm font-medium"
+      >
+        Bersihkan duplikat
       </button>
       <input
         ref={fileInputRef}
