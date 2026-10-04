@@ -1,12 +1,19 @@
 /**
- * Generate draft soal via OpenAI Chat Completions.
- * Kunci: VITE_OPENAI_API_KEY di .env (jangan commit ke git).
+ * Generate draft soal via OpenAI — arahan & API.
  *
- * Catatan keamanan: memanggil OpenAI dari browser mengekspos kunci ke client.
- * Untuk produksi, pindahkan ke Cloud Function. Mode ini cukup untuk setup awal.
+ * File ini adalah "penghubung" petunjuk ke AI (system + user prompt).
+ * Kunci: VITE_OPENAI_API_KEY di .env (jangan commit).
+ *
+ * Produksi: pindahkan pemanggilan ke Cloud Function agar key tidak di client.
  */
 
 import type { QuestionType, SubjectKey } from '../types/question'
+
+/** Mode stimulus yang diminta guru */
+export type StimulusMode = 'none' | 'text' | 'image'
+
+/** Level kognitif (Taksonomi sederhana SD) */
+export type KompleksitasLevel = 'L1-Pemahaman' | 'L2-Aplikasi' | 'L3-Penalaran' | 'campuran'
 
 export type AiDraftQuestion = {
   type: QuestionType
@@ -15,7 +22,12 @@ export type AiDraftQuestion = {
   correctAnswers: number[]
   categoryLabels?: string[]
   explanation?: string
+  /** Teks bacaan / konteks / deskripsi gambar */
   stimulus?: string
+  /** URL gambar (DALL·E) bila mode image berhasil */
+  stimulusImage?: string
+  /** Prompt gambar (untuk dokumentasi / generate ulang) */
+  imagePrompt?: string
   tpCodes?: string[]
   kompleksitas?: string
 }
@@ -27,51 +39,99 @@ export type GenerateAiOptions = {
   tpCodes?: string[]
   count: number
   types: QuestionType[]
-  /** Konteks tambahan dari guru (opsional) */
+  stimulusMode?: StimulusMode
+  kompleksitas?: KompleksitasLevel
   extraContext?: string
   model?: string
+  /** Generate gambar DALL·E bila stimulusMode === 'image' (default true) */
+  generateImages?: boolean
 }
 
-const SYSTEM = `Kamu adalah penulis soal asesmen untuk siswa SD kelas 5 di Indonesia.
-Hasilkan soal dalam bahasa Indonesia yang jelas, sesuai usia, dan akurat.
-Balas HANYA JSON valid tanpa markdown, bentuk:
-{"questions":[{...}]}
+/* ============================================================================
+ * ARAHAN UTAMA KE AI (system prompt)
+ * Sesuaikan di sini jika ingin mengubah gaya penulisan soal nasional/sekolah.
+ * ============================================================================ */
+export const AI_QUESTION_GUIDANCE = {
+  role: `Kamu adalah penulis soal asesmen formatif untuk siswa SD kelas 5 di Indonesia
+(Kurikulum Merdeka). Bahasa Indonesia baku, jelas, ramah anak, akurat secara konten.`,
 
-Setiap soal:
+  outputFormat: `Balas HANYA JSON valid (tanpa markdown), bentuk:
+{"questions":[ ... ]}
+
+Setiap elemen questions:
 - type: "single" | "multiple" | "category"
-- question: string (teks soal)
-- options: string[] (4 opsi untuk single/multiple; pernyataan untuk category)
-- correctAnswers: number[] (indeks 0-based). single: satu indeks. multiple: satu atau lebih. category: indeks opsi yang "Benar" ATAU gunakan categoryLabels.
-- categoryLabels: opsional, default ["Benar","Salah"] hanya untuk type category — jika category, correctAnswers adalah indeks label per baris opsi (0=Benar, 1=Salah) dengan panjang = options.length
-- explanation: string singkat
-- stimulus: opsional teks bacaan singkat
-- tpCodes: array string kode TP bila diketahui
-- kompleksitas: "L1-Pemahaman" | "L2-Aplikasi" | "L3-Penalaran"
+- question: string — pertanyaan yang merujuk ke stimulus bila ada (jangan mengulang seluruh stimulus)
+- options: string[] — 4 opsi untuk single/multiple; 3–5 pernyataan untuk category
+- correctAnswers: number[] indeks 0-based
+  · single: tepat 1 indeks
+  · multiple: ≥2 indeks benar
+  · category: array panjang = options.length, tiap nilai 0 atau 1 (0=Benar, 1=Salah) sesuai categoryLabels
+- categoryLabels: ["Benar","Salah"] hanya untuk type category
+- explanation: string singkat mengapa jawaban benar
+- stimulus: string | null — teks konteks/bacaan/tabel sederhana/deskripsi situasi
+- imagePrompt: string | null — prompt bahasa Inggris singkat untuk ilustrasi (hanya jika diminta gambar)
+- tpCodes: string[] bila diketahui
+- kompleksitas: "L1-Pemahaman" | "L2-Aplikasi" | "L3-Penalaran"`,
 
-Aturan:
-- single: tepat 1 jawaban benar
-- multiple: minimal 2 opsi benar
-- category: setiap pernyataan dilabeli Benar/Salah via correctAnswers sejajar options
-- Jangan gunakan opsi "semua benar" / "tidak ada yang benar"
-- Hindari soal ambigu`
+  rules: `Aturan wajib:
+1. Jangan opsi "semua benar" / "tidak ada yang benar" / "semua salah".
+2. Soal tidak ambigu; satu interpretasi jelas.
+3. Opsi pengecoh masuk akal (bukan konyol).
+4. Jika ada stimulus: pertanyaan HARUS bergantung pada stimulus (tidak bisa dijawab tanpa membacanya).
+5. Stimulus teks: 2–6 kalimat atau data singkat (tabel ASCII sederhana boleh).
+6. Stimulus gambar: isi imagePrompt (English, simple illustration, no text in image if possible) DAN stimulus berisi keterangan singkat berbahasa Indonesia untuk siswa (apa yang digambarkan).
+7. Sesuaikan kompleksitas:
+   - L1-Pemahaman: mengingat/mengidentifikasi fakta dari stimulus atau konsep dasar
+   - L2-Aplikasi: memakai konsep pada situasi baru
+   - L3-Penalaran: menganalisis, membandingkan, menyimpulkan dari data/stimulus
+8. Usia SD kelas 5: hindari istilah kuliah; angka dan konteks sehari-hari.`,
+} as const
+
+function buildSystemPrompt(): string {
+  const g = AI_QUESTION_GUIDANCE
+  return [g.role, g.outputFormat, g.rules].join('\n\n')
+}
 
 function buildUserPrompt(opts: GenerateAiOptions): string {
   const types = opts.types.length ? opts.types.join(', ') : 'single'
   const tps = opts.tpCodes?.length ? opts.tpCodes.join(', ') : '(sesuaikan dengan materi)'
+  const stim = opts.stimulusMode || 'none'
+  const komp = opts.kompleksitas || 'campuran'
+
+  const stimulusInstr =
+    stim === 'none'
+      ? 'Stimulus: TIDAK PERLU. Biarkan stimulus dan imagePrompt null. Soal mandiri tanpa teks/gambar konteks.'
+      : stim === 'text'
+        ? `Stimulus: WAJIB teks kontekstual untuk SETIAP soal.
+- Isi field "stimulus" dengan bacaan/data/situasi.
+- imagePrompt = null.
+- Pertanyaan dan opsi harus merujuk pada stimulus tersebut.`
+        : `Stimulus: WAJIB berbasis gambar untuk SETIAP soal.
+- Isi "imagePrompt" (English, clear scene for illustration, age-appropriate, no scary content).
+- Isi "stimulus" dengan keterangan singkat Indonesia yang mendampingi gambar (1–3 kalimat).
+- Pertanyaan harus mengandalkan informasi visual yang digambarkan (mis. menghitung objek, membaca situasi di gambar).`
+
+  const kompInstr =
+    komp === 'campuran'
+      ? 'Kompleksitas: campur L1, L2, dan L3 secara seimbang; tandai field kompleksitas per soal.'
+      : `Kompleksitas: SEMUA soal harus level ${komp}. Field kompleksitas = "${komp}".`
+
   return [
     `Mapel: ${opts.subjectName} (${opts.subjectKey})`,
-    `Materi: ${opts.topicName}`,
+    `Materi / topik: ${opts.topicName}`,
     `Kode TP relevan: ${tps}`,
     `Jumlah soal: ${opts.count}`,
-    `Tipe yang diizinkan: ${types}`,
-    opts.extraContext?.trim() ? `Konteks guru: ${opts.extraContext.trim()}` : '',
-    'Buat soal yang saling berbeda, tidak mengulang ide yang sama.',
+    `Tipe diizinkan: ${types}`,
+    stimulusInstr,
+    kompInstr,
+    opts.extraContext?.trim() ? `Instruksi tambahan guru: ${opts.extraContext.trim()}` : '',
+    'Buat soal saling berbeda; jangan mengulang ide yang sama.',
   ]
     .filter(Boolean)
     .join('\n')
 }
 
-function normalizeDraft(raw: any): AiDraftQuestion | null {
+function normalizeDraft(raw: any, fallbackKomp?: string): AiDraftQuestion | null {
   if (!raw || typeof raw !== 'object') return null
   const type = (['single', 'multiple', 'category'] as const).includes(raw.type)
     ? (raw.type as QuestionType)
@@ -86,20 +146,29 @@ function normalizeDraft(raw: any): AiDraftQuestion | null {
   if (Array.isArray(raw.correctAnswers)) {
     correctAnswers = raw.correctAnswers
       .map((n: unknown) => Number(n))
-      .filter((n: number) => Number.isInteger(n) && n >= 0 && n < options.length)
+      .filter((n: number) => Number.isInteger(n) && n >= 0)
   }
 
+  const stimulus = raw.stimulus ? String(raw.stimulus).trim() : undefined
+  const imagePrompt = raw.imagePrompt ? String(raw.imagePrompt).trim() : undefined
+  const kompleksitas = raw.kompleksitas
+    ? String(raw.kompleksitas)
+    : fallbackKomp && fallbackKomp !== 'campuran'
+      ? fallbackKomp
+      : undefined
+
   if (type === 'single') {
+    correctAnswers = correctAnswers.filter((n) => n < options.length)
     if (correctAnswers.length === 0) correctAnswers = [0]
     correctAnswers = [correctAnswers[0]]
   } else if (type === 'multiple') {
+    correctAnswers = [...new Set(correctAnswers.filter((n) => n < options.length))]
     if (correctAnswers.length === 0) correctAnswers = [0]
-    correctAnswers = [...new Set(correctAnswers)]
   } else {
-    // category: correctAnswers length should match options (0/1 labels)
-    const labels = Array.isArray(raw.categoryLabels) && raw.categoryLabels.length >= 2
-      ? raw.categoryLabels.map((x: unknown) => String(x))
-      : ['Benar', 'Salah']
+    const labels =
+      Array.isArray(raw.categoryLabels) && raw.categoryLabels.length >= 2
+        ? raw.categoryLabels.map((x: unknown) => String(x))
+        : ['Benar', 'Salah']
     if (correctAnswers.length !== options.length) {
       correctAnswers = options.map(() => 0)
     } else {
@@ -112,11 +181,12 @@ function normalizeDraft(raw: any): AiDraftQuestion | null {
       correctAnswers,
       categoryLabels: labels.slice(0, 2),
       explanation: raw.explanation ? String(raw.explanation) : undefined,
-      stimulus: raw.stimulus ? String(raw.stimulus) : undefined,
+      stimulus,
+      imagePrompt,
       tpCodes: Array.isArray(raw.tpCodes)
         ? raw.tpCodes.map((c: unknown) => String(c).trim()).filter(Boolean)
         : undefined,
-      kompleksitas: raw.kompleksitas ? String(raw.kompleksitas) : undefined,
+      kompleksitas,
     }
   }
 
@@ -126,16 +196,40 @@ function normalizeDraft(raw: any): AiDraftQuestion | null {
     options,
     correctAnswers,
     explanation: raw.explanation ? String(raw.explanation) : undefined,
-    stimulus: raw.stimulus ? String(raw.stimulus) : undefined,
+    stimulus,
+    imagePrompt,
     tpCodes: Array.isArray(raw.tpCodes)
       ? raw.tpCodes.map((c: unknown) => String(c).trim()).filter(Boolean)
       : undefined,
-    kompleksitas: raw.kompleksitas ? String(raw.kompleksitas) : undefined,
+    kompleksitas,
   }
 }
 
 export function isOpenAiConfigured(): boolean {
   return Boolean(import.meta.env.VITE_OPENAI_API_KEY?.trim())
+}
+
+async function generateDalleImage(prompt: string, apiKey: string): Promise<string | undefined> {
+  try {
+    const res = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'dall-e-2',
+        prompt: `${prompt}. Children's educational illustration, simple, colorful, no text, no watermark.`,
+        n: 1,
+        size: '512x512',
+      }),
+    })
+    if (!res.ok) return undefined
+    const data = await res.json()
+    return data?.data?.[0]?.url as string | undefined
+  } catch {
+    return undefined
+  }
 }
 
 export async function generateQuestionsWithOpenAI(
@@ -150,6 +244,7 @@ export async function generateQuestionsWithOpenAI(
 
   const model = opts.model || import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini'
   const count = Math.max(1, Math.min(opts.count || 5, 15))
+  const stimulusMode = opts.stimulusMode || 'none'
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -162,7 +257,7 @@ export async function generateQuestionsWithOpenAI(
       temperature: 0.7,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: SYSTEM },
+        { role: 'system', content: buildSystemPrompt() },
         { role: 'user', content: buildUserPrompt({ ...opts, count }) },
       ],
     }),
@@ -194,9 +289,23 @@ export async function generateQuestionsWithOpenAI(
       ? parsed
       : []
 
-  const drafts = arr.map(normalizeDraft).filter(Boolean) as AiDraftQuestion[]
+  let drafts = arr
+    .map((r: any) => normalizeDraft(r, opts.kompleksitas))
+    .filter(Boolean) as AiDraftQuestion[]
+
   if (drafts.length === 0) {
-    throw new Error('Tidak ada soal valid dari AI. Coba ubah prompt/jumlah.')
+    throw new Error('Tidak ada soal valid dari AI. Coba ubah opsi/jumlah.')
   }
+
+  // Mode gambar: coba DALL·E per soal yang punya imagePrompt
+  if (stimulusMode === 'image' && opts.generateImages !== false) {
+    for (let i = 0; i < drafts.length; i++) {
+      const p = drafts[i].imagePrompt || drafts[i].stimulus
+      if (!p) continue
+      const url = await generateDalleImage(p, key)
+      if (url) drafts[i] = { ...drafts[i], stimulusImage: url }
+    }
+  }
+
   return drafts
 }

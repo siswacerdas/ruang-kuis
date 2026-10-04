@@ -1109,6 +1109,7 @@ export default function TopicQuestions() {
         categoryLabels: d.type === 'category' ? d.categoryLabels || ['Benar', 'Salah'] : null,
         explanation: d.explanation || null,
         stimulus: d.stimulus || null,
+        stimulusImage: d.stimulusImage || null,
         tp: tpCodes[0] || null,
         tpCodes: tpCodes.length ? tpCodes : null,
         kompleksitas: d.kompleksitas || null,
