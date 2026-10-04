@@ -35,6 +35,10 @@ const emptyForm = () => ({
   correctAnswers: [] as number[],
   categoryLabels: [...DEFAULT_CATEGORY_LABELS] as string[],
   explanation: '',
+  stimulus: '',
+  stimulusImage: '',
+  skor: 1,
+  kompleksitas: '',
   tp: '',
   tpCodes: '',
   materialName: '',
@@ -343,6 +347,10 @@ export default function TopicQuestions() {
       correctAnswers: [...q.correctAnswers],
       categoryLabels: q.categoryLabels ? [...q.categoryLabels] : [...DEFAULT_CATEGORY_LABELS],
       explanation: q.explanation || '',
+      stimulus: q.stimulus || '',
+      stimulusImage: q.stimulusImage || '',
+      skor: q.skor != null ? Number(q.skor) : 1,
+      kompleksitas: q.kompleksitas || '',
       tp: q.tp || (q.tpCodes || []).join(', '),
       tpCodes: (q.tpCodes || (q.tp ? [q.tp] : [])).join(', '),
       materialName: q.materialName || topic?.name || '',
@@ -466,6 +474,10 @@ export default function TopicQuestions() {
         options: form.options.map((o) => o.trim()),
         correctAnswers: form.correctAnswers,
         explanation: form.explanation.trim() || null,
+        stimulus: form.stimulus.trim() || null,
+        stimulusImage: form.stimulusImage.trim() || null,
+        skor: Number(form.skor) > 0 ? Number(form.skor) : 1,
+        kompleksitas: form.kompleksitas.trim() || null,
         tp: parseTpCodes(form.tpCodes || form.tp)[0] || null,
         tpCodes: parseTpCodes(form.tpCodes || form.tp),
         materialName: form.materialName.trim() || topic?.name || null,
@@ -797,6 +809,141 @@ export default function TopicQuestions() {
                 <p className="text-xs text-gray-400 mt-1">Kosongkan untuk memakai TP materi ini: {(topic?.tpCodes || []).join(', ') || 'belum ada'}</p>
               </div>
             </div>
+
+            {/* Stimulus + media (selaras tka2026) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Stimulus / bacaan <span className="text-gray-400 font-normal">(opsional)</span>
+                </label>
+                <textarea
+                  value={form.stimulus}
+                  onChange={(e) => setForm({ ...form, stimulus: e.target.value })}
+                  rows={4}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-sm"
+                  placeholder="Teks bacaan, konteks, atau petunjuk sebelum pertanyaan..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Gambar stimulus <span className="text-gray-400 font-normal">(URL atau unggah)</span>
+                </label>
+                <input
+                  type="url"
+                  value={form.stimulusImage.startsWith('data:') ? '' : form.stimulusImage}
+                  onChange={(e) => setForm({ ...form, stimulusImage: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-sm mb-2"
+                  placeholder="https://... atau kosongkan lalu unggah"
+                />
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="block w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 file:font-medium"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    if (file.size > 1_500_000) {
+                      alert('Gambar terlalu besar (maks ~1,5 MB). Kompres dulu atau gunakan URL.')
+                      return
+                    }
+                    const reader = new FileReader()
+                    reader.onload = () => {
+                      const dataUrl = String(reader.result || '')
+                      // optional resize via canvas for large images
+                      const img = new Image()
+                      img.onload = () => {
+                        const maxW = 900
+                        let w = img.width
+                        let h = img.height
+                        if (w > maxW) {
+                          h = Math.round((h * maxW) / w)
+                          w = maxW
+                        }
+                        const canvas = document.createElement('canvas')
+                        canvas.width = w
+                        canvas.height = h
+                        const ctx = canvas.getContext('2d')
+                        if (ctx) {
+                          ctx.drawImage(img, 0, 0, w, h)
+                          setForm((prev) => ({
+                            ...prev,
+                            stimulusImage: canvas.toDataURL('image/jpeg', 0.82),
+                          }))
+                        } else {
+                          setForm((prev) => ({ ...prev, stimulusImage: dataUrl }))
+                        }
+                      }
+                      img.onerror = () => setForm((prev) => ({ ...prev, stimulusImage: dataUrl }))
+                      img.src = dataUrl
+                    }
+                    reader.readAsDataURL(file)
+                  }}
+                />
+                {form.stimulusImage && (
+                  <div className="mt-2 relative">
+                    <img
+                      src={form.stimulusImage}
+                      alt="Preview stimulus"
+                      className="max-h-36 rounded-lg border border-gray-100 object-contain bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, stimulusImage: '' })}
+                      className="absolute top-1 right-1 text-xs bg-white/90 border border-gray-200 rounded px-1.5 py-0.5 text-red-600"
+                    >
+                      Hapus
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Skor</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={form.skor}
+                  onChange={(e) => setForm({ ...form, skor: Number(e.target.value) || 1 })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none text-sm"
+                />
+              </div>
+              <div className="col-span-1 md:col-span-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Kompleksitas</label>
+                <select
+                  value={form.kompleksitas}
+                  onChange={(e) => setForm({ ...form, kompleksitas: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white outline-none text-sm"
+                >
+                  <option value="">— tidak diisi —</option>
+                  <option value="L1-Pemahaman">L1-Pemahaman</option>
+                  <option value="L2-Aplikasi">L2-Aplikasi</option>
+                  <option value="L3-Penalaran">L3-Penalaran</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Preview ringkas seperti kuis */}
+            {(form.stimulus || form.stimulusImage || form.question) && (
+              <div className="rounded-xl border border-dashed border-indigo-200 bg-indigo-50/40 p-4">
+                <p className="text-xs font-semibold text-indigo-700 mb-2">Preview tampilan kuis</p>
+                {form.stimulusImage && (
+                  <img
+                    src={form.stimulusImage}
+                    alt=""
+                    className="max-h-28 mb-2 rounded-lg object-contain bg-white border border-gray-100"
+                  />
+                )}
+                {form.stimulus && (
+                  <p className="text-xs text-gray-600 whitespace-pre-wrap mb-2 bg-white/80 rounded-lg px-3 py-2 border border-gray-100">
+                    {form.stimulus}
+                  </p>
+                )}
+                <p className="text-sm font-medium text-gray-900">{form.question || '…'}</p>
+              </div>
+            )}
 
             {form.type === 'category' && (
               <div>
