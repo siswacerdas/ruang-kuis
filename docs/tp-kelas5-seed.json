@@ -2,7 +2,7 @@
   "version": "2026-10-04",
   "className": "5A",
   "phase": "C",
-  "note": "Kode TP stabil untuk referensi soal dan nilai. Field statement boleh diubah guru di website. Al-Islam dan Bahasa Inggris belum ada.",
+  "note": "Kode TP stabil. Satu TP boleh terkait banyak materi. Soal tanpa kode TP memakai tpCodes materi bank soal yang tertaut.",
   "subjects": [
     {
       "key": "bahasa-indonesia",
@@ -864,9 +864,11 @@
       "summary": "Pengertian, cara memperoleh, memilah, dan menyampaikan informasi",
       "suggestedTpCodes": [
         "BIN-S.1",
-        "BIN-B.2"
+        "BIN-B.1",
+        "BIN-B.2",
+        "BIN-P.1"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Satu materi boleh mengisi lebih dari satu TP. Kuis pada materi ini ikut ke nilai TP terkait."
     },
     {
       "subjectKey": "bahasa-indonesia",
@@ -874,10 +876,11 @@
       "summary": "Konsep, ciri, fakta-opini, sebab-akibat, struktur, menulis",
       "suggestedTpCodes": [
         "BIN-S.2",
+        "BIN-B.1",
         "BIN-T.1",
         "BIN-T.4"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Satu materi boleh mengisi lebih dari satu TP. Kuis pada materi ini ikut ke nilai TP terkait."
     },
     {
       "subjectKey": "bahasa-indonesia",
@@ -885,9 +888,10 @@
       "summary": "Menggambarkan objek dan kejadian, kata sifat, struktur, menulis",
       "suggestedTpCodes": [
         "BIN-T.1",
+        "BIN-B.1",
         "BIN-B.2"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Satu materi boleh mengisi lebih dari satu TP. Kuis pada materi ini ikut ke nilai TP terkait."
     },
     {
       "subjectKey": "bahasa-indonesia",
@@ -896,9 +900,10 @@
       "suggestedTpCodes": [
         "BIN-T.2",
         "BIN-T.3",
-        "BIN-P.2"
+        "BIN-P.2",
+        "BIN-B.1"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Satu materi boleh mengisi lebih dari satu TP. Kuis pada materi ini ikut ke nilai TP terkait."
     },
     {
       "subjectKey": "bahasa-indonesia",
@@ -906,9 +911,10 @@
       "summary": "Urutan informasi, kalimat perintah, ciri, menulis prosedur",
       "suggestedTpCodes": [
         "BIN-S.2",
-        "BIN-T.1"
+        "BIN-T.1",
+        "BIN-B.1"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Satu materi boleh mengisi lebih dari satu TP. Kuis pada materi ini ikut ke nilai TP terkait."
     },
     {
       "subjectKey": "bahasa-indonesia",
@@ -918,7 +924,7 @@
         "BIN-T.4",
         "BIN-P.1"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Satu materi boleh mengisi lebih dari satu TP. Kuis pada materi ini ikut ke nilai TP terkait."
     },
     {
       "subjectKey": "ipas",
@@ -928,17 +934,17 @@
         "IPAS-1.1",
         "IPAS-1.2"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Satu materi boleh mengisi lebih dari satu TP. Kuis pada materi ini ikut ke nilai TP terkait."
     },
     {
       "subjectKey": "ipas",
       "title": "Sistem Pencernaan Manusia",
       "summary": "Organ, proses mekanik-kimiawi, gangguan, gizi",
       "suggestedTpCodes": [
-        "IPAS-1.2",
-        "IPAS-1.1"
+        "IPAS-1.1",
+        "IPAS-1.2"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Satu materi boleh mengisi lebih dari satu TP. Kuis pada materi ini ikut ke nilai TP terkait."
     },
     {
       "subjectKey": "ipas",
@@ -948,16 +954,17 @@
         "IPAS-2.1",
         "IPAS-2.2"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Satu materi boleh mengisi lebih dari satu TP. Kuis pada materi ini ikut ke nilai TP terkait."
     },
     {
       "subjectKey": "ipas",
       "title": "Gelombang Bunyi dan Cahaya",
       "summary": "Sifat, organ pendengar dan penglihat, pemanfaatan",
       "suggestedTpCodes": [
-        "IPAS-3.1"
+        "IPAS-3.1",
+        "IPAS-1.2"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Sifat gelombang ke IPAS-3.1; organ pendengar dan penglihat ikut ke IPAS-1.2."
     },
     {
       "subjectKey": "ipas",
@@ -966,7 +973,7 @@
       "suggestedTpCodes": [
         "IPAS-4.1"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Satu materi boleh mengisi lebih dari satu TP. Kuis pada materi ini ikut ke nilai TP terkait."
     },
     {
       "subjectKey": "ipas",
@@ -975,7 +982,7 @@
       "suggestedTpCodes": [
         "IPAS-4.1"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Satu materi boleh mengisi lebih dari satu TP. Kuis pada materi ini ikut ke nilai TP terkait."
     },
     {
       "subjectKey": "ipas",
@@ -984,7 +991,7 @@
       "suggestedTpCodes": [
         "IPAS-5.1"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Satu materi boleh mengisi lebih dari satu TP. Kuis pada materi ini ikut ke nilai TP terkait."
     },
     {
       "subjectKey": "ipas",
@@ -993,7 +1000,7 @@
       "suggestedTpCodes": [
         "IPAS-6.1"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Satu materi boleh mengisi lebih dari satu TP. Kuis pada materi ini ikut ke nilai TP terkait."
     },
     {
       "subjectKey": "ipas",
@@ -1002,7 +1009,7 @@
       "suggestedTpCodes": [
         "IPAS-3.1"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Tidak ada TP khusus magnet/listrik. Dikaitkan ke IPAS-3.1 karena sama-sama mengamati fenomena fisik sehari-hari."
     },
     {
       "subjectKey": "ipas",
@@ -1012,7 +1019,7 @@
         "IPAS-4.1",
         "IPAS-6.1"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Bersinggungan dengan kondisi wilayah (IPAS-4.1) dan kegiatan ekonomi/kebutuhan manusia (IPAS-6.1)."
     },
     {
       "subjectKey": "pendidikan-pancasila",
@@ -1021,9 +1028,10 @@
       "suggestedTpCodes": [
         "PP-2.2",
         "PP-2.3",
-        "PP-1.3"
+        "PP-1.3",
+        "PP-1.2"
       ],
-      "linkNote": "Usulan kaitan; guru dapat mengubah di website."
+      "linkNote": "Inti ke hak-kewajiban dan musyawarah; sikap menerapkan nilai masuk PP-1.2 dan PP-1.3."
     }
   ]
 }

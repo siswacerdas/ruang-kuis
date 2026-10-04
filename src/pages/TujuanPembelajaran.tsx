@@ -144,7 +144,23 @@ export default function TujuanPembelajaran() {
         })
         await batch.commit()
       }
-      setNotice(`Impor langsung tersimpan: ${tpCount} TP dan ${mats.length} materi.`)
+      const byTp = new Map<string, string[]>()
+      mats.forEach((m) => {
+        ;(m.suggestedTpCodes || []).forEach((code) => {
+          const list = byTp.get(code) || []
+          list.push(m.title)
+          byTp.set(code, list)
+        })
+      })
+      const tpCodes = [...byTp.keys()]
+      for (let i = 0; i < tpCodes.length; i += 400) {
+        const batch = writeBatch(db)
+        tpCodes.slice(i, i + 400).forEach((code) => {
+          batch.set(doc(db, 'learningObjectives', code), { relatedMaterials: byTp.get(code) || [], updatedAt: serverTimestamp() }, { merge: true })
+        })
+        await batch.commit()
+      }
+      setNotice(`Impor langsung tersimpan: ${tpCount} TP dan ${mats.length} materi. Satu TP boleh terkait lebih dari satu materi.`)
       await load()
     } catch (e: any) {
       setError(e?.message || 'Gagal membaca JSON.')
@@ -307,7 +323,12 @@ export default function TujuanPembelajaran() {
                   {group.rows.map((row) => (
                     <div key={row.id} className="px-4 py-3 flex gap-3 items-start">
                       <span className="shrink-0 mt-0.5 text-xs font-semibold px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700">{row.code}</span>
-                      <p className={`flex-1 text-sm leading-relaxed ${row.active ? 'text-gray-800' : 'text-gray-400 line-through'}`}>{row.statement}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm leading-relaxed ${row.active ? 'text-gray-800' : 'text-gray-400 line-through'}`}>{row.statement}</p>
+                        {(row.relatedMaterials || []).length > 0 && (
+                          <p className="text-xs text-gray-500 mt-1">Materi: {row.relatedMaterials!.join(' · ')}</p>
+                        )}
+                      </div>
                       <button type="button" onClick={() => setEditor(row)} className="shrink-0 text-sm font-medium text-indigo-600 hover:text-indigo-800">
                         Edit
                       </button>

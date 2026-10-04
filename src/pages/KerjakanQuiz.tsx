@@ -45,6 +45,7 @@ export default function KerjakanQuiz() {
   const [session, setSession] = useState<Session | null>(null)
   const [paket, setPaket] = useState<LatihanPaket | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
+  const topicTp = useRef<Record<string, string[]>>({})
   const [loading, setLoading] = useState(true)
   const [current, setCurrent] = useState(0)
   // answers[questionId] = selected indices
@@ -106,8 +107,17 @@ export default function KerjakanQuiz() {
       const byId = new Map(all.map((q) => [q.id!, q]))
       let ordered = ids.map((qid) => byId.get(qid)).filter(Boolean) as Question[]
       if (p.shuffleQuestions) ordered = shuffle(ordered)
-
-      // shuffle options display order is handled in UI via mapping if needed
+      const topicIds = [...new Set(ordered.map((q) => q.topicId).filter(Boolean))]
+      const tpByTopic: Record<string, string[]> = {}
+      for (let i = 0; i < topicIds.length; i += 30) {
+        const chunk = topicIds.slice(i, i + 30)
+        const tSnap = await getDocs(query(collection(db, 'topics'), where(documentId(), 'in', chunk)))
+        tSnap.docs.forEach((d) => {
+          const codes = (d.data().tpCodes || []) as string[]
+          tpByTopic[d.id] = codes.map((c) => String(c).trim()).filter(Boolean)
+        })
+      }
+      topicTp.current = tpByTopic
       setQuestions(ordered)
 
       if (p.timeLimitMinutes && p.timeLimitMinutes > 0) {
@@ -200,10 +210,15 @@ export default function KerjakanQuiz() {
 
       const tpSummary: Record<string, { correct: number; total: number }> = {}
       questions.forEach((q, i) => {
-        const tp = (q.tp || '').trim() || 'Lainnya'
-        if (!tpSummary[tp]) tpSummary[tp] = { correct: 0, total: 0 }
-        tpSummary[tp].total += 1
-        if (answerList[i].isCorrect) tpSummary[tp].correct += 1
+        const own = (q.tp || '').trim()
+        const fromTopic = topicTp.current[q.topicId] || []
+        const codes = own ? [own] : fromTopic
+        const targets = codes.length ? codes : ['Lainnya']
+        targets.forEach((tp) => {
+          if (!tpSummary[tp]) tpSummary[tp] = { correct: 0, total: 0 }
+          tpSummary[tp].total += 1
+          if (answerList[i].isCorrect) tpSummary[tp].correct += 1
+        })
       })
 
       const durationMs = Date.now() - startedAt.current

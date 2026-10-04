@@ -21,6 +21,7 @@ export interface LearningObjective {
   className: string
   phase: string
   source?: string
+  relatedMaterials?: string[]
   updatedAt?: any
 }
 

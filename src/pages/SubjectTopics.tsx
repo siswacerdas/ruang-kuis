@@ -62,10 +62,11 @@ export default function SubjectTopics() {
       setMaterials(mats)
 
       const linked = await autoLink(list, mats)
-      setTopics(linked)
+      const withMissing = await ensureTopics(subjectKey, linked, mats)
+      setTopics(withMissing)
 
       const counts: Record<string, number> = {}
-      if (linked.length > 0) {
+      if (withMissing.length > 0) {
         const qSnap = await getDocs(query(collection(db, 'questions'), where('subjectKey', '==', subjectKey)))
         qSnap.docs.forEach((d) => {
           const tid = d.data().topicId as string
@@ -291,6 +292,27 @@ export default function SubjectTopics() {
       </div>
     </Layout>
   )
+}
+
+async function ensureTopics(subjectKey: string, topics: Topic[], materials: BookMaterial[]) {
+  const taken = new Set(topics.map((t) => t.bookMaterialId).filter(Boolean))
+  const missing = materials.filter((m) => m.id && !taken.has(m.id) && !topics.some((t) => sameName(t.name, m.title)))
+  if (missing.length === 0) return topics
+  const batch = writeBatch(db)
+  const created: Topic[] = []
+  missing.forEach((m) => {
+    const ref = doc(collection(db, 'topics'))
+    batch.set(ref, {
+      subjectKey,
+      name: m.title,
+      bookMaterialId: m.id,
+      tpCodes: m.suggestedTpCodes || [],
+      createdAt: serverTimestamp(),
+    })
+    created.push({ id: ref.id, subjectKey: subjectKey as SubjectKey, name: m.title, bookMaterialId: m.id, tpCodes: m.suggestedTpCodes || [] })
+  })
+  await batch.commit()
+  return [...created, ...topics]
 }
 
 async function autoLink(topics: Topic[], materials: BookMaterial[]) {
