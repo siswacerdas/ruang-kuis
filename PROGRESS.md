@@ -5,73 +5,51 @@ Update file ini setiap kali ada progress berarti.
 
 ---
 
-## 2026-10-03 (lanjutan – UI/UX refresh)
+## 2026-10-04 — Bank Soal hierarkis
 
 ### Yang sudah dilakukan
-- [x] Redesign UI/UX admin panel dengan referensi modern dashboard
-- [x] Membuat komponen Layout bersama (sidebar + top bar + mobile nav)
-- [x] Memperbarui halaman Login (split panel, show/hide password, visual lebih polished)
-- [x] Memperbarui halaman Dashboard (card statistik, welcome banner, tips)
-- [x] Memperbarui halaman Kelola Soal (form, daftar soal, tombol aksi, empty state)
-- [x] Konsistensi warna, radius, shadow, dan tipografi di seluruh admin UI
+- [x] Mengubah "Kelola Soal" menjadi **Bank Soal**
+- [x] Struktur hierarki: **Mata Pelajaran → Materi → Soal**
+- [x] 8 mapel tetap (Bahasa Indonesia, Pendidikan Pancasila, IPAS, Seni Musik, Seni Rupa, Matematika, Al-Islam, Bahasa Inggris)
+- [x] Guru dapat menambah/hapus **materi** sendiri tanpa ubah kode
+- [x] Soal menyimpan `subjectKey` (denormalisasi) agar pool per mapel mudah di-query untuk ATS/AS
+- [x] 3 tipe soal:
+  - Pilihan Ganda (single)
+  - Pilihan Ganda Kompleks (multiple correct)
+  - Pilihan Ganda Kategori (benar-salah / sesuai-tidak sesuai, label bisa diubah)
+- [x] Editor soal terinspirasi UI referensi (outline kiri + preview/editor)
+- [x] Field pembahasan (explanation) opsional
+- [x] Route: `/bank-soal`, `/bank-soal/:subjectKey`, `/bank-soal/:subjectKey/:topicId`
+- [x] Redirect `/questions` → `/bank-soal`
 
-### Keputusan UI
-- Sidebar kiri dengan navigasi Dashboard & Kelola Soal
-- Background soft `#F5F6FA`, card putih rounded-2xl, aksen indigo/violet
-- Icon SVG inline (tanpa dependency tambahan)
-- Responsive: sidebar desktop, tab navigasi mobile
+### Model data Firestore
+- Collection `topics`: `{ subjectKey, name, createdAt }`
+- Collection `questions`: `{ topicId, subjectKey, type, question, options, correctAnswers, categoryLabels?, explanation?, createdAt }`
+
+### Catatan teknis
+- Query `where + orderBy` mungkin butuh composite index di Firebase Console (ada fallback tanpa orderBy).
+- Soal lama (flat, tanpa topicId/subjectKey) tidak otomatis migrasi — buat materi baru lalu input ulang atau import nanti.
 
 ### Selanjutnya (Prioritas)
-- [ ] Halaman untuk siswa mengerjakan latihan soal
+- [ ] Import soal ke materi tertentu (JSON/CSV/Excel disesuaikan schema baru)
+- [ ] Halaman siswa mengerjakan latihan (dari pool mapel / materi)
+- [ ] Generate kuis ATS/AS dari pool mapel
 - [ ] Menampilkan skor / hasil latihan
 - [ ] Sistem role (Admin vs Siswa) — opsional
-- [ ] Kunci Firestore Security Rules (saat ini masih test mode)
+- [ ] Kunci Firestore Security Rules
 - [ ] Deploy ke Firebase Hosting
 
 ---
 
-## 2026-10-03
+## 2026-10-03 (UI/UX refresh)
 
-### Yang sudah dilakukan
-- [x] Membuat repository `ruang-kuis` di GitHub
-- [x] Membuat `README.md`
-- [x] Membuat `PROGRESS.md` (file ini)
-- [x] Membuat `docs/ANTI_REGRESSION.md`
-- [x] Memutuskan tech stack: **Vite + React + TypeScript + Tailwind CSS**
-- [x] Setup project Vite + React + TypeScript
-- [x] Install dan konfigurasi Tailwind CSS v4
-- [x] Install React Router
-- [x] Membuat halaman **Login Admin**
-- [x] Setup Firebase project + Authentication (Email/Password)
-- [x] Hubungkan Firebase Auth ke aplikasi
-- [x] Login Admin berhasil menggunakan Firebase
-- [x] Membuat halaman **Dashboard Admin**
-- [x] Proteksi route (hanya user login yang bisa akses)
-- [x] Fitur **Logout** + redirect otomatis
-- [x] Setup **Firestore Database**
-- [x] Fitur **Kelola Soal** (CRUD lengkap):
-  - Tambah soal manual
-  - Edit soal
-  - Hapus soal
-  - Lihat daftar soal
-- [x] Fitur **Import Soal** dari file (JSON, CSV, Excel)
-- [x] Berhasil import 5 contoh soal biotik-abiotik (IPAS Kelas 5 SD)
-- [x] Membuat Dokumen Serah Terima untuk melanjutkan di percakapan baru
+- [x] Layout sidebar, Login/Dashboard/Questions polished
 
-### Keputusan Teknis
-- Frontend: Vite + React + TypeScript + Tailwind CSS v4
-- Backend: Firebase (Authentication + Firestore)
-- Hosting nanti: Firebase Hosting
-- Preferensi development: kode digenerate langsung di GitHub, user tinggal `git pull`
+## 2026-10-03 (awal)
 
-### Selanjutnya (Prioritas)
-- [ ] Halaman untuk siswa mengerjakan latihan soal
-- [ ] Menampilkan skor / hasil latihan
-- [ ] Sistem role (Admin vs Siswa) — opsional
-- [ ] Kunci Firestore Security Rules (saat ini masih test mode)
-- [ ] Deploy ke Firebase Hosting
+- [x] Setup Vite + React + TS + Tailwind + Firebase
+- [x] Login admin, CRUD soal flat, import file
 
 ---
 
-*Catatan: Selalu update file ini setelah menyelesaikan task penting.*
-*Update terakhir: 2026-10-03 (UI/UX refresh)*
+*Update terakhir: 2026-10-04*

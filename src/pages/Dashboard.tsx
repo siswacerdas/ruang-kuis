@@ -20,7 +20,7 @@ export default function Dashboard() {
       {/* Stats / quick cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-8">
         <Link
-          to="/questions"
+          to="/bank-soal"
           className="group bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all"
         >
           <div className="flex items-start justify-between">
@@ -33,9 +33,9 @@ export default function Dashboard() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </div>
-          <h3 className="mt-4 text-base font-semibold text-gray-900">Kelola Soal</h3>
+          <h3 className="mt-4 text-base font-semibold text-gray-900">Bank Soal</h3>
           <p className="mt-1 text-sm text-gray-500">
-            Tambah, edit, hapus, dan import soal dari JSON / CSV / Excel
+            Kelola materi & soal per mata pelajaran (pool untuk ATS/AS)
           </p>
         </Link>
 
@@ -85,7 +85,7 @@ export default function Dashboard() {
         <ul className="space-y-2 text-sm text-gray-600">
           <li className="flex gap-2">
             <span className="text-indigo-500 font-medium">1.</span>
-            Gunakan menu <strong>Kelola Soal</strong> untuk menambah soal manual atau import dari file.
+            Gunakan menu <strong>Bank Soal</strong> untuk menambah soal manual atau import dari file.
           </li>
           <li className="flex gap-2">
             <span className="text-indigo-500 font-medium">2.</span>
