@@ -28,6 +28,18 @@ interface Session {
   token: string
 }
 
+function optionOrder(seed: string, count: number) {
+  const order = Array.from({ length: count }, (_, i) => i)
+  let hash = 2166136261
+  for (const ch of seed) hash = Math.imul(hash ^ ch.charCodeAt(0), 16777619)
+  for (let i = order.length - 1; i > 0; i--) {
+    hash = Math.imul(hash ^ (hash >>> 16), 2246822519)
+    const j = (hash >>> 0) % (i + 1)
+    ;[order[i], order[j]] = [order[j], order[i]]
+  }
+  return order
+}
+
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr]
   // simple shuffle
@@ -394,8 +406,13 @@ export default function KerjakanQuiz() {
               {q.type === 'multiple' && (
                 <p className="text-xs text-gray-400 mb-2">Pilih semua jawaban yang benar</p>
               )}
-              {q.options.map((opt, oi) => {
+              {(paket?.shuffleOptions === false
+                ? q.options.map((_, i) => i)
+                : optionOrder(q.id || String(current), q.options.length)
+              ).map((oi, letterIndex) => {
+                const opt = q.options[oi]
                 const isOn = selected.includes(oi)
+                const letter = letterIndex
                 return (
                   <button
                     key={oi}
@@ -419,7 +436,7 @@ export default function KerjakanQuiz() {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
                       ) : (
-                        String.fromCharCode(65 + oi)
+                        String.fromCharCode(65 + letter)
                       )}
                     </span>
                     <span className="text-sm text-gray-800 pt-0.5">{opt}</span>

@@ -240,6 +240,7 @@ export default function TopicQuestions() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
+  const [checkedIds, setCheckedIds] = useState<string[]>([])
 
   useEffect(() => {
     if (!subject || !topicId) {
@@ -447,16 +448,21 @@ export default function TopicQuestions() {
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Yakin ingin menghapus soal ini?')) return
-    try {
-      await deleteDoc(doc(db, 'questions', id))
-      await loadData()
-      if (showEditor && editingId === id) closeEditor()
-    } catch (err) {
-      console.error(err)
-      alert('Gagal menghapus soal')
+  const deleteIds = async (ids: string[]) => {
+    const unique = [...new Set(ids.filter(Boolean))]
+    if (unique.length === 0) return
+    if (!confirm(`Hapus ${unique.length} soal? Tindakan ini tidak dapat dibatalkan.`)) return
+    for (let i = 0; i < unique.length; i += 400) {
+      const batch = writeBatch(db)
+      unique.slice(i, i + 400).forEach((id) => batch.delete(doc(db, 'questions', id)))
+      await batch.commit()
     }
+    setCheckedIds([])
+    await loadData()
+  }
+
+  const handleDelete = async (id: string) => {
+    await deleteIds([id])
   }
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -561,6 +567,39 @@ export default function TopicQuestions() {
     }
   }
 
+  const toggleChecked = (id: string) => {
+    setCheckedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  const spreadKeys = async () => {
+    if (!topicId) return
+    if (!confirm('Sebar posisi kunci jawaban pada soal pilihan di materi ini? Isi jawaban tidak berubah, hanya urutan opsi.')) return
+    setImporting(true)
+    try {
+      let n = 0
+      for (let i = 0; i < questions.length; i += 400) {
+        const batch = writeBatch(db)
+        questions.slice(i, i + 400).forEach((q, offset) => {
+          if (!q.id || q.type === 'category' || !q.options?.length) return
+          const shift = (i + offset) % q.options.length
+          if (shift === 0) return
+          const options = q.options.map((_, idx) => q.options[(idx + shift) % q.options.length])
+          const correctAnswers = q.correctAnswers.map((ans) => (ans - shift + q.options.length) % q.options.length)
+          batch.update(doc(db, 'questions', q.id), { options, correctAnswers })
+          n++
+        })
+        await batch.commit()
+      }
+      alert(n ? `Kunci ${n} soal disebar ke opsi yang berbeda.` : 'Tidak ada soal yang perlu digeser.')
+      await loadData()
+    } catch (err) {
+      console.error(err)
+      alert('Gagal menyebar kunci.')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   if (!subject) return null
 
   const selected = questions[selectedIndex]
@@ -584,6 +623,30 @@ export default function TopicQuestions() {
         className="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 text-gray-700 px-3.5 py-2 rounded-xl text-sm font-medium"
       >
         Bersihkan duplikat
+      </button>
+      <button
+        type="button"
+        onClick={spreadKeys}
+        disabled={importing || questions.length === 0}
+        className="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-60 text-gray-700 px-3.5 py-2 rounded-xl text-sm font-medium"
+      >
+        Sebar kunci
+      </button>
+      <button
+        type="button"
+        onClick={() => deleteIds(checkedIds)}
+        disabled={importing || checkedIds.length === 0}
+        className="inline-flex items-center gap-1.5 bg-white border border-red-100 hover:bg-red-50 disabled:opacity-60 text-red-600 px-3.5 py-2 rounded-xl text-sm font-medium"
+      >
+        Hapus terpilih ({checkedIds.length})
+      </button>
+      <button
+        type="button"
+        onClick={() => deleteIds(questions.map((q) => q.id || ''))}
+        disabled={importing || questions.length === 0}
+        className="inline-flex items-center gap-1.5 bg-white border border-red-100 hover:bg-red-50 disabled:opacity-60 text-red-600 px-3.5 py-2 rounded-xl text-sm font-medium"
+      >
+        Hapus semua
       </button>
       <input
         ref={fileInputRef}
@@ -830,7 +893,14 @@ export default function TopicQuestions() {
         <div className="lg:col-span-4 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <span className="text-sm font-semibold text-gray-900">Daftar soal</span>
-            <span className="text-xs text-gray-500">{questions.length}</span>
+            <label className="text-xs text-gray-500 flex items-center gap-1">
+              <input
+                type="checkbox"
+                checked={questions.length > 0 && checkedIds.length === questions.length}
+                onChange={(e) => setCheckedIds(e.target.checked ? questions.map((q) => q.id || '') : [])}
+              />
+              Pilih semua
+            </label>
           </div>
           {loading ? (
             <div className="p-8 text-center text-sm text-gray-500">Memuat...</div>
@@ -842,23 +912,27 @@ export default function TopicQuestions() {
           ) : (
             <div className="divide-y divide-gray-50 max-h-[28rem] overflow-y-auto">
               {questions.map((q, idx) => (
-                <button
+                <div
                   key={q.id}
-                  type="button"
-                  onClick={() => setSelectedIndex(idx)}
                   className={`w-full text-left px-4 py-3 flex gap-3 hover:bg-gray-50 transition ${
                     selectedIndex === idx ? 'bg-indigo-50/70 border-l-2 border-indigo-500' : 'border-l-2 border-transparent'
                   }`}
                 >
-                  <span className="text-xs font-semibold text-gray-400 w-5 shrink-0 pt-0.5">{idx + 1}</span>
-                  <div className="min-w-0 flex-1">
+                  <input
+                    type="checkbox"
+                    checked={checkedIds.includes(q.id || '')}
+                    onChange={() => q.id && toggleChecked(q.id)}
+                    className="mt-1"
+                  />
+                  <button type="button" onClick={() => setSelectedIndex(idx)} className="min-w-0 flex-1 text-left">
                     <p className="text-sm text-gray-800 line-clamp-2 leading-snug">{q.question}</p>
                     <p className="text-[11px] text-gray-400 mt-1">
                       {QUESTION_TYPE_LABELS[q.type] || q.type}
+                      {!q.stimulus ? ' · tanpa stimulus' : ''}
                       {(q.tpCodes || (q.tp ? [q.tp] : [])).join(', ') ? ` · TP ${(q.tpCodes || [q.tp]).filter(Boolean).join(', ')}` : ''}
                     </p>
-                  </div>
-                </button>
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -892,6 +966,11 @@ export default function TopicQuestions() {
                 </div>
               </div>
               <div className="p-6">
+                {selected.stimulus ? (
+                  <div className="mb-4 rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 text-sm text-gray-700 whitespace-pre-wrap">{selected.stimulus}</div>
+                ) : (
+                  <p className="mb-4 text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">Soal ini belum punya stimulus. Tambahkan jika jawaban bergantung pada teks.</p>
+                )}
                 <p className="text-base font-medium text-gray-900 leading-relaxed mb-5">{selected.question}</p>
                 {selected.type === 'category' ? (
                   <div className="space-y-3">
