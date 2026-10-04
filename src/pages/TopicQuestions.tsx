@@ -16,6 +16,8 @@ import { db } from '../lib/firebase'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import Layout from '../components/Layout'
+import AiQuestionGenerator from '../components/AiQuestionGenerator'
+import type { AiDraftQuestion } from '../lib/openaiQuestions'
 import {
   getSubject,
   QUESTION_TYPE_LABELS,
@@ -656,6 +658,7 @@ export default function TopicQuestions() {
   const [questions, setQuestions] = useState<Question[]>([])
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
+  const [showAiGen, setShowAiGen] = useState(false)
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showEditor, setShowEditor] = useState(false)
@@ -1090,6 +1093,32 @@ export default function TopicQuestions() {
 
   const selected = questions[selectedIndex]
 
+
+  const saveAiDrafts = async (drafts: AiDraftQuestion[]) => {
+    if (!topicId || !subjectKey || !topic) return
+    const codes = topic.tpCodes || []
+    for (const d of drafts) {
+      const tpCodes = d.tpCodes?.length ? d.tpCodes : codes
+      await addDoc(collection(db, 'questions'), {
+        topicId,
+        subjectKey,
+        type: d.type,
+        question: d.question.trim(),
+        options: d.options,
+        correctAnswers: d.correctAnswers,
+        categoryLabels: d.type === 'category' ? d.categoryLabels || ['Benar', 'Salah'] : null,
+        explanation: d.explanation || null,
+        stimulus: d.stimulus || null,
+        tp: tpCodes[0] || null,
+        tpCodes: tpCodes.length ? tpCodes : null,
+        kompleksitas: d.kompleksitas || null,
+        materialName: topic.name || null,
+        createdAt: serverTimestamp(),
+      })
+    }
+    await loadData()
+  }
+
   const actions = (
     <div className="flex items-center gap-2">
       <button
@@ -1141,6 +1170,16 @@ export default function TopicQuestions() {
         onChange={handleImportFile}
         className="hidden"
       />
+      <button
+        type="button"
+        onClick={() => setShowAiGen(true)}
+        className="inline-flex items-center gap-1.5 bg-white border border-violet-200 hover:bg-violet-50 text-violet-700 px-3.5 py-2 rounded-xl text-sm font-medium"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+        AI Generate
+      </button>
       <button
         onClick={openNew}
         className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-sm font-medium transition shadow-sm shadow-indigo-200"
@@ -2116,6 +2155,16 @@ export default function TopicQuestions() {
         </div>
       )}
 
-    </Layout>
+    
+      {topic && (
+        <AiQuestionGenerator
+          open={showAiGen}
+          onClose={() => setShowAiGen(false)}
+          subject={subject}
+          topic={topic}
+          onAccept={saveAiDrafts}
+        />
+      )}
+</Layout>
   )
 }
