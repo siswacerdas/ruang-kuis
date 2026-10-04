@@ -18,6 +18,7 @@ import SiswaLogin from './pages/SiswaLogin'
 import KerjakanEntry from './pages/KerjakanEntry'
 import KerjakanQuiz from './pages/KerjakanQuiz'
 import KerjakanResult from './pages/KerjakanResult'
+import KerjakanRiwayat from './pages/KerjakanRiwayat'
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -61,6 +62,7 @@ function App() {
         <Route path="/kerjakan" element={<SiswaLogin />} />
         <Route path="/kerjakan/token" element={<KerjakanEntry />} />
         <Route path="/kerjakan/hasil" element={<KerjakanResult />} />
+        <Route path="/kerjakan/riwayat" element={<KerjakanRiwayat />} />
         <Route path="/kerjakan/:latihanId" element={<KerjakanQuiz />} />
 
         {/* Admin auth */}
