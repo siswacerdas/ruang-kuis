@@ -1592,6 +1592,45 @@ export default function TopicQuestions() {
 
       )}
 
+
+      {/* Preview stimulus saja (dari editor) */}
+      {showStimulusPreview && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="dialog">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">Preview stimulus</p>
+                <p className="text-xs text-gray-500">Hanya bacaan/stimulus — cek format & jarak baris</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowStimulusPreview(false)}
+                className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-sm font-medium"
+              >
+                Tutup
+              </button>
+            </div>
+            <div className="overflow-y-auto p-5">
+              <div className="rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
+                {form.stimulusImage && (
+                  <div className="px-3 pt-3 flex justify-center">
+                    <img src={form.stimulusImage} alt="" className="max-h-48 max-w-full object-contain" />
+                  </div>
+                )}
+                {form.stimulus ? (
+                  <StimulusHtmlView
+                    html={form.stimulus}
+                    className="px-4 py-3 text-sm text-gray-800 leading-relaxed"
+                  />
+                ) : (
+                  <p className="px-4 py-6 text-sm text-gray-400 text-center">Stimulus masih kosong</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal preview tampilan kuis — dari daftar soal (selected) */}
       {showPreview && selected && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="dialog">
