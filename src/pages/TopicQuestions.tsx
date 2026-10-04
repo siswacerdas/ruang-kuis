@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import {
   collection,
   addDoc,
@@ -670,6 +670,7 @@ export default function TopicQuestions() {
   const [previewChecked, setPreviewChecked] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [checkedIds, setCheckedIds] = useState<string[]>([])
+  const [listSearch, setListSearch] = useState('')
   const [lightbox, setLightbox] = useState<{ img?: string; text?: string } | null>(null)
   const [lbScale, setLbScale] = useState(1)
 
@@ -691,7 +692,8 @@ export default function TopicQuestions() {
     return () => window.removeEventListener('keydown', onKey)
   }, [lightbox])
 
-  const loadData = async () => {
+  /** preferId: setelah simpan/edit, pilih soal itu lagi (bukan loncat ke atas). */
+  const loadData = async (preferId?: string | null) => {
     if (!topicId || !subjectKey) return
     setLoading(true)
     try {
@@ -718,7 +720,14 @@ export default function TopicQuestions() {
         list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Question))
       }
       setQuestions(list)
-      if (list.length > 0) setSelectedIndex(0)
+      if (list.length === 0) {
+        setSelectedIndex(0)
+      } else if (preferId) {
+        const i = list.findIndex((q) => q.id === preferId)
+        setSelectedIndex(i >= 0 ? i : 0)
+      } else {
+        setSelectedIndex(0)
+      }
     } catch (err) {
       console.error(err)
     } finally {
@@ -881,14 +890,16 @@ export default function TopicQuestions() {
         payload.categoryLabels = form.categoryLabels.map((l) => l.trim())
       }
 
+      let savedId = editingId
       if (editingId) {
         await updateDoc(doc(db, 'questions', editingId), payload)
       } else {
         payload.createdAt = serverTimestamp()
-        await addDoc(collection(db, 'questions'), payload)
+        const ref = await addDoc(collection(db, 'questions'), payload)
+        savedId = ref.id
       }
       closeEditor()
-      await loadData()
+      await loadData(savedId)
     } catch (err) {
       console.error(err)
       setError('Gagal menyimpan soal. Coba lagi.')
@@ -1055,6 +1066,25 @@ export default function TopicQuestions() {
       setImporting(false)
     }
   }
+
+  const filteredQuestions = useMemo(() => {
+    const q = listSearch.trim().toLowerCase()
+    if (!q) return questions
+    return questions.filter((item) => {
+      const hay = [
+        item.question,
+        item.stimulus,
+        item.explanation,
+        ...(item.options || []),
+        item.tp,
+        ...(item.tpCodes || []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      return hay.includes(q)
+    })
+  }, [questions, listSearch])
 
   if (!subject) return null
 
@@ -1465,16 +1495,62 @@ export default function TopicQuestions() {
       {!showEditor && (
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         <div className="lg:col-span-4 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-900">Daftar soal</span>
-            <label className="text-xs text-gray-500 flex items-center gap-1">
+          <div className="px-4 py-3 border-b border-gray-100 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold text-gray-900">Daftar soal</span>
+              <label className="text-xs text-gray-500 flex items-center gap-1 shrink-0">
+                <input
+                  type="checkbox"
+                  checked={
+                    filteredQuestions.length > 0 &&
+                    filteredQuestions.every((q) => checkedIds.includes(q.id || ''))
+                  }
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setCheckedIds((prev) => [
+                        ...new Set([...prev, ...filteredQuestions.map((q) => q.id || '').filter(Boolean)]),
+                      ])
+                    } else {
+                      const drop = new Set(filteredQuestions.map((q) => q.id || ''))
+                      setCheckedIds((prev) => prev.filter((id) => !drop.has(id)))
+                    }
+                  }}
+                />
+                Pilih semua
+              </label>
+            </div>
+            <div className="relative">
               <input
-                type="checkbox"
-                checked={questions.length > 0 && checkedIds.length === questions.length}
-                onChange={(e) => setCheckedIds(e.target.checked ? questions.map((q) => q.id || '') : [])}
+                type="search"
+                value={listSearch}
+                onChange={(e) => setListSearch(e.target.value)}
+                placeholder="Cari pertanyaan, stimulus, opsi…"
+                className="w-full pl-8 pr-8 py-1.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none"
               />
-              Pilih semua
-            </label>
+              <svg
+                className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              {listSearch && (
+                <button
+                  type="button"
+                  onClick={() => setListSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+                  title="Hapus pencarian"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            {listSearch.trim() && (
+              <p className="text-[11px] text-gray-400">
+                {filteredQuestions.length} dari {questions.length} soal
+              </p>
+            )}
           </div>
           {loading ? (
             <div className="p-8 text-center text-sm text-gray-500">Memuat...</div>
@@ -1483,31 +1559,50 @@ export default function TopicQuestions() {
               <p className="text-sm text-gray-500">Belum ada soal</p>
               <button onClick={openNew} className="mt-3 text-sm text-indigo-600 font-medium hover:underline">+ Tambah soal pertama</button>
             </div>
+          ) : filteredQuestions.length === 0 ? (
+            <div className="p-8 text-center">
+              <p className="text-sm text-gray-500">Tidak ada soal yang cocok</p>
+              <button type="button" onClick={() => setListSearch('')} className="mt-2 text-sm text-indigo-600 font-medium hover:underline">
+                Hapus pencarian
+              </button>
+            </div>
           ) : (
             <div className="divide-y divide-gray-50 max-h-[28rem] overflow-y-auto">
-              {questions.map((q, idx) => (
-                <div
-                  key={q.id}
-                  className={`w-full text-left px-4 py-3 flex gap-3 hover:bg-gray-50 transition ${
-                    selectedIndex === idx ? 'bg-indigo-50/70 border-l-2 border-indigo-500' : 'border-l-2 border-transparent'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checkedIds.includes(q.id || '')}
-                    onChange={() => q.id && toggleChecked(q.id)}
-                    className="mt-1"
-                  />
-                  <button type="button" onClick={() => setSelectedIndex(idx)} className="min-w-0 flex-1 text-left">
-                    <p className="text-sm text-gray-800 line-clamp-2 leading-snug">{q.question}</p>
-                    <p className="text-[11px] text-gray-400 mt-1">
-                      {QUESTION_TYPE_LABELS[q.type] || q.type}
-                      {q.stimulusImage ? ' · 🖼' : ''}{!q.stimulus && !q.stimulusImage ? ' · tanpa stimulus' : q.stimulus ? ' · stimulus' : ''}
-                      {(q.tpCodes || (q.tp ? [q.tp] : [])).join(', ') ? ` · TP ${(q.tpCodes || [q.tp]).filter(Boolean).join(', ')}` : ''}
-                    </p>
-                  </button>
-                </div>
-              ))}
+              {filteredQuestions.map((q) => {
+                const fullIdx = questions.findIndex((x) => x.id === q.id)
+                const isSelected = fullIdx === selectedIndex
+                return (
+                  <div
+                    key={q.id}
+                    className={`w-full text-left px-4 py-3 flex gap-3 hover:bg-gray-50 transition ${
+                      isSelected ? 'bg-indigo-50/70 border-l-2 border-indigo-500' : 'border-l-2 border-transparent'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checkedIds.includes(q.id || '')}
+                      onChange={() => q.id && toggleChecked(q.id)}
+                      className="mt-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fullIdx >= 0 && setSelectedIndex(fullIdx)}
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <p className="text-sm text-gray-800 line-clamp-2 leading-snug">{q.question}</p>
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        {fullIdx >= 0 ? `#${fullIdx + 1} · ` : ''}
+                        {QUESTION_TYPE_LABELS[q.type] || q.type}
+                        {q.stimulusImage ? ' · 🖼' : ''}
+                        {!q.stimulus && !q.stimulusImage ? ' · tanpa stimulus' : q.stimulus ? ' · stimulus' : ''}
+                        {(q.tpCodes || (q.tp ? [q.tp] : [])).join(', ')
+                          ? ` · TP ${(q.tpCodes || [q.tp]).filter(Boolean).join(', ')}`
+                          : ''}
+                      </p>
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
