@@ -8,36 +8,48 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
-### Added — Fase C (siap push manual)
-- **`src/pages/KerjakanQuiz.tsx`**: tampilan stimulus gambar terbingkai + tombol perbesar; lightbox (zoom +/−, Tutup/Esc, **tidak** tutup saat klik backdrop); tabel kategori desktop + kartu mobile; badge skor soal.
+### Fixed (manual push UI besar)
+- **`src/pages/TopicQuestions.tsx`** & **`KerjakanQuiz.tsx`**: pastikan file patch terbaru sudah di repo lokal sebelum deploy (lihat patch zip di chat).
 
-### Fixed (manual push masih diperlukan)
-- **`src/pages/TopicQuestions.tsx`** — UI bank soal + import tka2026 (file di GitHub masih stub).
+---
+
+## [0.3.0] — 2026-10-04
+
+### Added — Stimulus & preview (Fase C lanjut)
+- Editor stimulus: tebal, miring, garis bawah, paragraf, rata kiri/tengah/kanan/kiri-kanan, jarak baris (per paragraf terpilih bila ada seleksi), persamaan LaTeX (opsional KaTeX).
+- **Preview stimulus** di form edit (hanya bacaan + gambar).
+- **Preview kuis** di daftar soal: tampilan ala siswa (stimulus HTML + gambar), tanpa kunci jawaban.
+- Detail daftar soal menampilkan stimulus terformat + gambar.
+- Unggah gambar: kompres & resize otomatis (~1200px, ~450 KB).
+
+### Fixed
+- Import gagal jika kunci teks mengandung koma — `resolveCorrectAnswers` cocokkan string utuh dulu.
+- Saat edit soal, daftar soal tidak tampil di bawah form.
+
+### Changed
+- Preview cuplikan di form edit dihapus; preview penuh di daftar soal.
 
 ---
 
 ## [0.2.2] — 2026-10-04
 
 ### Changed
-- `docs/template_import_soal.csv`: kolom `stimulus`, `kompleksitas`, `skor`; contoh kunci teks opsi; tipe `pg`/`pgk`.
+- `docs/template_import_soal.csv`: kolom stimulus, kompleksitas, skor; kunci teks opsi.
 
 ---
 
 ## [0.2.1] — 2026-10-04
 
 ### Added (Fase B — skema)
-- Field opsional: `stimulusImage`, `tipeMateri`, `kompleksitas`, `skor`.
-- `mapTkaType()`, `resolveCorrectAnswers()` (kunci teks opsi / indeks / A–D).
-
-### Tidak Berubah
-- `correctAnswers: number[]`, scoring, collection Firestore existing.
+- Field opsional: stimulusImage, tipeMateri, kompleksitas, skor.
+- mapTkaType(), resolveCorrectAnswers().
 
 ---
 
 ## [0.2.0] — 2026-10-04
 
 ### Added
-- CHANGELOG, anti-regresi diperluas, rencana A→B→C.
+- CHANGELOG, anti-regresi, rencana A→B→C.
 
 ---
 
