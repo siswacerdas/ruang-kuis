@@ -69,7 +69,7 @@ export default function KerjakanRiwayat() {
       const s = await ensureStudentSession()
       if (cancelled) return
       if (!s) {
-        navigate('/kerjakan', { replace: true })
+        navigate('/login', { replace: true })
         return
       }
       setStudent(s)
@@ -184,7 +184,6 @@ export default function KerjakanRiwayat() {
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
-      {/* Top bar — sama gaya beranda */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
@@ -209,7 +208,6 @@ export default function KerjakanRiwayat() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        {/* Banner */}
         <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700 text-white p-6 sm:p-8 shadow-sm">
           <div className="absolute inset-0 opacity-20 pointer-events-none">
             <div className="absolute -top-10 -right-10 w-48 h-48 bg-white rounded-full blur-3xl" />
@@ -228,7 +226,6 @@ export default function KerjakanRiwayat() {
           </div>
         </section>
 
-        {/* Stats */}
         <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: 'Total kuis', value: loading ? '…' : String(stats.n), tone: 'text-indigo-600' },
@@ -258,7 +255,6 @@ export default function KerjakanRiwayat() {
           ))}
         </section>
 
-        {/* TP summary */}
         {tpAgg.length > 0 && (
           <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <h2 className="text-sm font-semibold text-gray-900 mb-3">Capaian TP (akumulasi)</h2>
@@ -289,7 +285,6 @@ export default function KerjakanRiwayat() {
           </section>
         )}
 
-        {/* Toolbar */}
         <section className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
           <div className="flex flex-wrap gap-1.5">
             {sortOptions.map((o) => (
@@ -331,7 +326,6 @@ export default function KerjakanRiwayat() {
           </div>
         </section>
 
-        {/* Cards */}
         <section>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-gray-900">Pengerjaan</h2>
