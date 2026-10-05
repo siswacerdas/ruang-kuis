@@ -1,15 +1,12 @@
 /**
- * Daftar akun non-siswa untuk login berbasis nama (tanpa mengingat email).
+ * Akun guru/admin untuk login berbasis nama (tanpa mengingat email).
  *
- * - STAFF_ACCOUNTS  → tab Guru (admin / guru)
- * - TEST_ACCOUNTS   → tab Tes Sistem (dummy / QA)
- *
- * Email tetap dipakai di balik layar untuk Firebase Auth.
- * Tambah / ubah entri di sini, atau simpan dokumen di koleksi Firestore `staff`
- * (field: displayName, email, role, active) agar muncul otomatis.
+ * Akun dummy / uji sistem TIDAK didefinisikan di sini.
+ * Mereka adalah dokumen di koleksi `students` dengan `isDummy: true`
+ * (atau nama/email mengandung "dummy") dan hanya muncul di tab Tes Sistem.
  */
 
-export type StaffRole = 'admin' | 'guru' | 'tester'
+export type StaffRole = 'admin' | 'guru'
 
 export interface NamedAccount {
   id: string
@@ -31,30 +28,7 @@ export const STAFF_ACCOUNTS: NamedAccount[] = [
   },
 ]
 
-/**
- * Akun uji sistem — tidak dicampur dengan daftar guru.
- * Buat dulu di Firebase Authentication (email + password),
- * lalu sesuaikan email di bawah.
- */
-export const TEST_ACCOUNTS: NamedAccount[] = [
-  {
-    id: 'test-admin',
-    displayName: 'Tes Admin',
-    email: 'tes.admin@ruang-kuis.id',
-    role: 'tester',
-    hint: 'Login ke dashboard admin (uji)',
-  },
-  {
-    id: 'test-guru',
-    displayName: 'Tes Guru',
-    email: 'tes.guru@ruang-kuis.id',
-    role: 'tester',
-    hint: 'Login ke dashboard admin (uji)',
-  },
-]
-
 export function roleLabel(role: StaffRole): string {
   if (role === 'admin') return 'Admin'
-  if (role === 'guru') return 'Guru'
-  return 'Tester'
+  return 'Guru'
 }
