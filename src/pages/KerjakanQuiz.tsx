@@ -578,18 +578,18 @@ export default function KerjakanQuiz() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(q.statements || []).map((stmt, si) => (
+                    {(q.options || []).map((stmt, si) => (
                       <tr key={si} className="border-t border-gray-50">
                         <td className="px-3 py-2 text-gray-400">{si + 1}</td>
                         <td className="px-3 py-2 text-gray-800">{stmt}</td>
-                        {(q.categoryLabels || DEFAULT_CATEGORY_LABELS).map((_, li) => (
-                          <td key={li} className="px-3 py-2 text-center">
+                        {(q.categoryLabels || DEFAULT_CATEGORY_LABELS).map((lab, li) => (
+                          <td key={lab} className="px-3 py-2 text-center">
                             <input
                               type="radio"
                               name={`cat-${q.id}-${si}`}
                               checked={selected[si] === li}
                               onChange={() =>
-                                setCategory(q.id!, si, li, (q.statements || []).length)
+                                setCategory(q.id!, si, li, (q.options || []).length)
                               }
                               className="accent-indigo-600"
                             />
@@ -601,7 +601,7 @@ export default function KerjakanQuiz() {
                 </table>
               </div>
               <div className="sm:hidden space-y-3">
-                {(q.statements || []).map((stmt, si) => (
+                {(q.options || []).map((stmt, si) => (
                   <div key={si} className="rounded-xl border border-gray-100 p-3">
                     <p className="text-sm text-gray-800 mb-2">
                       <span className="text-gray-400 mr-1">{si + 1}.</span>
@@ -610,9 +610,9 @@ export default function KerjakanQuiz() {
                     <div className="flex flex-wrap gap-2">
                       {(q.categoryLabels || DEFAULT_CATEGORY_LABELS).map((lab, li) => (
                         <button
-                          key={li}
+                          key={lab}
                           type="button"
-                          onClick={() => setCategory(q.id!, si, li, (q.statements || []).length)}
+                          onClick={() => setCategory(q.id!, si, li, (q.options || []).length)}
                           className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition ${
                             selected[si] === li
                               ? 'bg-indigo-600 text-white border-indigo-600'
@@ -629,9 +629,12 @@ export default function KerjakanQuiz() {
             </div>
           ) : (
             <div className="space-y-2">
+              {q.type === 'multiple' && (
+                <p className="text-xs text-gray-400 mb-2">Pilih semua jawaban yang benar</p>
+              )}
               {optionOrder(q.id || 'x', (q.options || []).length).map((oi) => {
                 const opt = (q.options || [])[oi]
-                const isMulti = q.type === 'multiple' || q.type === 'complex'
+                const isMulti = q.type === 'multiple'
                 const checked = selected.includes(oi)
                 return (
                   <button
@@ -647,7 +650,9 @@ export default function KerjakanQuiz() {
                     }`}
                   >
                     <span
-                      className={`mt-0.5 shrink-0 w-5 h-5 rounded-${isMulti ? 'md' : 'full'} border flex items-center justify-center ${
+                      className={`mt-0.5 shrink-0 w-5 h-5 border flex items-center justify-center ${
+                        isMulti ? 'rounded-md' : 'rounded-full'
+                      } ${
                         checked
                           ? 'border-indigo-600 bg-indigo-600 text-white'
                           : 'border-gray-300'
