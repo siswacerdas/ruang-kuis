@@ -45,13 +45,13 @@ export default function KerjakanResult() {
   useEffect(() => {
     const raw = sessionStorage.getItem('rk_result')
     if (!raw) {
-      navigate('/kerjakan/token', { replace: true })
+      navigate('/siswa', { replace: true })
       return
     }
     try {
       setData(JSON.parse(raw))
     } catch {
-      navigate('/kerjakan/token', { replace: true })
+      navigate('/siswa', { replace: true })
     }
   }, [navigate])
 
@@ -183,7 +183,7 @@ export default function KerjakanResult() {
         )}
 
         <Link
-          to="/kerjakan/token"
+          to="/siswa"
           className="inline-flex items-center justify-center w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-xl transition"
         >
           Kembali ke beranda
