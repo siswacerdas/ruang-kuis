@@ -1,16 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../lib/firebase'
+import { ensureStudentSession, type StudentSession } from '../lib/studentSession'
 import { Link, useNavigate } from 'react-router-dom'
 import type { LatihanAttempt } from '../types/question'
-
-interface StudentSession {
-  studentId: string
-  fullName: string
-  nickname?: string
-  email: string
-  className?: string
-}
 
 function toMillis(v: unknown): number | null {
   if (!v) return null
@@ -51,17 +44,19 @@ export default function KerjakanRiwayat() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const raw = sessionStorage.getItem('rk_student')
-    if (!raw) {
-      navigate('/kerjakan')
-      return
-    }
-    try {
-      const s = JSON.parse(raw) as StudentSession
+    let cancelled = false
+    ;(async () => {
+      const s = await ensureStudentSession()
+      if (cancelled) return
+      if (!s) {
+        navigate('/kerjakan', { replace: true })
+        return
+      }
       setStudent(s)
       loadAttempts(s)
-    } catch {
-      navigate('/kerjakan')
+    })()
+    return () => {
+      cancelled = true
     }
   }, [navigate])
 
@@ -161,7 +156,7 @@ export default function KerjakanRiwayat() {
             to="/kerjakan/token"
             className="text-sm text-indigo-600 hover:underline font-medium"
           >
-            ← Token
+            ← Beranda
           </Link>
         </div>
 
@@ -227,7 +222,7 @@ export default function KerjakanRiwayat() {
             <p className="p-8 text-center text-sm text-gray-400">Memuat riwayat...</p>
           ) : attempts.length === 0 ? (
             <p className="p-8 text-center text-sm text-gray-400">
-              Belum ada kuis yang dikerjakan. Masukkan token dari guru untuk mulai.
+              Belum ada kuis yang dikerjakan. Pilih jadwal di beranda untuk mulai.
             </p>
           ) : (
             <div className="divide-y divide-gray-50">
