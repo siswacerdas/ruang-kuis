@@ -45,13 +45,13 @@ export default function KerjakanResult() {
   useEffect(() => {
     const raw = sessionStorage.getItem('rk_result')
     if (!raw) {
-      navigate('/kerjakan')
+      navigate('/kerjakan/token', { replace: true })
       return
     }
     try {
       setData(JSON.parse(raw))
     } catch {
-      navigate('/kerjakan')
+      navigate('/kerjakan/token', { replace: true })
     }
   }, [navigate])
 
@@ -183,10 +183,10 @@ export default function KerjakanResult() {
         )}
 
         <Link
-          to="/kerjakan"
+          to="/kerjakan/token"
           className="inline-flex items-center justify-center w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-xl transition"
         >
-          Selesai
+          Kembali ke beranda
         </Link>
       </div>
     </div>
