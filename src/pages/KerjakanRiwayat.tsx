@@ -4,7 +4,6 @@ import { db } from '../lib/firebase'
 import { ensureStudentSession, type StudentSession } from '../lib/studentSession'
 import { Link, useNavigate } from 'react-router-dom'
 import {
-  SUBJECTS,
   getSubject,
   type LatihanAttempt,
   type LatihanPaket,
@@ -347,7 +346,7 @@ export default function KerjakanRiwayat() {
 
         {tpAgg.length > 0 && (
           <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <h2 className="text-sm font-semibold text-gray-900 mb-3">Capaian TP (akumulasi)</h2>
+            <h2 className="text- font-semibold text-gray-900 mb-3">Capaian TP (akumulasi)</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
               {tpAgg.map((row) => (
                 <div key={row.tp} className="flex items-center gap-2">
@@ -487,7 +486,7 @@ export default function KerjakanRiwayat() {
                         </span>
                       </div>
                       {a.tpSummary && Object.keys(a.tpSummary).length > 0 && (
-                        <div className="mt-1 flex flex-wrap gap-1">
+                        <div className="flex flex-wrap gap-1 mt-1">
                           {Object.entries(a.tpSummary)
                             .slice(0, 4)
                             .map(([tp, v]) => {
@@ -495,14 +494,7 @@ export default function KerjakanRiwayat() {
                               return (
                                 <span
                                   key={tp}
-                                  className={`text-[10px] px-1.5 py-0.5 rounded-md border ${
-                                    p >= 70
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                      : p >= 40
-                                        ? 'bg-amber-50 text-amber-800 border-amber-100'
-                                        : 'bg-rose-50 text-rose-700 border-rose-100'
-                                  }`}
-                                  title={`${v.correct}/${v.total}`}
+                                  className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-600 border border-gray-100"
                                 >
                                   {tp} {p}%
                                 </span>
@@ -510,6 +502,14 @@ export default function KerjakanRiwayat() {
                             })}
                         </div>
                       )}
+                      <div className="mt-auto pt-2">
+                        <Link
+                          to={`/kerjakan/hasil?attempt=${a.id}`}
+                          className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
+                        >
+                          Lihat detail →
+                        </Link>
+                      </div>
                     </div>
                   </article>
                 )
