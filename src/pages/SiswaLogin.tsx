@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { collection, getDocs, query, orderBy } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
+import { ensureStudentSession, setStudentSession } from '../lib/studentSession'
 import { useNavigate, Link } from 'react-router-dom'
 import type { Student } from '../types/student'
 
@@ -13,10 +14,28 @@ export default function SiswaLogin() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [checkingSession, setCheckingSession] = useState(true)
+
+  // Jika sudah login (Auth + sesi / bisa di-recover), langsung ke dashboard siswa
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const s = await ensureStudentSession()
+      if (!cancelled && s) {
+        navigate('/kerjakan/token', { replace: true })
+        return
+      }
+      if (!cancelled) setCheckingSession(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [navigate])
 
   useEffect(() => {
+    if (checkingSession) return
     loadStudents()
-  }, [])
+  }, [checkingSession])
 
   const loadStudents = async () => {
     setLoadingList(true)
@@ -63,20 +82,17 @@ export default function SiswaLogin() {
       const em = selected.email.trim().toLowerCase()
       const cred = await signInWithEmailAndPassword(auth, em, password.trim())
 
-      sessionStorage.setItem(
-        'rk_student',
-        JSON.stringify({
-          studentId: selected.id,
-          fullName: selected.fullName,
-          nickname: selected.nickname || '',
-          email: selected.email,
-          nisn: selected.nisn,
-          className: selected.className || '5A',
-          authUid: cred.user.uid,
-        })
-      )
+      setStudentSession({
+        studentId: selected.id!,
+        fullName: selected.fullName,
+        nickname: selected.nickname || '',
+        email: selected.email,
+        nisn: selected.nisn,
+        className: selected.className || '5A',
+        authUid: cred.user.uid,
+      })
 
-      navigate('/kerjakan/token')
+      navigate('/kerjakan/token', { replace: true })
     } catch (err: any) {
       console.error(err)
       if (
@@ -95,22 +111,40 @@ export default function SiswaLogin() {
     }
   }
 
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F5F6FA]">
+        <p className="text-gray-500 text-sm">Memuat...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[#F5F6FA] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center mx-auto mb-4 shadow-sm">
             <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+              />
             </svg>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Login Siswa</h1>
           <p className="text-sm text-gray-500 mt-1">Kelas 5A · Ruang Kuis</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4"
+        >
           {error && (
-            <div className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-3 rounded-xl">{error}</div>
+            <div className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-3 rounded-xl">
+              {error}
+            </div>
           )}
 
           <div>
