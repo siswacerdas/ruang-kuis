@@ -70,6 +70,15 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
       ),
     },
     {
+      path: '/peringkat',
+      label: 'Peringkat',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+        </svg>
+      ),
+    },
+    {
       path: '/daftar-siswa',
       label: 'Daftar Siswa',
       icon: (
@@ -82,109 +91,99 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
 
   return (
     <div className="min-h-screen bg-[#F5F6FA] flex">
-      <aside className="w-64 bg-white border-r border-gray-100 flex flex-col shrink-0 hidden md:flex">
-        <div className="px-6 py-5 border-b border-gray-100">
+      <aside className="hidden md:flex md:w-64 md:flex-col bg-white border-r border-gray-100 fixed inset-y-0 left-0 z-30">
+        <div className="h-16 flex items-center px-5 border-b border-gray-100">
           <Link to="/dashboard" className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+              RK
             </div>
             <div>
-              <p className="font-semibold text-gray-900 text-[15px] leading-tight">Ruang Kuis</p>
-              <p className="text-xs text-gray-400">Admin Panel</p>
+              <p className="text-sm font-bold text-gray-900 leading-tight">Ruang Kuis</p>
+              <p className="text-[11px] text-gray-400">Admin</p>
             </div>
           </Link>
         </div>
 
         <nav className="flex-1 px-3 py-5 space-y-1">
-          <p className="px-3 mb-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-            Menu
-          </p>
           {navItems.map((item) => {
-            const isActive = location.pathname === item.path
+            const active =
+              location.pathname === item.path || location.pathname.startsWith(item.path + '/')
             return (
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  isActive
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
+                  active
                     ? 'bg-indigo-50 text-indigo-700'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 }`}
               >
-                <span className={isActive ? 'text-indigo-600' : 'text-gray-400'}>{item.icon}</span>
+                <span className={active ? 'text-indigo-600' : 'text-gray-400'}>{item.icon}</span>
                 {item.label}
               </Link>
             )
           })}
         </nav>
 
-        <div className="px-3 py-4 border-t border-gray-100">
+        <div className="p-4 border-t border-gray-100">
           <button
+            type="button"
             onClick={handleLogout}
-            className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:bg-red-50 hover:text-red-600 transition-all"
+            className="w-full text-left text-sm text-gray-500 hover:text-red-600 px-3 py-2 rounded-xl hover:bg-red-50 transition"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            Logout
+            Keluar
           </button>
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-white border-b border-gray-100 px-4 md:px-8 py-4 sticky top-0 z-10">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <Link to="/dashboard" className="md:hidden flex items-center gap-2 shrink-0">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                </div>
-              </Link>
+      <div className="flex-1 md:pl-64 min-w-0">
+        <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-100">
+          <div className="px-4 sm:px-6 py-3.5">
+            <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                {title && (
-                  <h1 className="text-lg md:text-xl font-semibold text-gray-900 truncate">{title}</h1>
-                )}
-                {subtitle && <p className="text-sm text-gray-500 truncate">{subtitle}</p>}
+                <Link to="/dashboard" className="md:hidden flex items-center gap-2 shrink-0 mb-1">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-xs">
+                    RK
+                  </div>
+                  <span className="text-sm font-bold text-gray-900">Ruang Kuis</span>
+                </Link>
+                {title && <h1 className="text-lg font-bold text-gray-900 truncate">{title}</h1>}
+                {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {actions}
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="md:hidden text-xs text-gray-500 hover:text-red-600 px-2 py-1.5"
+                >
+                  Keluar
+                </button>
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {actions}
-              <button
-                onClick={handleLogout}
-                className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100"
-                title="Logout"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-              </button>
-            </div>
+            <nav className="md:hidden flex gap-1 mt-3 -mx-1 overflow-x-auto pb-1">
+              {navItems.map((item) => {
+                const active =
+                  location.pathname === item.path || location.pathname.startsWith(item.path + '/')
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border transition ${
+                      active
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-gray-600 border-gray-200'
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                )
+              })}
+            </nav>
           </div>
-
-          <nav className="md:hidden flex gap-1 mt-3 -mx-1 overflow-x-auto pb-1">
-            {navItems.map((item) => {
-              const isActive = location.pathname === item.path
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap ${
-                    isActive ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  {item.icon}
-                  {item.label}
-                </Link>
-              )
-            })}
-          </nav>
         </header>
 
-        <main className="flex-1 p-4 md:p-8 overflow-auto">{children}</main>
+        <main className="p-4 sm:p-6">{children}</main>
       </div>
     </div>
   )
