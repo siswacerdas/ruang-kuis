@@ -1,16 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { collection, getDocs, query, orderBy, where } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 import { ensureStudentSession, setStudentSession } from '../lib/studentSession'
-import {
-  STAFF_ACCOUNTS,
-  TEST_ACCOUNTS,
-  roleLabel,
-  type NamedAccount,
-} from '../lib/loginAccounts'
+import { STAFF_ACCOUNTS, roleLabel, type NamedAccount } from '../lib/loginAccounts'
+import { isDummyStudent, type Student } from '../types/student'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
-import type { Student } from '../types/student'
 
 type TabKey = 'siswa' | 'guru' | 'tes'
 
@@ -28,13 +23,14 @@ export default function Login() {
     tabParam === 'guru' || tabParam === 'tes' || tabParam === 'siswa' ? tabParam : 'siswa'
   )
 
-  // —— Siswa ——
+  // —— Siswa (nyata) & Dummy (tes) ——
   const [students, setStudents] = useState<Student[]>([])
+  const [dummyStudents, setDummyStudents] = useState<Student[]>([])
   const [loadingStudents, setLoadingStudents] = useState(false)
   const [selectedStudentId, setSelectedStudentId] = useState('')
   const [studentPassword, setStudentPassword] = useState('')
 
-  // —— Guru / Tes ——
+  // —— Guru ——
   const [staffList, setStaffList] = useState<NamedAccount[]>(STAFF_ACCOUNTS)
   const [loadingStaff, setLoadingStaff] = useState(false)
   const [selectedAccountId, setSelectedAccountId] = useState('')
@@ -45,7 +41,6 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
 
-  // Sinkron tab ↔ URL
   useEffect(() => {
     setSearchParams(
       (prev) => {
@@ -57,7 +52,6 @@ export default function Login() {
     )
   }, [tab, setSearchParams])
 
-  // Jika sudah login siswa → beranda siswa; admin ditangani App.tsx
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -73,9 +67,9 @@ export default function Login() {
     }
   }, [navigate])
 
-  // Muat daftar siswa (tab Siswa)
+  // Muat siswa: pisah nyata vs dummy
   useEffect(() => {
-    if (tab !== 'siswa' || checkingSession) return
+    if ((tab !== 'siswa' && tab !== 'tes') || checkingSession) return
     let cancelled = false
     ;(async () => {
       setLoadingStudents(true)
@@ -88,17 +82,31 @@ export default function Login() {
           snap = await getDocs(collection(db, 'students'))
         }
         if (cancelled) return
-        const list = snap.docs
+        const all = snap.docs
           .map((d) => ({ id: d.id, ...d.data() } as Student))
           .filter((s) => s.active !== false)
+
+        const real = all
+          .filter((s) => !isDummyStudent(s))
           .sort((a, b) => a.fullName.localeCompare(b.fullName, 'id'))
-        setStudents(list)
-        if (list.length === 0) {
+        const dummy = all
+          .filter((s) => isDummyStudent(s))
+          .sort((a, b) => a.fullName.localeCompare(b.fullName, 'id'))
+
+        setStudents(real)
+        setDummyStudents(dummy)
+
+        if (tab === 'siswa' && real.length === 0) {
           setError('Daftar siswa masih kosong. Minta guru mengimpor data di Daftar Siswa.')
+        }
+        if (tab === 'tes' && dummy.length === 0) {
+          setError(
+            'Belum ada akun dummy. Tandai siswa uji dengan isDummy: true di Firestore, atau nama/email mengandung "dummy".'
+          )
         }
       } catch (err) {
         console.error(err)
-        if (!cancelled) setError('Gagal memuat daftar siswa. Coba refresh halaman.')
+        if (!cancelled) setError('Gagal memuat daftar. Coba refresh halaman.')
       } finally {
         if (!cancelled) setLoadingStudents(false)
       }
@@ -108,7 +116,7 @@ export default function Login() {
     }
   }, [tab, checkingSession])
 
-  // Muat daftar guru: static + opsional koleksi Firestore `staff`
+  // Muat daftar guru
   useEffect(() => {
     if (tab !== 'guru' || checkingSession) return
     let cancelled = false
@@ -119,25 +127,25 @@ export default function Login() {
           query(collection(db, 'staff'), where('active', '==', true))
         ).catch(() => null)
         if (cancelled) return
-        const fromDb: NamedAccount[] = (snap?.docs || []).map((d) => {
-          const data = d.data()
-          return {
-            id: d.id,
-            displayName: String(data.displayName || data.name || d.id),
-            email: String(data.email || '').toLowerCase(),
-            role: (data.role === 'guru' ? 'guru' : 'admin') as NamedAccount['role'],
-            hint: data.hint ? String(data.hint) : undefined,
-          }
-        }).filter((a) => a.email.includes('@'))
+        const fromDb: NamedAccount[] = (snap?.docs || [])
+          .map((d) => {
+            const data = d.data()
+            return {
+              id: d.id,
+              displayName: String(data.displayName || data.name || d.id),
+              email: String(data.email || '').toLowerCase(),
+              role: (data.role === 'guru' ? 'guru' : 'admin') as NamedAccount['role'],
+              hint: data.hint ? String(data.hint) : undefined,
+            }
+          })
+          .filter((a) => a.email.includes('@'))
 
         const byEmail = new Map<string, NamedAccount>()
         ;[...STAFF_ACCOUNTS, ...fromDb].forEach((a) => {
           byEmail.set(a.email.toLowerCase(), a)
         })
         setStaffList(
-          [...byEmail.values()].sort((a, b) =>
-            a.displayName.localeCompare(b.displayName, 'id')
-          )
+          [...byEmail.values()].sort((a, b) => a.displayName.localeCompare(b.displayName, 'id'))
         )
       } catch {
         if (!cancelled) setStaffList(STAFF_ACCOUNTS)
@@ -150,7 +158,6 @@ export default function Login() {
     }
   }, [tab, checkingSession])
 
-  // Reset form saat ganti tab
   useEffect(() => {
     setError('')
     setSelectedStudentId('')
@@ -160,20 +167,15 @@ export default function Login() {
     setShowPassword(false)
   }, [tab])
 
-  const accountOptions: NamedAccount[] = useMemo(() => {
-    if (tab === 'tes') return TEST_ACCOUNTS
-    if (tab === 'guru') return staffList
-    return []
-  }, [tab, staffList])
+  const listForStudentForm = tab === 'tes' ? dummyStudents : students
+  const selectedStudent = listForStudentForm.find((s) => s.id === selectedStudentId)
+  const selectedAccount = staffList.find((a) => a.id === selectedAccountId)
 
-  const selectedStudent = students.find((s) => s.id === selectedStudentId)
-  const selectedAccount = accountOptions.find((a) => a.id === selectedAccountId)
-
-  const handleStudentSubmit = async (e: React.FormEvent) => {
+  const handleStudentOrDummySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     if (!selectedStudent) {
-      setError('Pilih nama kamu dari daftar')
+      setError(tab === 'tes' ? 'Pilih akun dummy dari daftar' : 'Pilih nama kamu dari daftar')
       return
     }
     if (!studentPassword.trim()) {
@@ -204,7 +206,7 @@ export default function Login() {
         err.code === 'auth/user-not-found' ||
         err.code === 'auth/wrong-password'
       ) {
-        setError('NISN salah, atau akun login belum dibuat guru. Coba lagi / hubungi guru.')
+        setError('NISN salah, atau akun login belum dibuat. Coba lagi / hubungi guru.')
       } else if (err.code === 'auth/too-many-requests') {
         setError('Terlalu banyak percobaan. Coba lagi nanti.')
       } else {
@@ -234,7 +236,6 @@ export default function Login() {
         selectedAccount.email.trim().toLowerCase(),
         staffPassword
       )
-      // Redirect admin ditangani App.tsx (onAuthStateChanged → /dashboard)
     } catch (err: any) {
       console.error(err)
       if (
@@ -263,7 +264,6 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-[#F5F6FA] flex">
-      {/* Left panel */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700 relative overflow-hidden items-center justify-center p-12">
         <div className="absolute inset-0 opacity-20">
           <div className="absolute top-20 left-20 w-72 h-72 bg-white rounded-full blur-3xl" />
@@ -282,13 +282,12 @@ export default function Login() {
           </div>
           <h2 className="text-3xl font-bold mb-4 leading-tight">Ruang Kuis</h2>
           <p className="text-indigo-100 text-lg leading-relaxed">
-            Pilih nama dari daftar, tanpa perlu mengingat email. Siswa, guru, dan akun uji sistem
-            punya tab masing-masing.
+            Pilih nama dari daftar. Siswa asli, guru, dan akun dummy (uji sistem) terpisah di tab
+            masing-masing.
           </p>
         </div>
       </div>
 
-      {/* Form */}
       <div className="flex-1 flex items-center justify-center p-6 md:p-12">
         <div className="w-full max-w-md">
           <div className="lg:hidden flex items-center gap-3 mb-6 justify-center">
@@ -316,7 +315,6 @@ export default function Login() {
               </p>
             </div>
 
-            {/* Tabs */}
             <div className="flex rounded-xl bg-gray-100 p-1 mb-6">
               {TABS.map((t) => (
                 <button
@@ -340,22 +338,30 @@ export default function Login() {
               </div>
             )}
 
-            {/* —— Tab Siswa —— */}
-            {tab === 'siswa' && (
-              <form onSubmit={handleStudentSubmit} className="space-y-4">
+            {/* Tab Siswa + Tes Sistem: dropdown + NISN */}
+            {(tab === 'siswa' || tab === 'tes') && (
+              <form onSubmit={handleStudentOrDummySubmit} className="space-y-4">
+                {tab === 'tes' && (
+                  <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    Hanya akun <strong>dummy / uji</strong>. Tidak tercampur dengan daftar siswa kelas.
+                    Password = NISN.
+                  </div>
+                )}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Nama kamu</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    {tab === 'tes' ? 'Akun dummy' : 'Nama kamu'}
+                  </label>
                   <select
                     value={selectedStudentId}
                     onChange={(e) => setSelectedStudentId(e.target.value)}
-                    disabled={loadingStudents || students.length === 0}
+                    disabled={loadingStudents || listForStudentForm.length === 0}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-sm"
                     required
                   >
                     <option value="">
                       {loadingStudents ? 'Memuat daftar...' : '— Pilih nama —'}
                     </option>
-                    {students.map((s) => (
+                    {listForStudentForm.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.fullName}
                         {s.nickname ? ` (${s.nickname})` : ''}
@@ -372,13 +378,11 @@ export default function Login() {
                     value={studentPassword}
                     onChange={(e) => setStudentPassword(e.target.value)}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none font-mono"
-                    placeholder="NISN kamu"
+                    placeholder="NISN"
                     required
                     autoComplete="current-password"
                   />
-                  <p className="text-[11px] text-gray-400 mt-1.5">
-                    Password = nomor NISN (bukan email).
-                  </p>
+                  <p className="text-[11px] text-gray-400 mt-1.5">Password = nomor NISN (bukan email).</p>
                 </div>
                 <button
                   type="button"
@@ -392,50 +396,38 @@ export default function Login() {
                   disabled={loading || loadingStudents || !selectedStudentId}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-3 rounded-xl transition"
                 >
-                  {loading ? 'Memeriksa...' : 'Masuk sebagai siswa'}
+                  {loading
+                    ? 'Memeriksa...'
+                    : tab === 'tes'
+                      ? 'Masuk (akun dummy)'
+                      : 'Masuk sebagai siswa'}
                 </button>
               </form>
             )}
 
-            {/* —— Tab Guru / Tes —— */}
-            {(tab === 'guru' || tab === 'tes') && (
+            {/* Tab Guru */}
+            {tab === 'guru' && (
               <form onSubmit={handleStaffSubmit} className="space-y-4">
-                {tab === 'tes' && (
-                  <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                    Akun di tab ini khusus uji sistem / demo. Tidak tercampur dengan daftar guru
-                    produksi.
-                  </div>
-                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    {tab === 'guru' ? 'Nama guru / admin' : 'Akun uji'}
+                    Nama guru / admin
                   </label>
                   <select
                     value={selectedAccountId}
                     onChange={(e) => setSelectedAccountId(e.target.value)}
-                    disabled={tab === 'guru' && loadingStaff}
+                    disabled={loadingStaff}
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-sm"
                     required
                   >
-                    <option value="">
-                      {tab === 'guru' && loadingStaff ? 'Memuat...' : '— Pilih nama —'}
-                    </option>
-                    {accountOptions.map((a) => (
+                    <option value="">{loadingStaff ? 'Memuat...' : '— Pilih nama —'}</option>
+                    {staffList.map((a) => (
                       <option key={a.id} value={a.id}>
-                        {a.displayName}
-                        {a.role !== 'tester' ? ` · ${roleLabel(a.role)}` : ''}
+                        {a.displayName} · {roleLabel(a.role)}
                       </option>
                     ))}
                   </select>
                   {selectedAccount?.hint && (
                     <p className="text-[11px] text-gray-400 mt-1.5">{selectedAccount.hint}</p>
-                  )}
-                  {tab === 'guru' && accountOptions.length === 0 && !loadingStaff && (
-                    <p className="text-[11px] text-amber-700 mt-1.5">
-                      Belum ada akun guru di daftar. Tambah di{' '}
-                      <code className="bg-gray-100 px-1 rounded">src/lib/loginAccounts.ts</code>{' '}
-                      atau koleksi Firestore <code className="bg-gray-100 px-1 rounded">staff</code>.
-                    </p>
                   )}
                 </div>
                 <div>
@@ -489,11 +481,7 @@ export default function Login() {
                   disabled={loading || !selectedAccountId}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium py-3 rounded-xl transition"
                 >
-                  {loading
-                    ? 'Memeriksa...'
-                    : tab === 'tes'
-                      ? 'Masuk (akun uji)'
-                      : 'Masuk sebagai guru'}
+                  {loading ? 'Memeriksa...' : 'Masuk sebagai guru'}
                 </button>
               </form>
             )}
