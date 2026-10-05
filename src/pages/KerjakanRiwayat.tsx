@@ -77,7 +77,6 @@ export default function KerjakanRiwayat() {
         }
       }
 
-      // Fallback data lama (tanpa studentId) — cocokkan nama
       try {
         const snap = await getDocs(
           query(collection(db, 'attempts'), where('studentName', '==', s.fullName))
@@ -152,10 +151,7 @@ export default function KerjakanRiwayat() {
               {student.className ? ` · Kelas ${student.className}` : ''}
             </p>
           </div>
-          <Link
-            to="/kerjakan/token"
-            className="text-sm text-indigo-600 hover:underline font-medium"
-          >
+          <Link to="/siswa" className="text-sm text-indigo-600 hover:underline font-medium">
             ← Beranda
           </Link>
         </div>
