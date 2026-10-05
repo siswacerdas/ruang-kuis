@@ -453,7 +453,7 @@ export default function Laporan() {
             >
               <option value="all">Semua</option>
               <option value="pass">≥ 70%</option>
-              <option value="fail">< 70%</option>
+              <option value="fail">{'< 70%'}</option>
             </select>
           </div>
           {(filterSubject || filterLatihan || searchQ || filterClass || filterScore !== 'all') && (
