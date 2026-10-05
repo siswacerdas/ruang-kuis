@@ -21,7 +21,12 @@ import {
   type QuestionAnswer,
   DEFAULT_CATEGORY_LABELS,
 } from '../types/question'
-
+import {
+  loadProgress,
+  saveProgress,
+  clearProgress,
+  shuffleSeeded,
+} from '../lib/quizProgress'
 
 function sanitizeStimulusHtml(html: string): string {
   if (!html) return ''
@@ -49,7 +54,7 @@ function sanitizeStimulusHtml(html: string): string {
     walk(doc.body)
     return doc.body.innerHTML
   } catch {
-    return html.replace(/</g, '&lt;')
+    return html.replace(/</g, '<')
   }
 }
 
@@ -108,16 +113,6 @@ function optionOrder(seed: string, count: number) {
   return order
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr]
-  // simple shuffle
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
-  }
-  return a
-}
-
 export default function KerjakanQuiz() {
   const { latihanId } = useParams<{ latihanId: string }>()
   const navigate = useNavigate()
@@ -128,7 +123,6 @@ export default function KerjakanQuiz() {
   const topicTp = useRef<Record<string, string[]>>({})
   const [loading, setLoading] = useState(true)
   const [current, setCurrent] = useState(0)
-  // answers[questionId] = selected indices
   const [answers, setAnswers] = useState<Record<string, number[]>>({})
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -138,6 +132,7 @@ export default function KerjakanQuiz() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
   const [lightbox, setLightbox] = useState<{ img?: string; text?: string } | null>(null)
   const [lbScale, setLbScale] = useState(1)
+  const submitQuizRef = useRef<((auto?: boolean) => Promise<void>) | null>(null)
 
   useEffect(() => {
     const raw = sessionStorage.getItem('rk_session')
@@ -148,7 +143,7 @@ export default function KerjakanQuiz() {
     try {
       const s = JSON.parse(raw) as Session
       if (s.latihanId !== latihanId) {
-        navigate('/kerjakan')
+        navigate('/siswa')
         return
       }
       setSession(s)
@@ -175,7 +170,6 @@ export default function KerjakanQuiz() {
           setError('Paket ini tidak ditugaskan untuk kelas/akun kamu.')
           return
         }
-        // Cek attempt existing → larangan ulang
         if (!canRetryPaket(p)) {
           try {
             const aSnap = await getDocs(
@@ -202,7 +196,6 @@ export default function KerjakanQuiz() {
         return
       }
 
-      // Firestore 'in' max 30 — batch if needed
       const ids = p.questionIds
       const chunks: string[][] = []
       for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30))
@@ -213,10 +206,18 @@ export default function KerjakanQuiz() {
         )
         qSnap.docs.forEach((d) => all.push({ id: d.id, ...d.data() } as Question))
       }
-      // preserve order from questionIds, then optional shuffle
+
       const byId = new Map(all.map((q) => [q.id!, q]))
+      const seed = `${id}:${st?.studentId || st?.studentName || 'x'}`
       let ordered = ids.map((qid) => byId.get(qid)).filter(Boolean) as Question[]
-      if (p.shuffleQuestions) ordered = shuffle(ordered)
+      if (p.shuffleQuestions) ordered = shuffleSeeded(ordered, seed)
+
+      const saved = st ? loadProgress(id, st) : null
+      if (saved?.questionIds?.length) {
+        const restored = saved.questionIds.map((qid) => byId.get(qid)).filter(Boolean) as Question[]
+        if (restored.length === ordered.length) ordered = restored
+      }
+
       const topicIds = [...new Set(ordered.map((q) => q.topicId).filter(Boolean))]
       const tpByTopic: Record<string, string[]> = {}
       for (let i = 0; i < topicIds.length; i += 30) {
@@ -230,10 +231,26 @@ export default function KerjakanQuiz() {
       topicTp.current = tpByTopic
       setQuestions(ordered)
 
-      if (p.timeLimitMinutes && p.timeLimitMinutes > 0) {
-        setTimeLeft(p.timeLimitMinutes * 60)
+      if (saved) {
+        setAnswers(saved.answers || {})
+        setCurrent(Math.min(saved.current || 0, Math.max(0, ordered.length - 1)))
+        timePerQ.current = saved.timePerQ || {}
+        startedAt.current = saved.startedAt || Date.now()
+        if (saved.deadlineAt) {
+          const left = Math.max(0, Math.floor((saved.deadlineAt - Date.now()) / 1000))
+          setTimeLeft(left)
+          if (left <= 0) {
+            setTimeout(() => submitQuizRef.current?.(true), 300)
+          }
+        } else if (p.timeLimitMinutes && p.timeLimitMinutes > 0) {
+          setTimeLeft(p.timeLimitMinutes * 60)
+        }
+      } else {
+        startedAt.current = Date.now()
+        if (p.timeLimitMinutes && p.timeLimitMinutes > 0) {
+          setTimeLeft(p.timeLimitMinutes * 60)
+        }
       }
-      startedAt.current = Date.now()
       questionStarted.current = Date.now()
     } catch (err) {
       console.error(err)
@@ -243,18 +260,16 @@ export default function KerjakanQuiz() {
     }
   }
 
-  // Timer
   useEffect(() => {
     if (timeLeft === null) return
     if (timeLeft <= 0) {
-      submitQuiz(true)
+      submitQuizRef.current?.(true)
       return
     }
     const t = setInterval(() => setTimeLeft((s) => (s === null ? null : s - 1)), 1000)
     return () => clearInterval(t)
   }, [timeLeft])
 
-  // Tutup lightbox dengan Esc
   useEffect(() => {
     if (!lightbox) return
     const onKey = (e: KeyboardEvent) => {
@@ -263,6 +278,19 @@ export default function KerjakanQuiz() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [lightbox])
+
+  useEffect(() => {
+    if (!session || !latihanId || questions.length === 0 || loading) return
+    const deadlineAt = timeLeft === null ? null : Date.now() + timeLeft * 1000
+    saveProgress(latihanId, session, {
+      questionIds: questions.map((q) => q.id!).filter(Boolean),
+      answers,
+      current,
+      startedAt: startedAt.current,
+      deadlineAt,
+      timePerQ: { ...timePerQ.current },
+    })
+  }, [answers, current, timeLeft, session, latihanId, questions, loading])
 
   const recordTime = (qid: string) => {
     const elapsed = Date.now() - questionStarted.current
@@ -282,7 +310,9 @@ export default function KerjakanQuiz() {
   const toggleMulti = (qid: string, index: number) => {
     setAnswers((prev) => {
       const cur = prev[qid] || []
-      const next = cur.includes(index) ? cur.filter((x) => x !== index) : [...cur, index].sort((a, b) => a - b)
+      const next = cur.includes(index)
+        ? cur.filter((x) => x !== index)
+        : [...cur, index].sort((a, b) => a - b)
       return { ...prev, [qid]: next }
     })
   }
@@ -296,89 +326,101 @@ export default function KerjakanQuiz() {
     })
   }
 
-  const submitQuiz = useCallback(async (auto = false) => {
-    if (!paket || !session || questions.length === 0 || submitting) return
-    if (!auto) {
-      const unanswered = questions.filter((q) => {
-        const a = answers[q.id!]
-        if (!a || a.length === 0) return true
-        if (q.type === 'category' && a.some((x) => x < 0)) return true
-        return false
-      })
-      if (unanswered.length > 0) {
-        if (!confirm(`Masih ada ${unanswered.length} soal belum dijawab. Kirim sekarang?`)) return
-      } else if (!confirm('Kirim jawaban dan selesai?')) return
-    }
-
-    if (questions[current]) recordTime(questions[current].id!)
-
-    setSubmitting(true)
-    try {
-      const answerList: QuestionAnswer[] = questions.map((q) => {
-        const selected = answers[q.id!] || []
-        const isCorrect = gradeAnswer(q, selected.filter((x) => x >= 0))
-        return {
-          questionId: q.id!,
-          selected,
-          isCorrect,
-          timeMs: timePerQ.current[q.id!] || 0,
-        }
-      })
-      const score = answerList.filter((a) => a.isCorrect).length
-      const total = questions.length
-      const percent = total ? Math.round((score / total) * 100) : 0
-
-      const tpSummary: Record<string, { correct: number; total: number }> = {}
-      questions.forEach((q, i) => {
-        const own = [q.tpCodes, q.tp].flat().flatMap((v) => String(v || '').split(/[,;|]/)).map((s) => s.trim()).filter(Boolean)
-        const fromTopic = topicTp.current[q.topicId] || []
-        const codes = [...new Set(own.length ? own : fromTopic)]
-        const targets = codes.length ? codes : ['Lainnya']
-        targets.forEach((tp) => {
-          if (!tpSummary[tp]) tpSummary[tp] = { correct: 0, total: 0 }
-          tpSummary[tp].total += 1
-          if (answerList[i].isCorrect) tpSummary[tp].correct += 1
+  const submitQuiz = useCallback(
+    async (auto = false) => {
+      if (!paket || !session || questions.length === 0 || submitting) return
+      if (!auto) {
+        const unanswered = questions.filter((q) => {
+          const a = answers[q.id!]
+          if (!a || a.length === 0) return true
+          if (q.type === 'category' && a.some((x) => x < 0)) return true
+          return false
         })
-      })
+        if (unanswered.length > 0) {
+          if (!confirm(`Masih ada ${unanswered.length} soal belum dijawab. Kirim sekarang?`)) return
+        } else if (!confirm('Kirim jawaban dan selesai?')) return
+      }
 
-      const durationMs = Date.now() - startedAt.current
-      const attemptRef = await addDoc(collection(db, 'attempts'), {
-        latihanId: paket.id,
-        latihanTitle: paket.title,
-        studentName: session.studentName,
-        studentId: session.studentId || null,
-        studentClass: session.studentClass || '5A',
-        answers: answerList,
-        score,
-        total,
-        percent,
-        tpSummary,
-        startedAt: new Date(startedAt.current),
-        finishedAt: serverTimestamp(),
-        durationMs,
-      })
+      if (questions[current]) recordTime(questions[current].id!)
 
-      sessionStorage.setItem(
-        'rk_result',
-        JSON.stringify({
-          attemptId: attemptRef.id,
+      setSubmitting(true)
+      try {
+        const answerList: QuestionAnswer[] = questions.map((q) => {
+          const selected = answers[q.id!] || []
+          const isCorrect = gradeAnswer(q, selected.filter((x) => x >= 0))
+          return {
+            questionId: q.id!,
+            selected,
+            isCorrect,
+            timeMs: timePerQ.current[q.id!] || 0,
+          }
+        })
+        const score = answerList.filter((a) => a.isCorrect).length
+        const total = questions.length
+        const percent = total ? Math.round((score / total) * 100) : 0
+
+        const tpSummary: Record<string, { correct: number; total: number }> = {}
+        questions.forEach((q, i) => {
+          const own = [q.tpCodes, q.tp]
+            .flat()
+            .flatMap((v) => String(v || '').split(/[,;|]/))
+            .map((s) => s.trim())
+            .filter(Boolean)
+          const fromTopic = topicTp.current[q.topicId] || []
+          const codes = [...new Set(own.length ? own : fromTopic)]
+          const targets = codes.length ? codes : ['Lainnya']
+          targets.forEach((tp) => {
+            if (!tpSummary[tp]) tpSummary[tp] = { correct: 0, total: 0 }
+            tpSummary[tp].total += 1
+            if (answerList[i].isCorrect) tpSummary[tp].correct += 1
+          })
+        })
+
+        const durationMs = Date.now() - startedAt.current
+        const attemptRef = await addDoc(collection(db, 'attempts'), {
+          latihanId: paket.id,
+          latihanTitle: paket.title,
+          studentName: session.studentName,
+          studentId: session.studentId || null,
+          studentClass: session.studentClass || '5A',
+          answers: answerList,
           score,
           total,
           percent,
-          showScore: paket.showScoreImmediately !== false,
-          name: session.studentName,
-          title: paket.title,
           tpSummary,
+          startedAt: new Date(startedAt.current),
+          finishedAt: serverTimestamp(),
+          durationMs,
         })
-      )
-      sessionStorage.removeItem('rk_session')
-      navigate('/kerjakan/hasil')
-    } catch (err) {
-      console.error(err)
-      alert('Gagal mengirim jawaban. Coba lagi.')
-      setSubmitting(false)
-    }
-  }, [paket, session, questions, answers, current, submitting, navigate])
+
+        sessionStorage.setItem(
+          'rk_result',
+          JSON.stringify({
+            attemptId: attemptRef.id,
+            score,
+            total,
+            percent,
+            showScore: paket.showScoreImmediately !== false,
+            name: session.studentName,
+            title: paket.title,
+            tpSummary,
+          })
+        )
+        sessionStorage.removeItem('rk_session')
+        if (paket.id) clearProgress(paket.id, session)
+        navigate('/kerjakan/hasil')
+      } catch (err) {
+        console.error(err)
+        alert('Gagal mengirim jawaban. Coba lagi.')
+        setSubmitting(false)
+      }
+    },
+    [paket, session, questions, answers, current, submitting, navigate]
+  )
+
+  useEffect(() => {
+    submitQuizRef.current = submitQuiz
+  }, [submitQuiz])
 
   if (loading) {
     return (
@@ -393,7 +435,10 @@ export default function KerjakanQuiz() {
       <div className="min-h-screen flex items-center justify-center bg-[#F5F6FA] p-4">
         <div className="bg-white rounded-2xl p-8 shadow-sm text-center max-w-sm">
           <p className="text-gray-700 mb-4">{error || 'Tidak ada soal'}</p>
-          <button onClick={() => navigate('/kerjakan')} className="text-indigo-600 font-medium text-sm">
+          <button
+            onClick={() => navigate('/siswa')}
+            className="text-indigo-600 font-medium text-sm"
+          >
             Kembali
           </button>
         </div>
@@ -418,7 +463,6 @@ export default function KerjakanQuiz() {
 
   return (
     <div className="min-h-screen bg-[#F5F6FA] flex flex-col">
-      {/* Top bar */}
       <header className="bg-white border-b border-gray-100 px-4 py-3 sticky top-0 z-10">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -430,7 +474,11 @@ export default function KerjakanQuiz() {
           </div>
           <div className="flex items-center gap-3 shrink-0">
             {timeLeft !== null && (
-              <span className={`text-sm font-mono font-semibold ${timeLeft < 60 ? 'text-red-600' : 'text-gray-700'}`}>
+              <span
+                className={`text-sm font-mono font-semibold ${
+                  timeLeft < 60 ? 'text-red-600' : 'text-gray-700'
+                }`}
+              >
                 {formatTime(timeLeft)}
               </span>
             )}
@@ -439,7 +487,6 @@ export default function KerjakanQuiz() {
             </span>
           </div>
         </div>
-        {/* Progress */}
         <div className="max-w-3xl mx-auto mt-2 flex gap-1 flex-wrap">
           {questions.map((qq, i) => {
             const a = answers[qq.id!]
@@ -453,8 +500,8 @@ export default function KerjakanQuiz() {
                   i === current
                     ? 'bg-indigo-600 text-white'
                     : done
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                 }`}
               >
                 {i + 1}
@@ -470,7 +517,6 @@ export default function KerjakanQuiz() {
             Soal {current + 1} dari {questions.length}
             {q.tp ? ` · TP ${q.tp}` : ''}
           </p>
-          {/* Stimulus teks + gambar (pola tka2026: frame terbatas + lightbox) */}
           {(q.stimulus || q.stimulusImage) && (
             <div className="mb-4 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
               {q.stimulusImage &&
@@ -512,13 +558,12 @@ export default function KerjakanQuiz() {
             )}
           </div>
 
-          {/* Options */}
           {q.type === 'category' ? (
             <div className="space-y-3">
               <p className="text-xs text-gray-400">
-                Pilih {(q.categoryLabels || DEFAULT_CATEGORY_LABELS).join(' / ')} untuk setiap pernyataan
+                Pilih {(q.categoryLabels || DEFAULT_CATEGORY_LABELS).join(' / ')} untuk setiap
+                pernyataan
               </p>
-              {/* Tabel (desktop) — pola tka2026 pgk-cat */}
               <div className="hidden sm:block overflow-x-auto rounded-xl border border-gray-100">
                 <table className="w-full text-sm">
                   <thead>
@@ -533,104 +578,88 @@ export default function KerjakanQuiz() {
                     </tr>
                   </thead>
                   <tbody>
-                    {q.options.map((stmt, si) => {
-                      const labels = q.categoryLabels || DEFAULT_CATEGORY_LABELS
-                      const val = selected[si]
-                      return (
-                        <tr key={si} className="border-t border-gray-50">
-                          <td className="px-3 py-2.5 text-gray-400 align-top">{si + 1}</td>
-                          <td className="px-3 py-2.5 text-gray-800 align-top">{stmt}</td>
-                          {labels.map((lab, li) => (
-                            <td key={lab} className="px-3 py-2.5 text-center align-middle">
-                              <button
-                                type="button"
-                                onClick={() => setCategory(q.id!, si, li, q.options.length)}
-                                className={`inline-flex items-center justify-center min-w-[4.5rem] px-2 py-1.5 rounded-lg text-xs font-medium border transition ${
-                                  val === li
-                                    ? 'bg-indigo-600 border-indigo-600 text-white'
-                                    : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300'
-                                }`}
-                              >
-                                {lab}
-                              </button>
-                            </td>
-                          ))}
-                        </tr>
-                      )
-                    })}
+                    {(q.statements || []).map((stmt, si) => (
+                      <tr key={si} className="border-t border-gray-50">
+                        <td className="px-3 py-2 text-gray-400">{si + 1}</td>
+                        <td className="px-3 py-2 text-gray-800">{stmt}</td>
+                        {(q.categoryLabels || DEFAULT_CATEGORY_LABELS).map((_, li) => (
+                          <td key={li} className="px-3 py-2 text-center">
+                            <input
+                              type="radio"
+                              name={`cat-${q.id}-${si}`}
+                              checked={selected[si] === li}
+                              onChange={() =>
+                                setCategory(q.id!, si, li, (q.statements || []).length)
+                              }
+                              className="accent-indigo-600"
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
-              {/* Kartu (mobile) */}
               <div className="sm:hidden space-y-3">
-                {q.options.map((stmt, si) => {
-                  const labels = q.categoryLabels || [...DEFAULT_CATEGORY_LABELS]
-                  const val = selected[si]
-                  return (
-                    <div key={si} className="border border-gray-100 rounded-xl p-3">
-                      <p className="text-sm text-gray-800 mb-2">
-                        {si + 1}. {stmt}
-                      </p>
-                      <div className="flex gap-2 flex-wrap">
-                        {labels.map((lab, li) => (
-                          <button
-                            key={lab}
-                            type="button"
-                            onClick={() => setCategory(q.id!, si, li, q.options.length)}
-                            className={`flex-1 min-w-[5rem] py-2 rounded-lg text-sm font-medium border transition ${
-                              val === li
-                                ? 'bg-indigo-600 border-indigo-600 text-white'
-                                : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300'
-                            }`}
-                          >
-                            {lab}
-                          </button>
-                        ))}
-                      </div>
+                {(q.statements || []).map((stmt, si) => (
+                  <div key={si} className="rounded-xl border border-gray-100 p-3">
+                    <p className="text-sm text-gray-800 mb-2">
+                      <span className="text-gray-400 mr-1">{si + 1}.</span>
+                      {stmt}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {(q.categoryLabels || DEFAULT_CATEGORY_LABELS).map((lab, li) => (
+                        <button
+                          key={li}
+                          type="button"
+                          onClick={() => setCategory(q.id!, si, li, (q.statements || []).length)}
+                          className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition ${
+                            selected[si] === li
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'bg-white text-gray-600 border-gray-200'
+                          }`}
+                        >
+                          {lab}
+                        </button>
+                      ))}
                     </div>
-                  )
-                })}
+                  </div>
+                ))}
               </div>
             </div>
           ) : (
             <div className="space-y-2">
-              {q.type === 'multiple' && (
-                <p className="text-xs text-gray-400 mb-2">Pilih semua jawaban yang benar</p>
-              )}
-              {(paket?.shuffleOptions === false
-                ? q.options.map((_, i) => i)
-                : optionOrder(q.id || String(current), q.options.length)
-              ).map((oi, letterIndex) => {
-                const opt = q.options[oi]
-                const isOn = selected.includes(oi)
-                const letter = letterIndex
+              {optionOrder(q.id || 'x', (q.options || []).length).map((oi) => {
+                const opt = (q.options || [])[oi]
+                const isMulti = q.type === 'multiple' || q.type === 'complex'
+                const checked = selected.includes(oi)
                 return (
                   <button
                     key={oi}
                     type="button"
                     onClick={() =>
-                      q.type === 'multiple' ? toggleMulti(q.id!, oi) : setSingle(q.id!, oi)
+                      isMulti ? toggleMulti(q.id!, oi) : setSingle(q.id!, oi)
                     }
-                    className={`w-full text-left flex items-start gap-3 px-4 py-3 rounded-xl border transition ${
-                      isOn
-                        ? 'bg-indigo-50 border-indigo-300'
-                        : 'bg-gray-50 border-gray-100 hover:border-gray-200'
+                    className={`w-full text-left px-4 py-3 rounded-xl border transition flex items-start gap-3 ${
+                      checked
+                        ? 'border-indigo-300 bg-indigo-50 ring-1 ring-indigo-100'
+                        : 'border-gray-100 bg-white hover:border-gray-200'
                     }`}
                   >
                     <span
-                      className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
-                        isOn ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-500'
+                      className={`mt-0.5 shrink-0 w-5 h-5 rounded-${isMulti ? 'md' : 'full'} border flex items-center justify-center ${
+                        checked
+                          ? 'border-indigo-600 bg-indigo-600 text-white'
+                          : 'border-gray-300'
                       }`}
                     >
-                      {q.type === 'multiple' && isOn ? (
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      {checked && (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                         </svg>
-                      ) : (
-                        String.fromCharCode(65 + letter)
                       )}
                     </span>
-                    <span className="text-sm text-gray-800 pt-0.5">{opt}</span>
+                    <span className="text-sm text-gray-800 leading-relaxed">{opt}</span>
                   </button>
                 )
               })}
@@ -638,12 +667,12 @@ export default function KerjakanQuiz() {
           )}
         </div>
 
-        <div className="flex justify-between mt-5 gap-3">
+        <div className="mt-4 flex items-center justify-between gap-3">
           <button
             type="button"
-            onClick={() => goTo(Math.max(0, current - 1))}
             disabled={current === 0}
-            className="px-5 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 disabled:opacity-40 hover:bg-gray-50"
+            onClick={() => goTo(current - 1)}
+            className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 disabled:opacity-40 hover:bg-white"
           >
             Sebelumnya
           </button>
@@ -651,54 +680,47 @@ export default function KerjakanQuiz() {
             <button
               type="button"
               onClick={() => goTo(current + 1)}
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700"
+              className="px-5 py-2.5 rounded-xl text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700"
             >
               Selanjutnya
             </button>
           ) : (
             <button
               type="button"
-              onClick={() => submitQuiz(false)}
               disabled={submitting}
-              className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-60"
+              onClick={() => submitQuiz(false)}
+              className="px-5 py-2.5 rounded-xl text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
             >
-              {submitting ? 'Mengirim...' : 'Kirim Jawaban'}
+              {submitting ? 'Mengirim...' : 'Kirim jawaban'}
             </button>
           )}
         </div>
       </main>
 
-      {/* Lightbox stimulus — tidak menutup saat klik backdrop (hanya Tutup / Esc) */}
       {lightbox && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Pratinjau stimulus"
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
         >
-          <div className="relative bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-auto p-4 md:p-6">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <div className="flex items-center gap-2">
+          <div
+            className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-auto p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setLbScale((s) => Math.min(3, Math.round((s + 0.25) * 100) / 100))}
-                  className="px-2.5 py-1 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  onClick={() => setLbScale((s) => Math.min(3, s + 0.25))}
+                  className="text-xs px-2 py-1 rounded-lg border border-gray-200"
                 >
                   +
                 </button>
                 <button
                   type="button"
-                  onClick={() => setLbScale((s) => Math.max(0.5, Math.round((s - 0.25) * 100) / 100))}
-                  className="px-2.5 py-1 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  onClick={() => setLbScale((s) => Math.max(0.5, s - 0.25))}
+                  className="text-xs px-2 py-1 rounded-lg border border-gray-200"
                 >
                   −
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLbScale(1)}
-                  className="px-2.5 py-1 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 hover:bg-gray-50"
-                >
-                  100%
                 </button>
               </div>
               <button
