@@ -18,7 +18,6 @@ function rowsToCsv(headers: string[], rows: (string | number)[][]): string {
     headers.map(cell).join(','),
     ...rows.map((r) => r.map(cell).join(',')),
   ]
-  // BOM agar Excel Windows mengenali UTF-8
   return '\uFEFF' + lines.join('\r\n')
 }
 
@@ -68,19 +67,22 @@ function formatDate(ms: number | null) {
 export interface GradeExportInput {
   attempts: LatihanAttempt[]
   paketMap: Map<string, LatihanPaket>
-  /** Filter mapel aktif (kosong = semua) */
   filterSubject?: string
   filterClass?: string
 }
 
-/**
- * Matriks nilai akhir per mapel (rata-rata percent per subjectKey).
- * Kolom: Nama, Kelas, [mapel...], Rata-rata, Jumlah Kuis
- */
-export function buildNilaiPerMapelCsv(input: GradeExportInput): string {
-  const { attempts, paketMap, filterSubject, filterClass } = input
+export interface TableData {
+  title: string
+  subtitle: string
+  headers: string[]
+  rows: (string | number)[][]
+  /** landscape jika banyak kolom */
+  landscape?: boolean
+}
 
-  const filtered = attempts.filter((a) => {
+function filterAttempts(input: GradeExportInput): LatihanAttempt[] {
+  const { attempts, paketMap, filterSubject, filterClass } = input
+  return attempts.filter((a) => {
     if (filterClass && (a.studentClass || '').trim() !== filterClass) return false
     if (filterSubject) {
       const p = paketMap.get(a.latihanId)
@@ -88,8 +90,24 @@ export function buildNilaiPerMapelCsv(input: GradeExportInput): string {
     }
     return true
   })
+}
 
-  // subject keys that appear
+function filterLabel(input: GradeExportInput): string {
+  const parts: string[] = []
+  if (input.filterSubject) {
+    parts.push(getSubject(input.filterSubject as SubjectKey)?.name || input.filterSubject)
+  } else {
+    parts.push('Semua mapel')
+  }
+  if (input.filterClass) parts.push(`Kelas ${input.filterClass}`)
+  else parts.push('Semua kelas')
+  return parts.join(' · ')
+}
+
+export function buildNilaiPerMapelTable(input: GradeExportInput): TableData {
+  const { paketMap, filterSubject } = input
+  const filtered = filterAttempts(input)
+
   const subjectSet = new Set<string>()
   filtered.forEach((a) => {
     const sk = paketMap.get(a.latihanId)?.subjectKey
@@ -100,7 +118,6 @@ export function buildNilaiPerMapelCsv(input: GradeExportInput): string {
       ? [filterSubject]
       : SUBJECTS.map((s) => s.key).filter((k) => subjectSet.has(k))
   ) as SubjectKey[]
-  // include unknown subjects at end
   subjectSet.forEach((k) => {
     if (!subjectKeys.includes(k as SubjectKey)) subjectKeys.push(k as SubjectKey)
   })
@@ -152,30 +169,23 @@ export function buildNilaiPerMapelCsv(input: GradeExportInput): string {
     .map((s, i) => {
       const subScores = subjectKeys.map((k) => {
         const v = s.bySub.get(k)
-        return v && v.n ? Math.round(v.sum / v.n) : ''
+        return v && v.n ? Math.round(v.sum / v.n) : '—'
       })
-      const avg = s.totalN ? Math.round(s.totalSum / s.totalN) : ''
-      return [i + 1, s.name, s.className || '', ...subScores, avg, s.totalN]
+      const avg = s.totalN ? Math.round(s.totalSum / s.totalN) : '—'
+      return [i + 1, s.name, s.className || '—', ...subScores, avg, s.totalN]
     })
 
-  return rowsToCsv(headers, rows)
+  return {
+    title: 'Nilai Akhir per Mata Pelajaran',
+    subtitle: filterLabel(input),
+    headers,
+    rows,
+    landscape: subjectKeys.length > 4,
+  }
 }
 
-/**
- * Rekap per siswa: keseluruhan + ringkas.
- * Kolom: No, Nama, Kelas, Jumlah Kuis, Rata-rata, Skor Terbaik, Benar/Total, Waktu (menit), Terakhir
- */
-export function buildRekapSiswaCsv(input: GradeExportInput): string {
-  const { attempts, paketMap, filterSubject, filterClass } = input
-
-  const filtered = attempts.filter((a) => {
-    if (filterClass && (a.studentClass || '').trim() !== filterClass) return false
-    if (filterSubject) {
-      const p = paketMap.get(a.latihanId)
-      if (!p || p.subjectKey !== filterSubject) return false
-    }
-    return true
-  })
+export function buildRekapSiswaTable(input: GradeExportInput): TableData {
+  const filtered = filterAttempts(input)
 
   type Agg = {
     name: string
@@ -225,11 +235,11 @@ export function buildRekapSiswaCsv(input: GradeExportInput): string {
     'Kelas',
     'Jumlah Kuis',
     'Rata-rata (%)',
-    'Skor Terbaik (%)',
+    'Terbaik (%)',
     'Benar',
     'Total Soal',
-    'Waktu (menit)',
-    'Terakhir Mengerjakan',
+    'Waktu (mnt)',
+    'Terakhir',
   ]
 
   const rows = [...map.values()]
@@ -241,42 +251,39 @@ export function buildRekapSiswaCsv(input: GradeExportInput): string {
     .map((s, i) => [
       i + 1,
       s.name,
-      s.className || '',
+      s.className || '—',
       s.n,
-      s.n ? Math.round(s.sumPct / s.n) : '',
+      s.n ? Math.round(s.sumPct / s.n) : '—',
       Math.round(s.best),
       s.score,
       s.totalQ,
       Math.round(s.ms / 60000),
-      formatDate(s.lastAt),
+      formatDate(s.lastAt) || '—',
     ])
 
-  return rowsToCsv(headers, rows)
+  return {
+    title: 'Rekap Nilai Siswa',
+    subtitle: filterLabel(input),
+    headers,
+    rows,
+    landscape: true,
+  }
 }
 
-/** Detail setiap attempt (untuk audit). */
-export function buildDetailAttemptCsv(input: GradeExportInput): string {
-  const { attempts, paketMap, filterSubject, filterClass } = input
-
-  const filtered = attempts.filter((a) => {
-    if (filterClass && (a.studentClass || '').trim() !== filterClass) return false
-    if (filterSubject) {
-      const p = paketMap.get(a.latihanId)
-      if (!p || p.subjectKey !== filterSubject) return false
-    }
-    return true
-  })
+export function buildDetailAttemptTable(input: GradeExportInput): TableData {
+  const { paketMap } = input
+  const filtered = filterAttempts(input)
 
   const headers = [
     'No',
     'Nama Siswa',
     'Kelas',
     'Judul Paket',
-    'Mata Pelajaran',
+    'Mapel',
     'Skor (%)',
     'Benar',
     'Total',
-    'Waktu (menit)',
+    'Waktu (mnt)',
     'Selesai',
   ]
 
@@ -292,23 +299,113 @@ export function buildDetailAttemptCsv(input: GradeExportInput): string {
       const sk = p?.subjectKey
       return [
         i + 1,
-        a.studentName || '',
-        a.studentClass || '',
+        a.studentName || '—',
+        a.studentClass || '—',
         a.latihanTitle || p?.title || a.latihanId,
-        sk ? getSubject(sk)?.name || sk : '',
-        a.percent ?? '',
-        a.score ?? '',
-        a.total ?? '',
-        a.durationMs != null ? Math.round(a.durationMs / 60000) : '',
-        formatDate(toMillis(a.finishedAt)),
+        sk ? getSubject(sk)?.shortName || sk : '—',
+        a.percent ?? '—',
+        a.score ?? '—',
+        a.total ?? '—',
+        a.durationMs != null ? Math.round(a.durationMs / 60000) : '—',
+        formatDate(toMillis(a.finishedAt)) || '—',
       ]
     })
 
-  return rowsToCsv(headers, rows)
+  return {
+    title: 'Detail Pengerjaan Kuis',
+    subtitle: filterLabel(input),
+    headers,
+    rows,
+    landscape: true,
+  }
 }
 
-export function stampFilename(prefix: string) {
+/** CSV wrappers (kompatibel API lama) */
+export function buildNilaiPerMapelCsv(input: GradeExportInput): string {
+  const t = buildNilaiPerMapelTable(input)
+  return rowsToCsv(t.headers, t.rows)
+}
+
+export function buildRekapSiswaCsv(input: GradeExportInput): string {
+  const t = buildRekapSiswaTable(input)
+  return rowsToCsv(t.headers, t.rows)
+}
+
+export function buildDetailAttemptCsv(input: GradeExportInput): string {
+  const t = buildDetailAttemptTable(input)
+  return rowsToCsv(t.headers, t.rows)
+}
+
+export function stampFilename(prefix: string, ext: 'csv' | 'pdf' = 'csv') {
   const d = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
-  return `${prefix}_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.csv`
+  return `${prefix}_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.${ext}`
+}
+
+/** Generate & unduh PDF tabel. */
+export async function downloadPdfTable(filename: string, data: TableData) {
+  const { default: jsPDF } = await import('jspdf')
+  const { default: autoTable } = await import('jspdf-autotable')
+
+  const doc = new jsPDF({
+    orientation: data.landscape ? 'landscape' : 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  })
+
+  const pageW = doc.internal.pageSize.getWidth()
+  const margin = 12
+
+  doc.setFontSize(14)
+  doc.setTextColor(30, 30, 40)
+  doc.text(data.title, margin, 16)
+
+  doc.setFontSize(9)
+  doc.setTextColor(100, 100, 110)
+  doc.text(data.subtitle, margin, 22)
+
+  const generated = new Date().toLocaleString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  doc.text(`Dicetak: ${generated} · Ruang Kuis`, pageW - margin, 22, { align: 'right' })
+
+  autoTable(doc, {
+    startY: 28,
+    head: [data.headers],
+    body: data.rows.map((r) => r.map((c) => (c == null ? '' : String(c)))),
+    styles: {
+      fontSize: data.landscape ? 8 : 9,
+      cellPadding: 2,
+      overflow: 'linebreak',
+      valign: 'middle',
+    },
+    headStyles: {
+      fillColor: [79, 70, 229],
+      textColor: 255,
+      fontStyle: 'bold',
+      halign: 'center',
+    },
+    alternateRowStyles: { fillColor: [245, 246, 250] },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 10 },
+    },
+    margin: { left: margin, right: margin },
+    didDrawPage: (hook) => {
+      const pageCount = doc.getNumberOfPages()
+      doc.setFontSize(8)
+      doc.setTextColor(150)
+      doc.text(
+        `Halaman ${hook.pageNumber} / ${pageCount}`,
+        pageW / 2,
+        doc.internal.pageSize.getHeight() - 8,
+        { align: 'center' }
+      )
+    },
+  })
+
+  doc.save(filename)
 }
