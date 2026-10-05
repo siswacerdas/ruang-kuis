@@ -8,6 +8,16 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+<<<<<<< Updated upstream
+=======
+### Added — Generate gambar stimulus dengan AI (editor soal)
+- Tombol **✨ Buat gambar dengan AI** di bawah field *Gambar stimulus* (muncul saat soal belum punya gambar; setelah jadi berubah menjadi **↻ Buat ulang**). Hanya membuat gambar, tidak mengubah isi soal.
+- Prompt gambar ditulis AI dari pertanyaan, opsi, kunci (hanya agar konsisten, tidak digambar), dan stimulus teks; ada kolom arahan opsional dari guru.
+- Memakai ulang `generateOpenAiImage` (model & aturan "tanpa teks/jawaban" yang sama dengan generate soal).
+- Hasil otomatis dikonversi di browser ke JPEG kecil (maks 800 px, ±150 KB) lewat `src/lib/imageCompress.ts`.
+- File: `src/lib/openaiQuestions.ts` (`generateStimulusImage`), `src/lib/imageCompress.ts` (baru), `src/pages/TopicQuestions.tsx`.
+
+>>>>>>> Stashed changes
 ### Added — Progress per studentId + riwayat siswa
 - Tipe `LatihanAttempt.studentId` (sudah diisi saat submit dari `rk_session`).
 - **Laporan**: agregasi per siswa memakai `studentId` bila ada, fallback nama (data lama).

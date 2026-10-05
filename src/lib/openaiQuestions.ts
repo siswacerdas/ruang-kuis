@@ -8,6 +8,10 @@
  */
 
 import type { QuestionType, SubjectKey } from '../types/question'
+<<<<<<< Updated upstream
+=======
+import { compressImageSrc } from './imageCompress'
+>>>>>>> Stashed changes
 
 /** Mode stimulus yang diminta guru */
 export type StimulusMode = 'none' | 'text' | 'image'
@@ -411,4 +415,150 @@ export async function generateQuestionsWithOpenAI(
   }
 
   return { drafts, imageWarnings }
+}
+
+/* ============================================================================
+ * GAMBAR SAJA untuk soal yang sudah ada (editor soal)
+ * Alur: (1) teks AI menulis prompt gambar dari soal → (2) GPT Image membuat gambar
+ *       → (3) dikonversi di browser ke JPEG kecil (≤ ±150 KB, maks 800 px).
+ * ============================================================================ */
+
+export type StimulusImageInput = {
+  subjectName: string
+  topicName: string
+  type: QuestionType
+  question: string
+  options: string[]
+  correctAnswers: number[]
+  categoryLabels?: string[]
+  /** Stimulus teks dari editor (boleh HTML) */
+  stimulusHtml?: string
+  /** Arahan tambahan dari guru, mis. "7 apel dan 3 jeruk di atas meja" */
+  hint?: string
+}
+
+export type StimulusImageResult = {
+  dataUrl: string
+  width: number
+  height: number
+  bytesApprox: number
+  imagePrompt: string
+}
+
+const IMAGE_FOR_QUESTION_GUIDANCE = `Kamu membantu guru SD kelas 5 membuat GAMBAR PENDUKUNG untuk satu soal yang sudah jadi.
+Tugasmu: tulis satu prompt gambar (bahasa Inggris, 1–3 kalimat) agar gambar memuat informasi visual yang DIBUTUHKAN siswa untuk menjawab soal.
+Balas HANYA JSON valid: {"imagePrompt":"..."}
+
+Aturan:
+1. Gambar harus konsisten dengan soal dan kunci jawaban (jumlah benda, posisi, urutan, perbandingan), tetapi JANGAN membocorkan kunci: tanpa lingkaran/centang/tanda pada opsi benar, tanpa tulisan jawaban.
+2. Tampilkan DATA atau KONTEKS yang harus ditafsirkan siswa (benda untuk dihitung, situasi, diagram sederhana, denah, grafik kasar), bukan sekadar hasil akhir.
+3. Hindari teks, angka, dan label di dalam gambar (model gambar sering salah menulis). Bila soal benar-benar membutuhkannya, minta sesedikit mungkin, besar, dan jelas.
+4. Gaya: ilustrasi sederhana, warna cerah, latar putih/polos, objek besar dan jelas, sedikit objek (maksimal sekitar 10), aman untuk anak.
+5. Jangan menggambar tokoh nyata atau merek dagang.
+6. Jika ada arahan guru, ikuti selama tidak membocorkan jawaban.`
+
+function htmlToPlainText(html: string): string {
+  if (!html) return ''
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  return (doc.body.textContent || '').replace(/\s+/g, ' ').trim()
+}
+
+function buildImagePromptRequest(input: StimulusImageInput): string {
+  const letters = 'ABCDEFGH'
+  const opts = input.options.map((o) => o.trim())
+  const optionLines = opts
+    .map((o, i) => (o ? `${letters[i] || i + 1}. ${o}` : ''))
+    .filter(Boolean)
+    .join('\n')
+
+  let keyLine = ''
+  if (input.type === 'category') {
+    const labels = input.categoryLabels?.length ? input.categoryLabels : ['Benar', 'Salah']
+    keyLine = opts
+      .map((o, i) => (o ? `- ${o} → ${labels[input.correctAnswers[i]] ?? '?'}` : ''))
+      .filter(Boolean)
+      .join('\n')
+  } else {
+    keyLine = input.correctAnswers
+      .map((i) => (opts[i] ? `${letters[i] || i + 1}. ${opts[i]}` : ''))
+      .filter(Boolean)
+      .join('; ')
+  }
+
+  const stim = htmlToPlainText(input.stimulusHtml || '')
+
+  return [
+    `Mapel: ${input.subjectName}`,
+    `Materi: ${input.topicName}`,
+    `Pertanyaan: ${input.question.trim()}`,
+    optionLines ? `Opsi:\n${optionLines}` : '',
+    keyLine ? `Kunci (hanya agar gambar konsisten — JANGAN digambar/ditulis):\n${keyLine}` : '',
+    stim ? `Teks stimulus yang sudah ada: ${stim}` : '',
+    input.hint?.trim() ? `Arahan guru untuk gambar: ${input.hint.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+/**
+ * Buat HANYA gambar stimulus untuk satu soal yang sudah ada.
+ * Hasil sudah dikonversi ke JPEG kecil (data-URL) dan siap diisi ke form.stimulusImage.
+ */
+export async function generateStimulusImage(
+  input: StimulusImageInput
+): Promise<StimulusImageResult> {
+  const key = import.meta.env.VITE_OPENAI_API_KEY?.trim()
+  if (!key) {
+    throw new Error(
+      'VITE_OPENAI_API_KEY belum diisi. Tambahkan di file .env lalu restart npm run dev.'
+    )
+  }
+  if (!input.question.trim()) {
+    throw new Error('Isi pertanyaan terlebih dahulu agar gambar sesuai soal.')
+  }
+
+  // (1) Prompt gambar dari soal
+  let imagePrompt = ''
+  try {
+    const model = import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini'
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model,
+        temperature: 0.6,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: IMAGE_FOR_QUESTION_GUIDANCE },
+          { role: 'user', content: buildImagePromptRequest(input) },
+        ],
+      }),
+    })
+    if (res.status === 401) throw new Error('API key OpenAI tidak valid (401).')
+    if (res.status === 429) throw new Error('Batas kuota/rate OpenAI (429). Coba lagi nanti.')
+    if (res.ok) {
+      const data = await res.json()
+      const content = data?.choices?.[0]?.message?.content
+      if (typeof content === 'string') {
+        imagePrompt = String(JSON.parse(content)?.imagePrompt || '').trim()
+      }
+    }
+  } catch (e: any) {
+    // Kesalahan kunci/kuota diteruskan; selain itu pakai fallback di bawah
+    if (/401|429/.test(String(e?.message))) throw e
+  }
+  if (!imagePrompt) {
+    imagePrompt = `Simple educational illustration for an elementary school question: ${input.question.trim()}`
+  }
+  if (input.hint?.trim() && !imagePrompt.toLowerCase().includes(input.hint.trim().toLowerCase())) {
+    imagePrompt = `${imagePrompt} Teacher note: ${input.hint.trim()}`
+  }
+
+  // (2) Gambar (memakai fungsi yang sama dengan generate soal: model, fallback, aturan "tanpa teks/jawaban")
+  const img = await generateOpenAiImage(imagePrompt, key)
+  if (!img.url) throw new Error(img.error || 'Gagal membuat gambar')
+
+  // (3) Konversi ke ukuran/resolusi kecil agar muat disimpan di dokumen soal
+  const small = await compressImageSrc(img.url, { maxSide: 800, targetChars: 200_000 })
+  return { ...small, imagePrompt }
 }

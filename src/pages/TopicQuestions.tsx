@@ -17,7 +17,15 @@ import { Link, useParams, useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import Layout from '../components/Layout'
 import AiQuestionGenerator from '../components/AiQuestionGenerator'
+<<<<<<< Updated upstream
 import type { AiDraftQuestion } from '../lib/openaiQuestions'
+=======
+import {
+  generateStimulusImage,
+  isOpenAiConfigured,
+  type AiDraftQuestion,
+} from '../lib/openaiQuestions'
+>>>>>>> Stashed changes
 import {
   getSubject,
   QUESTION_TYPE_LABELS,
@@ -667,6 +675,11 @@ export default function TopicQuestions() {
   const [error, setError] = useState('')
   const [imageBusy, setImageBusy] = useState(false)
   const [imageInfo, setImageInfo] = useState('')
+  // Generate gambar stimulus dengan AI (editor soal)
+  const [aiImageBusy, setAiImageBusy] = useState(false)
+  const [aiImageHint, setAiImageHint] = useState('')
+  const [aiImageError, setAiImageError] = useState('')
+  const [aiImageMade, setAiImageMade] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [showStimulusPreview, setShowStimulusPreview] = useState(false)
   const [previewAnswers, setPreviewAnswers] = useState<number[]>([])
@@ -738,10 +751,19 @@ export default function TopicQuestions() {
     }
   }
 
+  const resetAiImageState = () => {
+    setAiImageBusy(false)
+    setAiImageHint('')
+    setAiImageError('')
+    setAiImageMade(false)
+    setImageInfo('')
+  }
+
   const openNew = () => {
     setEditingId(null)
     setForm(emptyForm())
     setError('')
+    resetAiImageState()
     setShowEditor(true)
   }
 
@@ -763,7 +785,42 @@ export default function TopicQuestions() {
       materialName: q.materialName || topic?.name || '',
     })
     setError('')
+    resetAiImageState()
     setShowEditor(true)
+  }
+
+  /** Buat HANYA gambar stimulus dari isi soal yang sedang diedit. */
+  const handleGenerateAiImage = async () => {
+    if (aiImageBusy || !subject) return
+    if (!form.question.trim()) {
+      setAiImageError('Isi pertanyaan terlebih dahulu agar gambar sesuai soal.')
+      return
+    }
+    setAiImageBusy(true)
+    setAiImageError('')
+    setImageInfo('')
+    try {
+      const result = await generateStimulusImage({
+        subjectName: subject.name,
+        topicName: topic?.name || '',
+        type: form.type,
+        question: form.question,
+        options: form.options,
+        correctAnswers: form.correctAnswers,
+        categoryLabels: form.categoryLabels,
+        stimulusHtml: form.stimulus,
+        hint: aiImageHint,
+      })
+      setForm((prev) => ({ ...prev, stimulusImage: result.dataUrl }))
+      setAiImageMade(true)
+      const kb = Math.round(result.bytesApprox / 1024)
+      setImageInfo(`Gambar AI siap: ${result.width}×${result.height}px · ~${kb} KB`)
+    } catch (err: any) {
+      console.error(err)
+      setAiImageError(err?.message || 'Gagal membuat gambar dengan AI.')
+    } finally {
+      setAiImageBusy(false)
+    }
   }
 
   const closeEditor = () => {
@@ -1323,6 +1380,7 @@ export default function TopicQuestions() {
                     try {
                       const result = await compressStimulusImage(file)
                       setForm((prev) => ({ ...prev, stimulusImage: result.dataUrl }))
+                      setAiImageMade(false)
                       const kb = Math.round(result.bytesApprox / 1024)
                       setImageInfo(
                         `Siap: ${result.width}×${result.height}px · ~${kb} KB (otomatis dioptimalkan)`
@@ -1343,6 +1401,37 @@ export default function TopicQuestions() {
                 {!imageBusy && imageInfo && form.stimulusImage && (
                   <p className="text-xs text-emerald-700 mt-1.5">{imageInfo}</p>
                 )}
+
+                {/* Generate gambar dengan AI — untuk soal yang butuh gambar tapi belum punya */}
+                {isOpenAiConfigured() && (!form.stimulusImage || aiImageMade) && (
+                  <div className="mt-3 p-3 rounded-xl border border-indigo-100 bg-indigo-50/50">
+                    <input
+                      type="text"
+                      value={aiImageHint}
+                      onChange={(e) => setAiImageHint(e.target.value)}
+                      disabled={aiImageBusy}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-xs mb-2 disabled:opacity-50"
+                      placeholder="Arahan gambar (opsional), mis. 7 apel dan 3 jeruk di atas meja"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleGenerateAiImage}
+                      disabled={aiImageBusy || imageBusy}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-50 disabled:opacity-60 px-3 py-1.5 rounded-lg transition"
+                    >
+                      {aiImageBusy
+                        ? '⏳ Membuat gambar…'
+                        : form.stimulusImage
+                          ? '↻ Buat ulang dengan AI'
+                          : '✨ Buat gambar dengan AI'}
+                    </button>
+                    <p className="text-[11px] text-gray-500 mt-1.5">
+                      Gambar dibuat dari pertanyaan &amp; opsi soal, lalu otomatis diperkecil. Periksa
+                      dulu apakah gambar sudah sesuai soal (misalnya jumlah benda) sebelum menyimpan.
+                    </p>
+                    {aiImageError && <p className="text-xs text-red-600 mt-1.5">{aiImageError}</p>}
+                  </div>
+                )}
                 {form.stimulusImage && (
                   <div className="mt-2 relative">
                     <img
@@ -1355,6 +1444,7 @@ export default function TopicQuestions() {
                       onClick={() => {
                         setForm({ ...form, stimulusImage: '' })
                         setImageInfo('')
+                        setAiImageMade(false)
                       }}
                       className="absolute top-1 right-1 text-xs bg-white/90 border border-gray-200 rounded px-1.5 py-0.5 text-red-600"
                     >

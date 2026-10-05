@@ -1,0 +1,460 @@
+From 1191334ecff38f8ee5b7f349aa7df4f7814d85b1 Mon Sep 17 00:00:00 2001
+From: claude <claude@example.com>
+Date: Sun, 4 Oct 2026 22:55:24 +0000
+Subject: [PATCH] feat: kompres otomatis gambar soal AI (aturan bersama
+ imageCompress)
+
+---
+ CHANGELOG.md                           |   7 ++
+ docs/ANTI_REGRESSION.md                |   4 +-
+ src/components/AiQuestionGenerator.tsx |  18 ++--
+ src/lib/imageCompress.ts               | 110 +++++++++++++++++++++++++
+ src/lib/openaiQuestions.ts             | 104 +++++++++++++++--------
+ src/pages/TopicQuestions.tsx           |  80 ++++--------------
+ 6 files changed, 218 insertions(+), 105 deletions(-)
+ create mode 100644 src/lib/imageCompress.ts
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index df69225..0357051 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -8,6 +8,13 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
+ 
+ ## [Unreleased]
+ 
++### Changed — Gambar soal AI otomatis dikompres
++- Gambar hasil AI kini dikompres otomatis dengan aturan yang sama seperti unggah manual (maks 1200 px, ≤ ~450 KB, JPEG).
++- Permintaan ke API gambar: 1024x1024, quality low, keluaran JPEG (fallback tanpa `output_format` bila model menolak); prompt diberi gaya sederhana/kontras tinggi agar tetap terbaca saat kecil.
++- Aturan kompres dipindah ke `src/lib/imageCompress.ts` (satu sumber; `compressStimulusImage` di `TopicQuestions.tsx` memakainya).
++- Jaring pengaman di `saveAiDrafts`: gambar data-URL > target dikompres ulang sebelum disimpan.
++- Pratinjau draf AI menampilkan perkiraan ukuran gambar.
++
+ ### Added — Progress per studentId + riwayat siswa
+ - Tipe `LatihanAttempt.studentId` (sudah diisi saat submit dari `rk_session`).
+ - **Laporan**: agregasi per siswa memakai `studentId` bila ada, fallback nama (data lama).
+diff --git a/docs/ANTI_REGRESSION.md b/docs/ANTI_REGRESSION.md
+index 81fbb26..be8085b 100644
+--- a/docs/ANTI_REGRESSION.md
++++ b/docs/ANTI_REGRESSION.md
+@@ -22,7 +22,8 @@ Referensi pola: tka2026 (stimulus, tiga tipe soal, preview, gate token/waktu).
+ |------|----------------|
+ | Skema soal & kunci | `src/types/question.ts`, `questions` |
+ | Import bank soal | `TopicQuestions.tsx` (`normalizeImportItem`, `resolveCorrectAnswers`) |
+-| Editor stimulus | `TopicQuestions.tsx` (HTML, gambar, kompres) |
++| Editor stimulus | `TopicQuestions.tsx` (HTML, gambar) |
++| Kompres gambar (manual + AI) | `src/lib/imageCompress.ts`, `openaiQuestions.ts` |
+ | UI daftar / preview | `TopicQuestions.tsx` (detail + modal preview kuis) |
+ | UI kuis siswa | `KerjakanQuiz.tsx` |
+ | Paket latihan | `LatihanForm.tsx`, `latihan` |
+@@ -43,6 +44,7 @@ Referensi pola: tka2026 (stimulus, tiga tipe soal, preview, gate token/waktu).
+ - [ ] Tiga tipe: single / multiple / category
+ - [ ] Stimulus HTML (B/I/U, perataan, spasi baris, persamaan) tersimpan & tampil lagi saat edit
+ - [ ] Gambar stimulus: unggah file besar → otomatis dikompres; preview di detail daftar
++- [ ] Generate soal AI mode gambar: gambar tampil di draf dengan ukuran ≤ ~450 KB, soal tersimpan, dan tampil di kuis siswa
+ - [ ] **Preview stimulus** (form edit) hanya menampilkan bacaan + gambar
+ - [ ] **Preview kuis** (dari daftar) menampilkan stimulus + gambar + opsi **tanpa** kunci jawaban
+ - [ ] Field skor / kompleksitas / TP tersimpan
+diff --git a/src/components/AiQuestionGenerator.tsx b/src/components/AiQuestionGenerator.tsx
+index 0e4de5e..d3ad134 100644
+--- a/src/components/AiQuestionGenerator.tsx
++++ b/src/components/AiQuestionGenerator.tsx
+@@ -6,6 +6,7 @@ import {
+   type StimulusMode,
+   type KompleksitasLevel,
+ } from '../lib/openaiQuestions'
++import { dataUrlBytes } from '../lib/imageCompress'
+ import {
+   QUESTION_TYPE_LABELS,
+   type QuestionType,
+@@ -316,11 +317,18 @@ export default function AiQuestionGenerator({ open, onClose, subject, topic, onA
+                       )}
+                     </div>
+                     {d.stimulusImage ? (
+-                      <img
+-                        src={d.stimulusImage}
+-                        alt=""
+-                        className="mb-2 max-h-28 rounded-lg border border-gray-100 object-contain bg-gray-50"
+-                      />
++                      <div className="mb-2">
++                        <img
++                          src={d.stimulusImage}
++                          alt=""
++                          className="max-h-28 rounded-lg border border-gray-100 object-contain bg-gray-50"
++                        />
++                        {d.stimulusImage.startsWith('data:') && (
++                          <p className="mt-0.5 text-[10px] text-gray-400">
++                            ±{Math.round(dataUrlBytes(d.stimulusImage) / 1024)} KB (sudah dikompres)
++                          </p>
++                        )}
++                      </div>
+                     ) : d.imagePrompt ? (
+                       <p className="mb-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1">
+                         Gambar belum tersedia. Prompt: {d.imagePrompt.slice(0, 120)}
+diff --git a/src/lib/imageCompress.ts b/src/lib/imageCompress.ts
+new file mode 100644
+index 0000000..3f40312
+--- /dev/null
++++ b/src/lib/imageCompress.ts
+@@ -0,0 +1,110 @@
++/**
++ * Kompres gambar untuk kuis (satu sumber aturan, dipakai unggah manual + gambar AI).
++ *
++ * Gambar stimulus hanya dikonsumsi di layar kuis siswa, jadi targetnya:
++ * terbaca jelas + kecil (cepat dimuat, aman di batas dokumen Firestore ~1 MiB).
++ */
++
++export const QUIZ_IMAGE = {
++  /** Sisi terpanjang maksimum (px). Tidak pernah memperbesar gambar kecil. */
++  maxWidth: 1200,
++  maxHeight: 1200,
++  /** Batas panjang string data-URL (~450 KB). */
++  targetChars: 450_000,
++  startQuality: 0.88,
++  minQuality: 0.45,
++  /** Resolusi tidak diturunkan di bawah lebar ini. */
++  minWidth: 480,
++} as const
++
++export type CompressedImage = {
++  dataUrl: string
++  width: number
++  height: number
++  bytesApprox: number
++}
++
++/** Perkiraan ukuran biner dari data-URL base64. */
++export function dataUrlBytes(dataUrl: string): number {
++  return Math.round((dataUrl.length * 3) / 4)
++}
++
++/** Data-URL melebihi target kuis? */
++export function isDataUrlTooBig(dataUrl: string): boolean {
++  return dataUrl.startsWith('data:') && dataUrl.length > QUIZ_IMAGE.targetChars
++}
++
++function blobToDataUrl(blob: Blob): Promise<string> {
++  return new Promise((resolve, reject) => {
++    const reader = new FileReader()
++    reader.onerror = () => reject(new Error('Gagal membaca file'))
++    reader.onload = () => resolve(String(reader.result || ''))
++    reader.readAsDataURL(blob)
++  })
++}
++
++async function toDataUrl(source: Blob | string): Promise<string> {
++  if (typeof source !== 'string') return blobToDataUrl(source)
++  if (source.startsWith('data:')) return source
++  // URL biasa: butuh CORS agar bisa dibaca canvas
++  const res = await fetch(source)
++  if (!res.ok) throw new Error(`Gagal mengambil gambar (HTTP ${res.status})`)
++  return blobToDataUrl(await res.blob())
++}
++
++function loadImage(dataUrl: string): Promise<HTMLImageElement> {
++  return new Promise((resolve, reject) => {
++    const img = new Image()
++    img.onerror = () => reject(new Error('File bukan gambar yang valid'))
++    img.onload = () => resolve(img)
++    img.src = dataUrl
++  })
++}
++
++/**
++ * Resize (maks 1200 px) + JPEG ke ≤ ~450 KB: turunkan kualitas dulu,
++ * baru resolusi bila masih terlalu besar.
++ */
++export async function compressImage(source: Blob | string): Promise<CompressedImage> {
++  const img = await loadImage(await toDataUrl(source))
++
++  const scale = Math.min(1, QUIZ_IMAGE.maxWidth / img.width, QUIZ_IMAGE.maxHeight / img.height)
++  const w = Math.max(1, Math.round(img.width * scale))
++  const h = Math.max(1, Math.round(img.height * scale))
++
++  const canvas = document.createElement('canvas')
++  canvas.width = w
++  canvas.height = h
++  const ctx = canvas.getContext('2d')
++  if (!ctx) throw new Error('Canvas tidak tersedia')
++  ctx.fillStyle = '#ffffff'
++  ctx.fillRect(0, 0, w, h)
++  ctx.drawImage(img, 0, 0, w, h)
++
++  let quality: number = QUIZ_IMAGE.startQuality
++  let out = canvas.toDataURL('image/jpeg', quality)
++  while (out.length > QUIZ_IMAGE.targetChars && quality > QUIZ_IMAGE.minQuality) {
++    quality = Math.round((quality - 0.08) * 100) / 100
++    out = canvas.toDataURL('image/jpeg', quality)
++  }
++
++  let cw = w
++  let ch = h
++  while (out.length > QUIZ_IMAGE.targetChars && cw > QUIZ_IMAGE.minWidth) {
++    cw = Math.round(cw * 0.85)
++    ch = Math.round(ch * 0.85)
++    canvas.width = cw
++    canvas.height = ch
++    ctx.fillStyle = '#ffffff'
++    ctx.fillRect(0, 0, cw, ch)
++    ctx.drawImage(img, 0, 0, cw, ch)
++    out = canvas.toDataURL('image/jpeg', 0.75)
++  }
++
++  return {
++    dataUrl: out,
++    width: canvas.width,
++    height: canvas.height,
++    bytesApprox: dataUrlBytes(out),
++  }
++}
+diff --git a/src/lib/openaiQuestions.ts b/src/lib/openaiQuestions.ts
+index ef39e7a..b9a642e 100644
+--- a/src/lib/openaiQuestions.ts
++++ b/src/lib/openaiQuestions.ts
+@@ -8,6 +8,7 @@
+  */
+ 
+ import type { QuestionType, SubjectKey } from '../types/question'
++import { compressImage } from './imageCompress'
+ 
+ /** Mode stimulus yang diminta guru */
+ export type StimulusMode = 'none' | 'text' | 'image'
+@@ -251,6 +252,22 @@ function resolveImageModel(): string {
+   )
+ }
+ 
++/** Gaya gambar: sederhana & tegas agar tetap terbaca saat dikecilkan untuk layar kuis. */
++const IMAGE_STYLE =
++  'Flat vector-style illustration, bold clean shapes, thick outlines, large simple objects, ' +
++  'high contrast, plain white or very light background, minimal fine detail, ' +
++  'easy to read when shown small (about 600 px wide).'
++
++/** Pesan error yang berarti parameter format/kompresi tidak didukung model. */
++const UNSUPPORTED_PARAM_RE = /output_format|output_compression|unknown parameter|unsupported/i
++
++/**
++ * Gambar AI untuk kuis:
++ * - minta ukuran terkecil yang didukung API (1024x1024), quality low, keluaran JPEG
++ *   (jauh lebih kecil dari PNG default);
++ * - lalu SELALU dikompres lewat aturan sistem (imageCompress.ts: maks 1200 px, ≤ ~450 KB),
++ *   sama dengan gambar yang diunggah manual.
++ */
+ async function generateOpenAiImage(
+   prompt: string,
+   apiKey: string
+@@ -258,6 +275,7 @@ async function generateOpenAiImage(
+   const fullPrompt = [
+     prompt.trim(),
+     "Children's educational illustration for Indonesian elementary school, simple, colorful, neutral teaching material.",
++    IMAGE_STYLE,
+     'No text overlays, no watermarks, no circled answers, no explicit solution numbers.',
+   ].join(' ')
+ 
+@@ -275,43 +293,57 @@ async function generateOpenAiImage(
+ 
+   const errors: string[] = []
+   for (const a of attempts) {
+-    try {
+-      const body: Record<string, unknown> = {
+-        model: a.model,
+-        prompt: fullPrompt.slice(0, 32000),
+-        n: 1,
+-        size: a.size,
+-        quality: a.quality,
+-      }
+-
+-      const res = await fetch('https://api.openai.com/v1/images/generations', {
+-        method: 'POST',
+-        headers: {
+-          'Content-Type': 'application/json',
+-          Authorization: `Bearer ${apiKey}`,
+-        },
+-        body: JSON.stringify(body),
+-      })
+-      const data = await res.json().catch(() => ({}))
+-      if (!res.ok) {
+-        const msg =
+-          data?.error?.message ||
+-          data?.error?.code ||
+-          `HTTP ${res.status}`
+-        errors.push(`${a.model}: ${msg}`)
+-        continue
+-      }
+-      const item = data?.data?.[0]
+-      // GPT Image default: b64_json; beberapa model masih bisa url
+-      if (item?.b64_json) {
+-        return { url: `data:image/png;base64,${item.b64_json}` }
+-      }
+-      if (item?.url) {
+-        return { url: item.url as string }
++    // Coba dengan keluaran JPEG; bila model menolak parameter itu, ulangi tanpa.
++    for (const compactOutput of [true, false]) {
++      try {
++        const body: Record<string, unknown> = {
++          model: a.model,
++          prompt: fullPrompt.slice(0, 32000),
++          n: 1,
++          size: a.size,
++          quality: a.quality,
++          ...(compactOutput ? { output_format: 'jpeg', output_compression: 80 } : {}),
++        }
++
++        const res = await fetch('https://api.openai.com/v1/images/generations', {
++          method: 'POST',
++          headers: {
++            'Content-Type': 'application/json',
++            Authorization: `Bearer ${apiKey}`,
++          },
++          body: JSON.stringify(body),
++        })
++        const data = await res.json().catch(() => ({}))
++        if (!res.ok) {
++          const msg = data?.error?.message || data?.error?.code || `HTTP ${res.status}`
++          if (compactOutput && res.status === 400 && UNSUPPORTED_PARAM_RE.test(String(msg))) {
++            continue // ulangi model yang sama tanpa output_format
++          }
++          errors.push(`${a.model}: ${msg}`)
++          break
++        }
++        const item = data?.data?.[0]
++        // GPT Image default: b64_json; beberapa model masih bisa url
++        const source: string | null = item?.b64_json
++          ? `data:image/${compactOutput ? 'jpeg' : 'png'};base64,${item.b64_json}`
++          : item?.url
++            ? String(item.url)
++            : null
++        if (!source) {
++          errors.push(`${a.model}: respons tanpa gambar (b64/url)`)
++          break
++        }
++        try {
++          const small = await compressImage(source)
++          return { url: small.dataUrl }
++        } catch (e: any) {
++          errors.push(`${a.model}: gagal kompres gambar (${e?.message || 'unknown'})`)
++          break
++        }
++      } catch (e: any) {
++        errors.push(`${a.model}: ${e?.message || 'network error'}`)
++        break
+       }
+-      errors.push(`${a.model}: respons tanpa gambar (b64/url)`)
+-    } catch (e: any) {
+-      errors.push(`${a.model}: ${e?.message || 'network error'}`)
+     }
+   }
+   return { error: errors.join(' | ') || 'Gagal generate gambar' }
+diff --git a/src/pages/TopicQuestions.tsx b/src/pages/TopicQuestions.tsx
+index 0c310d0..c8f417e 100644
+--- a/src/pages/TopicQuestions.tsx
++++ b/src/pages/TopicQuestions.tsx
+@@ -17,6 +17,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom'
+ import * as XLSX from 'xlsx'
+ import Layout from '../components/Layout'
+ import AiQuestionGenerator from '../components/AiQuestionGenerator'
++import { compressImage, isDataUrlTooBig } from '../lib/imageCompress'
+ import type { AiDraftQuestion } from '../lib/openaiQuestions'
+ import {
+   getSubject,
+@@ -229,68 +230,11 @@ function cleanPayload(data: Record<string, any>) {
+ 
+ 
+ /** Kompres & resize gambar stimulus ke ukuran optimal untuk kuis (keterbacaan + loading). */
+-function compressStimulusImage(file: File): Promise<{ dataUrl: string; width: number; height: number; bytesApprox: number }> {
+-  return new Promise((resolve, reject) => {
+-    const reader = new FileReader()
+-    reader.onerror = () => reject(new Error('Gagal membaca file'))
+-    reader.onload = () => {
+-      const dataUrl = String(reader.result || '')
+-      const img = new Image()
+-      img.onerror = () => reject(new Error('File bukan gambar yang valid'))
+-      img.onload = () => {
+-        // Lebar ideal untuk teks pengumuman/infografis di layar siswa
+-        const MAX_W = 1200
+-        const MAX_H = 1200
+-        let w = img.width
+-        let h = img.height
+-        const scale = Math.min(1, MAX_W / w, MAX_H / h)
+-        w = Math.max(1, Math.round(w * scale))
+-        h = Math.max(1, Math.round(h * scale))
+-
+-        const canvas = document.createElement('canvas')
+-        canvas.width = w
+-        canvas.height = h
+-        const ctx = canvas.getContext('2d')
+-        if (!ctx) {
+-          reject(new Error('Canvas tidak tersedia'))
+-          return
+-        }
+-        ctx.fillStyle = '#ffffff'
+-        ctx.fillRect(0, 0, w, h)
+-        ctx.drawImage(img, 0, 0, w, h)
+-
+-        // Target ~450 KB data-URL (Firestore doc limit & loading kuis)
+-        const TARGET = 450_000
+-        let quality = 0.88
+-        let out = canvas.toDataURL('image/jpeg', quality)
+-        while (out.length > TARGET && quality > 0.45) {
+-          quality = Math.round((quality - 0.08) * 100) / 100
+-          out = canvas.toDataURL('image/jpeg', quality)
+-        }
+-        // Jika masih terlalu besar, turunkan resolusi bertahap
+-        let cw = w
+-        let ch = h
+-        while (out.length > TARGET && cw > 480) {
+-          cw = Math.round(cw * 0.85)
+-          ch = Math.round(ch * 0.85)
+-          canvas.width = cw
+-          canvas.height = ch
+-          ctx.fillStyle = '#ffffff'
+-          ctx.fillRect(0, 0, cw, ch)
+-          ctx.drawImage(img, 0, 0, cw, ch)
+-          out = canvas.toDataURL('image/jpeg', 0.75)
+-        }
+-        resolve({
+-          dataUrl: out,
+-          width: canvas.width,
+-          height: canvas.height,
+-          bytesApprox: Math.round((out.length * 3) / 4),
+-        })
+-      }
+-      img.src = dataUrl
+-    }
+-    reader.readAsDataURL(file)
+-  })
++function compressStimulusImage(
++  file: File
++): Promise<{ dataUrl: string; width: number; height: number; bytesApprox: number }> {
++  // Aturan kompres satu sumber: src/lib/imageCompress.ts (dipakai juga gambar AI)
++  return compressImage(file)
+ }
+ 
+ 
+@@ -1099,6 +1043,16 @@ export default function TopicQuestions() {
+     const codes = topic.tpCodes || []
+     for (const d of drafts) {
+       const tpCodes = d.tpCodes?.length ? d.tpCodes : codes
++      // Jaring pengaman: gambar AI yang masih besar dikompres sebelum disimpan
++      // (batas dokumen Firestore ~1 MiB). Gagal kompres → simpan soal tanpa gambar.
++      let stimulusImage: string | null = d.stimulusImage || null
++      if (stimulusImage && isDataUrlTooBig(stimulusImage)) {
++        try {
++          stimulusImage = (await compressImage(stimulusImage)).dataUrl
++        } catch {
++          stimulusImage = null
++        }
++      }
+       await addDoc(collection(db, 'questions'), {
+         topicId,
+         subjectKey,
+@@ -1109,7 +1063,7 @@ export default function TopicQuestions() {
+         categoryLabels: d.type === 'category' ? d.categoryLabels || ['Benar', 'Salah'] : null,
+         explanation: d.explanation || null,
+         stimulus: d.stimulus || null,
+-        stimulusImage: d.stimulusImage || null,
++        stimulusImage,
+         tp: tpCodes[0] || null,
+         tpCodes: tpCodes.length ? tpCodes : null,
+         kompleksitas: d.kompleksitas || null,
+-- 
+2.43.0
+
