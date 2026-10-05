@@ -194,7 +194,14 @@ export default function SiswaLogin() {
         </form>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          Guru? <Link to="/login" className="text-indigo-600 hover:underline">Login admin</Link>
+          Guru / admin?{' '}
+          <Link to="/login?tab=guru" className="text-indigo-600 hover:underline">
+            Login guru
+          </Link>
+          {' · '}
+          <Link to="/login?tab=tes" className="text-indigo-600 hover:underline">
+            Tes sistem
+          </Link>
         </p>
       </div>
     </div>
