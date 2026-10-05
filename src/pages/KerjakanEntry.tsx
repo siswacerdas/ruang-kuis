@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../lib/firebase'
+import {
+  ensureStudentSession,
+  clearStudentSession,
+  type StudentSession,
+} from '../lib/studentSession'
 import { useNavigate, Link } from 'react-router-dom'
 import {
   SUBJECTS,
@@ -23,14 +28,6 @@ import {
  * - Status sudah/belum dikerjakan
  * - Klik kartu → langsung mulai (atau token bila requireToken)
  */
-
-interface StudentSession {
-  studentId: string
-  fullName: string
-  nickname?: string
-  email: string
-  className?: string
-}
 
 function toMillis(v: unknown): number | null {
   if (!v) return null
@@ -104,17 +101,19 @@ export default function KerjakanEntry() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   useEffect(() => {
-    const raw = sessionStorage.getItem('rk_student')
-    if (!raw) {
-      navigate('/kerjakan')
-      return
-    }
-    try {
-      const s = JSON.parse(raw) as StudentSession
+    let cancelled = false
+    ;(async () => {
+      const s = await ensureStudentSession()
+      if (cancelled) return
+      if (!s) {
+        navigate('/kerjakan', { replace: true })
+        return
+      }
       setStudent(s)
       loadData(s)
-    } catch {
-      navigate('/kerjakan')
+    })()
+    return () => {
+      cancelled = true
     }
   }, [navigate])
 
@@ -209,14 +208,13 @@ export default function KerjakanEntry() {
   const selected = selectedId ? pakets.find((p) => p.id === selectedId) : null
 
   const handleLogout = async () => {
-    sessionStorage.removeItem('rk_student')
-    sessionStorage.removeItem('rk_session')
+    clearStudentSession()
     try {
       await signOut(auth)
     } catch {
       /* ignore */
     }
-    navigate('/kerjakan')
+    navigate('/kerjakan', { replace: true })
   }
 
   const beginSession = (paket: LatihanPaket, tokenUsed?: string) => {
@@ -522,17 +520,14 @@ export default function KerjakanEntry() {
                                 {p.timeLimitMinutes
                                   ? ` · batas ${p.timeLimitMinutes} mnt`
                                   : ''}
-                                {canStart && !done ? (needsToken(p) ? ' · ketuk lalu masukkan token' : ' · ketuk untuk mulai') : ''}
-                                {blocked ? ' · sudah selesai, pengerjaan ulang ditutup' : canStart && done ? ' · boleh diulang (guru mengizinkan)' : ''}
-                                {resolved === 'scheduled' ? ' · belum dibuka' : ''}
-                                {resolved === 'finished' ? ' · waktu habis' : ''}
+                                {canStart && !done
+                                  ? needsToken(p)
+                                    ? ' · ketuk lalu masukkan token'
+                                    : ' · ketuk untuk mulai'
+                                  : ''}
+                                {blocked ? ' · sudah dikerjakan' : ''}
                               </p>
                             </div>
-                            {canStart && (
-                              <span className="text-indigo-600 text-xs font-semibold shrink-0 mt-1">
-                                {needsToken(p) ? 'Token →' : 'Mulai →'}
-                              </span>
-                            )}
                           </div>
                         </button>
                       )
@@ -543,10 +538,6 @@ export default function KerjakanEntry() {
             </div>
           )}
         </div>
-
-        <p className="text-[11px] text-center text-gray-400 px-4">
-          Akses utama: login siswa + jadwal aktif + penugasan kelas. Token hanya jika guru mengaktifkannya.
-        </p>
       </div>
     </div>
   )
