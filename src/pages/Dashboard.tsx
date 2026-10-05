@@ -57,7 +57,6 @@ export default function Dashboard() {
           ? Math.round(attempts.reduce((s, a) => s + (a.percent || 0), 0) / n)
           : 0
 
-        // recent: sort client-side if orderBy index missing
         let recentList = [...attempts]
         recentList.sort((a, b) => {
           const ta = toMillis(a.finishedAt) || 0
@@ -66,7 +65,6 @@ export default function Dashboard() {
         })
         recentList = recentList.slice(0, 8)
 
-        // try ordered query for recent if possible
         try {
           const ordered = await getDocs(query(collection(db, 'attempts'), orderBy('finishedAt', 'desc'), limit(8)))
           if (!ordered.empty) {
@@ -96,7 +94,6 @@ export default function Dashboard() {
 
   return (
     <Layout title="Dashboard" subtitle="Ringkasan progress kuis dan akses cepat fitur admin">
-      {/* Welcome */}
       <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl p-6 md:p-8 text-white mb-6 shadow-sm">
         <h2 className="text-xl md:text-2xl font-semibold mb-1">Selamat datang, Admin!</h2>
         <p className="text-indigo-100 text-sm md:text-base">
@@ -104,7 +101,6 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* Live stats dari attempts / bank */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
         {[
           { label: 'Pengerjaan kuis', value: stats.attempts, to: '/laporan', tint: 'text-indigo-600' },
@@ -133,7 +129,6 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mb-8">
-        {/* Recent attempts */}
         <div className="lg:col-span-7 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-900">Pengerjaan terbaru</h3>
@@ -179,7 +174,6 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Quick links compact */}
         <div className="lg:col-span-5 space-y-3">
           <Link
             to="/laporan"
@@ -207,7 +201,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Menu grid (tetap) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-8">
         <Link
           to="/bank-soal"
@@ -224,12 +217,7 @@ export default function Dashboard() {
                 />
               </svg>
             </div>
-            <svg
-              className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 transition"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+            <svg className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </div>
@@ -252,12 +240,7 @@ export default function Dashboard() {
                 />
               </svg>
             </div>
-            <svg
-              className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 transition"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+            <svg className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </div>
@@ -266,7 +249,7 @@ export default function Dashboard() {
         </Link>
 
         <Link
-          to="/siswa"
+          to="/daftar-siswa"
           className="group bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all"
         >
           <div className="flex items-start justify-between">
@@ -280,12 +263,7 @@ export default function Dashboard() {
                 />
               </svg>
             </div>
-            <svg
-              className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 transition"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+            <svg className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </div>
@@ -308,12 +286,7 @@ export default function Dashboard() {
                 />
               </svg>
             </div>
-            <svg
-              className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 transition"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+            <svg className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </div>
@@ -336,12 +309,7 @@ export default function Dashboard() {
                 />
               </svg>
             </div>
-            <svg
-              className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 transition"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+            <svg className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </div>
@@ -374,8 +342,8 @@ export default function Dashboard() {
           </li>
           <li className="flex gap-2">
             <span className="text-indigo-500 font-medium">3.</span>
-            Siswa buka <code className="bg-gray-100 px-1 rounded text-xs">/kerjakan</code> → login → token → hasil
-            masuk <strong>Laporan</strong>.
+            Siswa buka <code className="bg-gray-100 px-1 rounded text-xs">/siswa</code> setelah login → kerjakan kuis
+            → hasil masuk <strong>Laporan</strong>.
           </li>
         </ul>
       </div>
