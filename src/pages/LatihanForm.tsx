@@ -6,14 +6,13 @@ import {
   doc,
   getDoc,
   updateDoc,
-  deleteField,
   query,
   where,
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import QuestionQuickEdit from '../components/QuestionQuickEdit'
 import {
@@ -127,7 +126,6 @@ function generateQuestions(
 
 export default function LatihanForm() {
   const { id } = useParams<{ id: string }>()
-  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const isNew = !id || id === 'baru'
 
@@ -159,8 +157,6 @@ export default function LatihanForm() {
   const [bankLoading, setBankLoading] = useState(false)
 
   const [autoCount, setAutoCount] = useState(10)
-  const [autoTopicIds, setAutoTopicIds] = useState<string[]>([])
-  const [autoTypes, setAutoTypes] = useState<QuestionType[]>([])
   const [autoBalancedTp, setAutoBalancedTp] = useState(true)
   const [autoMessage, setAutoMessage] = useState('')
   const [usedQuestionIds, setUsedQuestionIds] = useState<Set<string>>(new Set())
@@ -288,8 +284,6 @@ export default function LatihanForm() {
   const runAutoGenerate = () => {
     setAutoMessage('')
     const ids = generateQuestions(bankQuestions, autoCount, {
-      topicIds: autoTopicIds.length ? autoTopicIds : undefined,
-      types: autoTypes.length ? autoTypes : undefined,
       balancedByTp: autoBalancedTp,
       excludeIds: preferUnused ? usedQuestionIds : undefined,
       fillFromExcluded: true,
@@ -675,9 +669,15 @@ export default function LatihanForm() {
                 </button>
               </div>
               {autoMessage && (
-                <p className={`text-xs px-3 py-2 rounded-lg ${
-                  autoMessage.includes('Tidak') ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-700'
-                }`}>{autoMessage}</p>
+                <p
+                  className={`text-xs px-3 py-2 rounded-lg ${
+                    autoMessage.includes('Tidak')
+                      ? 'bg-amber-50 text-amber-800'
+                      : 'bg-emerald-50 text-emerald-700'
+                  }`}
+                >
+                  {autoMessage}
+                </p>
               )}
             </div>
           )}
@@ -707,7 +707,11 @@ export default function LatihanForm() {
                       >
                         <span className="font-mono text-xs w-7 shrink-0">#{i + 1}</span>
                         <span className="flex-1 truncate">Soal tidak ditemukan di pool mapel</span>
-                        <button type="button" onClick={() => toggleQuestion(qid)} className="text-xs text-red-500 hover:underline">
+                        <button
+                          type="button"
+                          onClick={() => toggleQuestion(qid)}
+                          className="text-xs text-red-500 hover:underline"
+                        >
                           Hapus
                         </button>
                       </li>
@@ -740,7 +744,9 @@ export default function LatihanForm() {
                           <p className="text-sm text-gray-800 line-clamp-2">{q.question}</p>
                           {q.options?.length > 0 && (
                             <p className="text-[11px] text-gray-400 mt-1 line-clamp-1">
-                              {q.options.map((o, oi) => `${String.fromCharCode(65 + oi)}. ${o}`).join(' · ')}
+                              {q.options
+                                .map((o, oi) => `${String.fromCharCode(65 + oi)}. ${o}`)
+                                .join(' · ')}
                             </p>
                           )}
                         </div>
