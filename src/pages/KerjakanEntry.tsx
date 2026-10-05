@@ -382,9 +382,274 @@ export default function KerjakanEntry() {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        {/* REST OF FILE LOADED FROM ORIGINAL - see follow-up if truncated */}
-        <p className="text-sm text-red-600">FILE INCOMPLETE - RESTORING</p>
+        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700 text-white p-6 sm:p-8 shadow-sm">
+          <div className="absolute inset-0 opacity-20 pointer-events-none">
+            <div className="absolute -top-10 -right-10 w-48 h-48 bg-white rounded-full blur-3xl" />
+            <div className="absolute bottom-0 left-10 w-40 h-40 bg-indigo-300 rounded-full blur-3xl" />
+          </div>
+          <div className="relative z-10 max-w-xl">
+            <p className="text-indigo-100 text-xs font-semibold uppercase tracking-wide mb-1">
+              Beranda siswa
+            </p>
+            <h1 className="text-2xl sm:text-3xl font-bold leading-tight mb-2">
+              Siap belajar hari ini, {firstName}?
+            </h1>
+            <p className="text-indigo-100 text-sm sm:text-base leading-relaxed">
+              Lihat jadwal kuis, cek progressmu, lalu mulai saat kamu siap. Tidak perlu buru-buru.
+            </p>
+          </div>
+        </section>
+
+        <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: 'Kuis tersedia', value: loadingList ? '…' : String(stats.total), tone: 'text-indigo-600' },
+            { label: 'Sedang aktif', value: loadingList ? '…' : String(stats.active), tone: 'text-emerald-600' },
+            { label: 'Sudah dikerjakan', value: loadingList ? '…' : String(stats.doneCount), tone: 'text-sky-600' },
+            {
+              label: 'Rata-rata skor',
+              value: loadingList ? '…' : stats.n ? `${stats.avg}%` : '—',
+              tone: 'text-violet-600',
+            },
+          ].map((c) => (
+            <div
+              key={c.label}
+              className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3.5"
+            >
+              <p className="text-[11px] text-gray-400 font-medium">{c.label}</p>
+              <p className={`text-2xl font-bold mt-0.5 tabular-nums ${c.tone}`}>{c.value}</p>
+            </div>
+          ))}
+        </section>
+
+        {urgentPakets.length > 0 && (
+          <section className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+            <p className="text-xs font-semibold text-amber-900 uppercase tracking-wide mb-2">
+              Segera berakhir
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {urgentPakets.map(({ paket: p }) => {
+                const h = hoursUntilEnd(p)
+                const label =
+                  h == null
+                    ? ''
+                    : h < 1
+                      ? `${Math.max(1, Math.round(h * 60))} mnt lagi`
+                      : `${Math.round(h)} jam lagi`
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => selectPaket(p)}
+                    className="inline-flex items-center gap-1.5 text-sm bg-white border border-amber-200 text-amber-950 px-3 py-1.5 rounded-xl hover:border-amber-300 transition"
+                  >
+                    <span className="font-medium">{p.title}</span>
+                    <span className="text-amber-700/80 text-xs">· {label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
+        <section className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+            <div className="flex flex-wrap gap-1.5">
+              {filters.map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => setFilter(f.key)}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition ${
+                    filter === f.key
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-200'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <div className="relative w-full sm:w-64">
+              <svg
+                className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"
+                />
+              </svg>
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Cari kuis…"
+                className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none"
+              />
+            </div>
+          </div>
+
+          {subjectOptions.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] text-gray-400 font-medium mr-1">Mapel:</span>
+              <button
+                type="button"
+                onClick={() => setSubjectFilter('all')}
+                className={`text-xs font-medium px-3 py-1.5 rounded-full border transition ${
+                  subjectFilter === 'all'
+                    ? 'bg-violet-600 text-white border-violet-600'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-violet-200'
+                }`}
+              >
+                Semua mapel
+              </button>
+              {subjectOptions.map((s) => (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => setSubjectFilter(s.key)}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition ${
+                    subjectFilter === s.key
+                      ? 'bg-violet-600 text-white border-violet-600'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-violet-200'
+                  }`}
+                >
+                  {s.shortName}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {loadingList ? (
+            <p className="text-center text-sm text-gray-400 py-12">Memuat jadwal…</p>
+          ) : filtered.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-dashed border-gray-200 px-5 py-14 text-center">
+              <p className="text-sm text-gray-500">Tidak ada kuis untuk filter ini.</p>
+              <p className="text-xs text-gray-400 mt-1">Coba ubah filter atau tunggu jadwal dari guru.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filtered.map(({ paket: p, resolved, done, blocked }) => {
+                const sub = p.subjectKey ? getSubject(p.subjectKey) : undefined
+                const best = p.id ? bestByLatihan[p.id] : undefined
+                const canEnter = resolved === 'active' && !blocked
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => selectPaket(p)}
+                    disabled={!canEnter && resolved !== 'active'}
+                    className={`text-left group rounded-2xl border bg-white shadow-sm overflow-hidden transition ${
+                      canEnter
+                        ? 'border-gray-100 hover:border-indigo-200 hover:shadow-md'
+                        : 'border-gray-100 opacity-90'
+                    }`}
+                  >
+                    <div className={`h-2 bg-gradient-to-r ${gradientFor(p.id)}`} />
+                    <div className="p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          {sub && (
+                            <span className="text-[11px] font-medium text-indigo-600">
+                              {sub.shortName}
+                            </span>
+                          )}
+                          <h3 className="font-semibold text-gray-900 leading-snug mt-0.5 group-hover:text-indigo-700 transition">
+                            {p.title}
+                          </h3>
+                        </div>
+                        <span
+                          className={`shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${statusPill(
+                            resolved
+                          )}`}
+                        >
+                          {LATIHAN_STATUS_LABELS[resolved]}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500">{formatRange(p.startAt, p.endAt)}</p>
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-gray-400">
+                          {p.questionCount || 0} soal
+                          {p.timeLimitMinutes ? ` · ${p.timeLimitMinutes} mnt` : ''}
+                        </span>
+                        {done && (
+                          <span className="font-medium text-emerald-600">
+                            {best != null ? `Skor terbaik ${best}%` : 'Sudah dikerjakan'}
+                          </span>
+                        )}
+                      </div>
+                      {blocked && (
+                        <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg px-2 py-1">
+                          Sudah dikerjakan · ulang tidak diizinkan
+                        </p>
+                      )}
+                      {canEnter && (
+                        <p className="text-xs font-medium text-indigo-600">Ketuk untuk mulai →</p>
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </section>
       </main>
+
+      {showTokenModal && selected && (
+        <div className="fixed inset-0 z-40 bg-gray-900/40 flex items-end sm:items-center justify-center p-0 sm:p-6">
+          <div className="bg-white w-full sm:max-w-md sm:rounded-2xl shadow-xl p-5 sm:p-6">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{selected.title}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {needsToken(selected)
+                    ? 'Masukkan token dari guru untuk memulai'
+                    : error || 'Tidak dapat membuka paket ini'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTokenModal(false)
+                  setError('')
+                  setToken('')
+                }}
+                className="text-xs text-gray-500 hover:text-gray-800 px-2 py-1"
+              >
+                Tutup
+              </button>
+            </div>
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2 mb-3">{error}</p>
+            )}
+            {needsToken(selected) && !error?.includes('sudah mengerjakan') && (
+              <form onSubmit={confirmToken} className="space-y-3">
+                <input
+                  ref={tokenRef}
+                  type="text"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value.toUpperCase())}
+                  placeholder="TOKEN"
+                  className="w-full text-center tracking-[0.3em] font-semibold text-lg border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500/30 outline-none uppercase"
+                  autoComplete="off"
+                  maxLength={12}
+                />
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-indigo-600 text-white text-sm font-medium py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-60 transition"
+                >
+                  {loading ? 'Memulai…' : 'Mulai mengerjakan'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
