@@ -72,7 +72,8 @@ export default function SiswaList() {
     if (!email.includes('@')) return null
     return {
       fullName,
-      nickname: nickname || undefined,
+      // Firestore menolak nilai `undefined`: sertakan field hanya jika terisi
+      ...(nickname ? { nickname } : {}),
       email,
       nisn,
       className: DEFAULT_STUDENT_CLASS,
@@ -105,8 +106,10 @@ export default function SiswaList() {
       const existing = new Set(students.map((s) => s.email.toLowerCase()))
       let added = 0
       let skipped = 0
-      for (const row of rows) {
-        const s = normalizeRow(row)
+      const failedRows: number[] = []
+      let firstFailure = ''
+      for (let i = 0; i < rows.length; i++) {
+        const s = normalizeRow(rows[i])
         if (!s) {
           skipped++
           continue
@@ -115,18 +118,33 @@ export default function SiswaList() {
           skipped++
           continue
         }
-        await addDoc(collection(db, 'students'), {
-          ...s,
-          createdAt: serverTimestamp(),
-        })
-        existing.add(s.email)
-        added++
+        try {
+          await addDoc(collection(db, 'students'), {
+            ...s,
+            createdAt: serverTimestamp(),
+          })
+          existing.add(s.email)
+          added++
+        } catch (rowErr: any) {
+          // Satu baris gagal tidak menghentikan baris lainnya
+          console.error('Import baris gagal', i + 1, rowErr)
+          failedRows.push(i + 1)
+          if (!firstFailure) firstFailure = String(rowErr?.message || '').slice(0, 140)
+        }
       }
       setMessage(`Import selesai: ${added} ditambahkan, ${skipped} dilewati (duplikat/tidak valid).`)
+      if (failedRows.length > 0) {
+        const shown = failedRows.slice(0, 10).join(', ') + (failedRows.length > 10 ? ', …' : '')
+        setError(
+          `${failedRows.length} baris gagal disimpan (baris data ke-${shown}). ${firstFailure} ` +
+            'Perbaiki lalu impor ulang; siswa yang sudah ada otomatis dilewati.'
+        )
+      }
       await load()
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
-      setError('Gagal membaca file. Pastikan format CSV/Excel benar.')
+      const detail = err?.message ? ` (${String(err.message).slice(0, 120)})` : ''
+      setError(`Gagal membaca file. Pastikan format CSV/Excel benar.${detail}`)
     } finally {
       setImporting(false)
       if (fileRef.current) fileRef.current.value = ''

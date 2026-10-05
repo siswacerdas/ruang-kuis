@@ -8,6 +8,18 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Fixed — Impor siswa berhenti jika "Nama Panggilan" kosong (Siswa → Import CSV/Excel)
+- **Penyebab:** baris tanpa nama panggilan dikirim ke Firestore dengan `nickname: undefined`, yang ditolak (`Unsupported field value: undefined`). Impor berhenti di baris itu, baris sesudahnya tidak masuk, daftar tidak dimuat ulang, dan pesan yang tampil menyesatkan ("Gagal membaca file").
+- **Perbaikan:** field `nickname` hanya disertakan bila terisi. Satu baris yang gagal tidak lagi menghentikan baris lain; ringkasan menyebut baris data yang gagal beserta penyebabnya, dan daftar selalu dimuat ulang. Impor ulang aman (siswa yang sudah ada dilewati berdasarkan email).
+- File: `src/pages/SiswaList.tsx`.
+
+### Fixed — Paket latihan gagal disimpan (Latihan Soal → Generate Otomatis / Buat Manual)
+- **Penyebab:** `LatihanForm` mengirim field opsional dengan nilai `undefined` (`description` kosong, `timeLimitMinutes` = 0) ke Firestore, yang menolak nilai `undefined` (`Unsupported field value: undefined`). Paket hanya tersimpan jika Deskripsi terisi **dan** Batas waktu > 0, sehingga paket tidak muncul di daftar.
+- **Perbaikan:** paket baru tidak lagi menyertakan field opsional yang kosong; saat edit, field yang dikosongkan dihapus dari dokumen dengan `deleteField()`.
+- Pesan error simpan kini menampilkan detail penyebab dan layar otomatis menggulir ke pesan tersebut (sebelumnya tampil di atas form, jauh dari tombol simpan).
+- Tombol **Cepat: 10 soal / 20 soal** kini memakai jumlah yang benar (sebelumnya memakai jumlah lama karena state belum ter-update).
+- File: `src/pages/LatihanForm.tsx`.
+
 ### Added — Perbaiki stimulus teks dengan AI (editor soal)
 - Tombol **✨ Perbaiki stimulus dengan AI** di bawah editor stimulus (muncul bila stimulus sudah terisi): AI merapikan stimulus agar jelas, runtut, berbahasa baku, dan pas dengan pertanyaan serta pilihan jawaban. Pertanyaan, pilihan, dan kunci tidak berubah.
 - AI menerima pertanyaan, opsi + status kunci, pembahasan, dan stimulus lama; aturan: stimulus harus memuat data yang dibutuhkan, tidak boleh menyalin/menyatakan jawaban benar, tidak membuat pengecoh jadi benar, data & angka dipertahankan. Kolom arahan opsional dari guru.

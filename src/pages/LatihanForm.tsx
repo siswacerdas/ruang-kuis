@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import {
   collection,
   addDoc,
@@ -6,6 +6,7 @@ import {
   doc,
   getDoc,
   updateDoc,
+  deleteField,
   query,
   where,
   serverTimestamp,
@@ -194,6 +195,13 @@ export default function LatihanForm() {
     if (!isNew && id) loadPaket(id)
   }, [id])
 
+  // Pesan error ada di bagian atas form, sedangkan tombol simpan di bawah:
+  // gulir otomatis agar kegagalan simpan tidak terlewat.
+  const errorRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [error])
+
   useEffect(() => {
     if (subjectKey) loadBank(subjectKey)
     else {
@@ -324,7 +332,7 @@ export default function LatihanForm() {
     )
   }
 
-  const runAutoGenerate = () => {
+  const runAutoGenerate = (countOverride?: number) => {
     setAutoMessage('')
     if (!subjectKey) {
       setAutoMessage('Pilih mata pelajaran dulu.')
@@ -334,7 +342,7 @@ export default function LatihanForm() {
       setAutoMessage('Tidak ada soal yang cocok dengan filter. Periksa materi/tipe atau isi bank soal.')
       return
     }
-    const n = Math.max(1, Math.min(autoCount, 100))
+    const n = Math.max(1, Math.min(countOverride ?? autoCount, 100))
     const ids = generateQuestions(bankQuestions, n, {
       topicIds: autoTopicIds.length > 0 ? autoTopicIds : undefined,
       types: autoTypes.length > 0 ? autoTypes : undefined,
@@ -393,17 +401,15 @@ export default function LatihanForm() {
 
     setSaving(true)
     try {
-      const payload: Omit<LatihanPaket, 'id'> = {
+      // Field wajib (selalu ada nilainya)
+      const common = {
         title: title.trim(),
-        description: description.trim() || undefined,
-        subjectKey: subjectKey || undefined,
         questionIds: selectedIds,
         questionCount: selectedIds.length,
         startAt: start,
         endAt: end,
         token: (token.trim() || generateToken()).toUpperCase(),
         status,
-        timeLimitMinutes: timeLimitMinutes > 0 ? timeLimitMinutes : undefined,
         shuffleQuestions,
         shuffleOptions,
         showScoreImmediately,
@@ -417,19 +423,36 @@ export default function LatihanForm() {
         requireToken,
         updatedAt: serverTimestamp(),
       }
+      // Field opsional. Firestore MENOLAK nilai `undefined`, jadi:
+      //  - paket baru: field kosong tidak disertakan sama sekali
+      //  - edit: field yang dikosongkan dihapus dari dokumen (deleteField)
+      const optional: Record<string, unknown> = {
+        description: description.trim() || undefined,
+        subjectKey: subjectKey || undefined,
+        timeLimitMinutes: timeLimitMinutes > 0 ? timeLimitMinutes : undefined,
+      }
 
       if (isNew) {
+        const present = Object.fromEntries(
+          Object.entries(optional).filter(([, v]) => v !== undefined)
+        )
         await addDoc(collection(db, 'latihan'), {
-          ...payload,
+          ...common,
+          ...present,
           createdAt: serverTimestamp(),
         })
       } else if (id) {
-        await updateDoc(doc(db, 'latihan', id), payload as any)
+        const patch: Record<string, unknown> = { ...common }
+        for (const [k, v] of Object.entries(optional)) {
+          patch[k] = v === undefined ? deleteField() : v
+        }
+        await updateDoc(doc(db, 'latihan', id), patch as any)
       }
       navigate('/latihan-soal')
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
-      setError('Gagal menyimpan paket latihan')
+      const detail = err?.message ? `: ${String(err.message).slice(0, 160)}` : ''
+      setError(`Gagal menyimpan paket latihan${detail}`)
     } finally {
       setSaving(false)
     }
@@ -458,7 +481,12 @@ export default function LatihanForm() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
-          <div className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-3 rounded-xl">{error}</div>
+          <div
+            ref={errorRef}
+            className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-3 rounded-xl"
+          >
+            {error}
+          </div>
         )}
 
         {/* Info dasar */}
@@ -878,7 +906,7 @@ export default function LatihanForm() {
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
-                  onClick={runAutoGenerate}
+                  onClick={() => runAutoGenerate()}
                   disabled={bankLoading}
                   className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-sm font-medium px-5 py-2.5 rounded-xl transition shadow-sm shadow-indigo-200"
                 >
@@ -889,14 +917,14 @@ export default function LatihanForm() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setAutoCount(10); runAutoGenerate() }}
+                  onClick={() => { setAutoCount(10); runAutoGenerate(10) }}
                   className="text-xs font-medium text-indigo-600 hover:underline"
                 >
                   Cepat: 10 soal
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setAutoCount(20); runAutoGenerate() }}
+                  onClick={() => { setAutoCount(20); runAutoGenerate(20) }}
                   className="text-xs font-medium text-indigo-600 hover:underline"
                 >
                   Cepat: 20 soal
