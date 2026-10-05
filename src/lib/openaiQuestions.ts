@@ -559,3 +559,296 @@ export async function generateStimulusImage(
   const small = await compressImageSrc(img.url, { maxSide: 800, targetChars: 200_000 })
   return { ...small, imagePrompt }
 }
+
+/* ============================================================================
+ * SEIMBANGKAN PILIHAN JAWABAN (editor soal)
+ * Menulis ulang TEKS opsi agar tidak ada pola yang membocorkan kunci
+ * (mis. "opsi terpanjang = jawaban benar"), tanpa mengubah urutan, jumlah, maupun kunci.
+ * Alur: (1) AI menulis ulang opsi → (2) pemeriksa AI menjawab soal secara buta
+ *       (tanpa kunci) dan hasilnya dibandingkan dengan kunci guru.
+ * ============================================================================ */
+
+export type RewriteOptionsInput = {
+  subjectName: string
+  topicName: string
+  type: QuestionType
+  question: string
+  /** Stimulus teks dari editor (boleh HTML) */
+  stimulusHtml?: string
+  /** Pembahasan guru (membantu AI memahami mengapa kunci benar) */
+  explanation?: string
+  /** Soal punya gambar stimulus yang tidak bisa dilihat AI */
+  hasImage?: boolean
+  options: string[]
+  /** single/multiple: indeks opsi benar. category: indeks label (0/1) per pernyataan. */
+  correctAnswers: number[]
+  categoryLabels?: string[]
+  /** Arahan tambahan dari guru */
+  hint?: string
+}
+
+export type OptionVerification = {
+  status: 'ok' | 'mismatch' | 'skipped'
+  message: string
+}
+
+export type RewriteOptionsResult = {
+  options: string[]
+  /** Indeks opsi yang teksnya berubah */
+  changed: number[]
+  /** Ringkasan dari AI: apa yang diubah dan mengapa */
+  note: string
+  verification: OptionVerification
+}
+
+const OPTION_REWRITE_GUIDANCE = `Kamu adalah editor soal asesmen untuk siswa SD kelas 5 di Indonesia (Kurikulum Merdeka).
+TUGASMU: menulis ulang TEKS pilihan jawaban sebuah soal supaya siswa TIDAK bisa menebak jawaban dari pola, misalnya "opsi terpanjang adalah jawaban benar". Pertanyaan dan kunci jawaban TIDAK boleh berubah.
+
+FORMAT MASUKAN
+Kamu menerima: pertanyaan, stimulus (jika ada), pembahasan guru (jika ada), dan daftar opsi. Setiap opsi diberi nomor/huruf, status kunci, dan panjang karakternya:
+- [KUNCI BENAR] = opsi yang benar menurut guru.
+- [SALAH – pengecoh] = opsi yang salah menurut guru.
+- Untuk soal kategori, setiap pernyataan diberi label kunci (mis. [Benar] atau [Salah]).
+
+LANGKAH BERPIKIR (lakukan dalam pikiranmu, jangan ditulis)
+1. Pahami pertanyaan dan stimulus. Pahami MENGAPA opsi berstatus kunci itu benar (gunakan pembahasan guru bila ada).
+2. Untuk setiap pengecoh, pahami kesalahan/kesalahpahaman apa yang diwakilinya terhadap pertanyaan tersebut.
+3. Cari pola yang bisa dipakai siswa untuk menebak (lihat daftar pola di bawah).
+4. Tulis ulang seperlunya, lalu periksa lagi bahwa kunci tetap benar dan setiap pengecoh tetap salah.
+
+ATURAN KUNCI (TIDAK BOLEH DILANGGAR)
+1. Jumlah opsi dan URUTANNYA sama persis dengan masukan. Opsi nomor/huruf ke-n tetap menjadi opsi ke-n, karena kunci disimpan berdasarkan urutan.
+2. Opsi berstatus benar tetap BENAR secara makna; opsi berstatus salah tetap SALAH secara tegas. Jangan membuat pengecoh menjadi (juga) benar, dan jangan membuat opsi benar menjadi salah atau ambigu. Pada soal kategori, setiap pernyataan mempertahankan label kuncinya.
+3. Jangan mengubah fakta, angka, satuan, nama, atau istilah yang menentukan benar/salahnya sebuah opsi.
+4. Jangan mengarang fakta baru. Jika menyeimbangkan memerlukan fakta yang tidak kamu ketahui pasti, lebih baik PERPENDEK opsi yang terlalu panjang daripada menambah isi.
+5. Jika soal memiliki gambar stimulus (yang tidak bisa kamu lihat), jangan menambahkan detail tentang isi gambar; cukup sesuaikan panjang dan gaya kalimat.
+
+POLA YANG HARUS DIHILANGKAN
+a. PANJANG: panjang semua opsi harus mirip (selisih opsi terpanjang dan terpendek sebaiknya tidak lebih dari sekitar 20–25% atau 3 kata). Opsi benar TIDAK boleh menjadi yang terpanjang maupun terpendek. Pada soal kategori, pernyataan berlabel benar dan salah harus berpanjang setara.
+b. STRUKTUR: kalimat paralel — awalan, bentuk kata kerja, dan pola kalimat sama di semua opsi.
+c. RINCIAN: tingkat detail sama. Jangan hanya opsi benar yang diberi alasan, contoh, atau kata "karena ...".
+d. KATA PETUNJUK: hindari kata mutlak (selalu, tidak pernah, hanya, semua, satu-satunya) yang hanya muncul di pengecoh; hindari kata dari pertanyaan atau stimulus yang hanya muncul di opsi benar.
+e. KEWAJARAN: setiap pengecoh harus terdengar masuk akal bagi siswa yang belum paham, dan terkait langsung dengan pertanyaan/stimulus. Tidak boleh konyol, tidak boleh menyimpang ke topik lain.
+f. TUMPANG TINDIH: tidak ada dua opsi yang artinya sama atau saling mencakup. Jangan memakai "semua benar", "semua salah", atau "tidak ada yang benar".
+
+CARA MEMPERBAIKI
+- Ubah SEMINIMAL MUNGKIN. Opsi yang sudah baik dibiarkan PERSIS sama.
+- Utamakan: menambah detail relevan yang tetap salah pada pengecoh yang terlalu pendek, dan/atau meringkas opsi benar tanpa kehilangan makna.
+- Jika opsi berupa angka, satu kata, atau nilai singkat dan sudah seimbang, kembalikan apa adanya.
+- Jika semua opsi sudah seimbang, kembalikan semuanya tanpa perubahan dan jelaskan di "note".
+- Bahasa Indonesia baku, ramah anak SD. Tulis hanya isi opsi: tanpa awalan "A.", "B.", nomor, atau tanda kutip pembungkus.
+- Ikuti arahan guru jika ada, selama tidak melanggar aturan kunci.
+
+FORMAT KELUARAN
+Balas HANYA JSON valid: {"options":["...","..."],"note":"..."}
+- "options": array string dengan jumlah dan urutan sama persis dengan masukan.
+- "note": 1–2 kalimat Bahasa Indonesia: opsi mana yang diubah dan alasannya (atau bahwa tidak ada yang perlu diubah).`
+
+const OPTION_VERIFY_GUIDANCE = `Kamu pemeriksa soal untuk siswa SD kelas 5. Jawab soal berikut sendiri secara independen dan teliti, lalu balas HANYA JSON: {"answers":[...]}.
+- Soal pilihan ganda: "answers" berisi tepat 1 indeks (mulai dari 0) opsi yang benar.
+- Soal pilihan ganda kompleks: "answers" berisi semua indeks (mulai dari 0) opsi yang benar.
+- Soal kategori: "answers" berisi satu angka per pernyataan, berurutan; 0 jika pernyataan sesuai label pertama, 1 jika sesuai label kedua.
+Jika soal kurang jelas, tetap pilih jawaban yang paling tepat.`
+
+async function callOpenAiJson(
+  key: string,
+  system: string,
+  user: string,
+  temperature: number
+): Promise<any> {
+  const model = import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini'
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      model,
+      temperature,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+    }),
+  })
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '')
+    if (res.status === 401) throw new Error('API key OpenAI tidak valid (401).')
+    if (res.status === 429) throw new Error('Batas kuota/rate OpenAI (429). Coba lagi nanti.')
+    throw new Error(`OpenAI error ${res.status}: ${errText.slice(0, 200)}`)
+  }
+  const data = await res.json()
+  const content = data?.choices?.[0]?.message?.content
+  if (!content || typeof content !== 'string') throw new Error('Respons OpenAI kosong.')
+  try {
+    return JSON.parse(content)
+  } catch {
+    throw new Error('Respons OpenAI bukan JSON valid.')
+  }
+}
+
+const OPTION_LETTERS = 'ABCDEF'
+
+function describeKey(input: RewriteOptionsInput): string[] {
+  const labels = input.categoryLabels?.length ? input.categoryLabels : ['Benar', 'Salah']
+  return input.options.map((_, i) =>
+    input.type === 'category'
+      ? `[${labels[input.correctAnswers[i] === 1 ? 1 : 0] || '?'}]`
+      : input.correctAnswers.includes(i)
+        ? '[KUNCI BENAR]'
+        : '[SALAH – pengecoh]'
+  )
+}
+
+function buildRewriteRequest(input: RewriteOptionsInput): string {
+  const typeLabel =
+    input.type === 'single'
+      ? 'Pilihan ganda (tepat 1 jawaban benar)'
+      : input.type === 'multiple'
+        ? 'Pilihan ganda kompleks (lebih dari satu jawaban benar mungkin)'
+        : `Kategori (tiap pernyataan dinilai ${(input.categoryLabels?.length ? input.categoryLabels : ['Benar', 'Salah']).join(' / ')})`
+  const keys = describeKey(input)
+  const lines = input.options.map(
+    (o, i) =>
+      `${input.type === 'category' ? i + 1 : OPTION_LETTERS[i] || i + 1}. ${keys[i]} (${o.trim().length} karakter) ${o.trim()}`
+  )
+
+  // Statistik panjang supaya AI melihat pola yang ada
+  let stats = ''
+  if (input.type !== 'category') {
+    const c = input.options.filter((_, i) => input.correctAnswers.includes(i)).map((o) => o.trim().length)
+    const w = input.options.filter((_, i) => !input.correctAnswers.includes(i)).map((o) => o.trim().length)
+    const mean = (a: number[]) => (a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : 0)
+    stats = `Rata-rata panjang: opsi benar ${mean(c)} karakter, pengecoh ${mean(w)} karakter.`
+  }
+
+  const stim = htmlToPlainText(input.stimulusHtml || '')
+  return [
+    `Mapel: ${input.subjectName}`,
+    `Materi: ${input.topicName}`,
+    `Jenis soal: ${typeLabel}`,
+    `PERTANYAAN: ${input.question.trim()}`,
+    stim ? `STIMULUS TEKS: ${stim}` : '',
+    input.hasImage ? 'CATATAN: soal ini memiliki gambar stimulus yang TIDAK bisa kamu lihat.' : '',
+    input.explanation?.trim() ? `PEMBAHASAN GURU: ${htmlToPlainText(input.explanation)}` : '',
+    `DAFTAR OPSI (${input.options.length} opsi; urutan dan jumlah TIDAK boleh berubah):`,
+    lines.join('\n'),
+    stats,
+    input.hint?.trim() ? `ARAHAN GURU: ${input.hint.trim()}` : '',
+    `Tulis ulang opsi sesuai aturan. Kembalikan tepat ${input.options.length} opsi.`,
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+async function verifyOptionKey(
+  key: string,
+  input: RewriteOptionsInput,
+  newOptions: string[]
+): Promise<OptionVerification> {
+  if (input.hasImage) {
+    return {
+      status: 'skipped',
+      message: 'Soal memakai gambar, jadi pemeriksaan otomatis dilewati. Cek kunci jawaban secara manual.',
+    }
+  }
+  try {
+    const labels = input.categoryLabels?.length ? input.categoryLabels : ['Benar', 'Salah']
+    const stim = htmlToPlainText(input.stimulusHtml || '')
+    const user = [
+      `Jenis soal: ${input.type === 'single' ? 'pilihan ganda' : input.type === 'multiple' ? 'pilihan ganda kompleks' : `kategori (label 0 = "${labels[0]}", label 1 = "${labels[1]}")`}`,
+      stim ? `Stimulus: ${stim}` : '',
+      `Pertanyaan: ${input.question.trim()}`,
+      'Opsi:',
+      newOptions.map((o, i) => `${i}. ${o}`).join('\n'),
+    ]
+      .filter(Boolean)
+      .join('\n')
+    const parsed = await callOpenAiJson(key, OPTION_VERIFY_GUIDANCE, user, 0)
+    const ans: number[] = Array.isArray(parsed?.answers)
+      ? parsed.answers.map((n: unknown) => Number(n)).filter((n: number) => Number.isInteger(n))
+      : []
+
+    if (input.type === 'category') {
+      const expected = newOptions.map((_, i) => (input.correctAnswers[i] === 1 ? 1 : 0))
+      const diff = expected
+        .map((e, i) => (ans[i] !== e ? i + 1 : 0))
+        .filter(Boolean)
+      return diff.length === 0
+        ? { status: 'ok', message: 'Pemeriksa AI menjawab soal tanpa melihat kunci dan hasilnya sama dengan kunci Anda.' }
+        : {
+            status: 'mismatch',
+            message: `Pemeriksa AI menilai pernyataan nomor ${diff.join(', ')} berbeda dari kunci Anda. Periksa manual atau kembalikan pilihan semula.`,
+          }
+    }
+
+    const got = [...new Set(ans)].sort((a, b) => a - b)
+    const want = [...input.correctAnswers].sort((a, b) => a - b)
+    const same = got.length === want.length && got.every((v, i) => v === want[i])
+    const show = (a: number[]) => a.map((i) => OPTION_LETTERS[i] || i + 1).join(', ') || '-'
+    return same
+      ? { status: 'ok', message: 'Pemeriksa AI menjawab soal tanpa melihat kunci dan hasilnya sama dengan kunci Anda.' }
+      : {
+          status: 'mismatch',
+          message: `Pemeriksa AI memilih ${show(got)}, sedangkan kunci Anda ${show(want)}. Periksa manual atau kembalikan pilihan semula.`,
+        }
+  } catch {
+    return { status: 'skipped', message: 'Pemeriksaan otomatis gagal dijalankan. Cek kunci jawaban secara manual.' }
+  }
+}
+
+/**
+ * Tulis ulang teks pilihan jawaban agar bebas pola (mis. terpanjang = benar).
+ * Urutan, jumlah, dan kunci tidak berubah; hasil diperiksa silang oleh AI kedua.
+ */
+export async function rewriteOptionsWithAI(
+  input: RewriteOptionsInput
+): Promise<RewriteOptionsResult> {
+  const key = import.meta.env.VITE_OPENAI_API_KEY?.trim()
+  if (!key) {
+    throw new Error(
+      'VITE_OPENAI_API_KEY belum diisi. Tambahkan di file .env lalu restart npm run dev.'
+    )
+  }
+  if (!input.question.trim()) throw new Error('Isi pertanyaan terlebih dahulu.')
+  if (input.options.length < 2 || input.options.some((o) => !o.trim())) {
+    throw new Error('Isi semua pilihan terlebih dahulu; AI menulis ulang pilihan yang sudah ada.')
+  }
+
+  const parsed = await callOpenAiJson(key, OPTION_REWRITE_GUIDANCE, buildRewriteRequest(input), 0.5)
+
+  const raw: unknown[] = Array.isArray(parsed?.options) ? parsed.options : []
+  if (raw.length !== input.options.length) {
+    throw new Error(
+      `AI mengembalikan ${raw.length} opsi, seharusnya ${input.options.length}. Coba lagi.`
+    )
+  }
+  const options = raw.map((o) =>
+    String(o ?? '')
+      .trim()
+      // buang awalan "A." / "B)" bila AI menambahkannya
+      .replace(/^[A-Fa-f][.)]\s+/, '')
+      .trim()
+  )
+  if (options.some((o) => !o)) throw new Error('AI menghasilkan opsi kosong. Coba lagi.')
+  const norm = options.map((o) => o.toLowerCase().replace(/\s+/g, ' '))
+  if (new Set(norm).size !== norm.length) {
+    throw new Error('AI menghasilkan dua opsi yang sama. Coba lagi.')
+  }
+
+  const changed = options
+    .map((o, i) => (o !== input.options[i].trim() ? i : -1))
+    .filter((i) => i >= 0)
+  const note =
+    typeof parsed?.note === 'string' && parsed.note.trim()
+      ? parsed.note.trim()
+      : changed.length
+        ? 'Panjang dan gaya pilihan disesuaikan.'
+        : 'Pilihan sudah seimbang, tidak ada yang diubah.'
+
+  const verification =
+    changed.length === 0
+      ? ({ status: 'ok', message: 'Tidak ada perubahan, kunci jawaban tetap.' } as OptionVerification)
+      : await verifyOptionKey(key, input, options)
+
+  return { options, changed, note, verification }
+}

@@ -20,8 +20,11 @@ import AiQuestionGenerator from '../components/AiQuestionGenerator'
 import {
   generateStimulusImage,
   isOpenAiConfigured,
+  rewriteOptionsWithAI,
   type AiDraftQuestion,
+  type OptionVerification,
 } from '../lib/openaiQuestions'
+import { analyzeOptionLength } from '../lib/optionPattern'
 import {
   getSubject,
   QUESTION_TYPE_LABELS,
@@ -676,6 +679,13 @@ export default function TopicQuestions() {
   const [aiImageHint, setAiImageHint] = useState('')
   const [aiImageError, setAiImageError] = useState('')
   const [aiImageMade, setAiImageMade] = useState(false)
+  // Seimbangkan pilihan jawaban dengan AI (editor soal)
+  const [aiOptBusy, setAiOptBusy] = useState(false)
+  const [aiOptHint, setAiOptHint] = useState('')
+  const [aiOptError, setAiOptError] = useState('')
+  const [aiOptUndo, setAiOptUndo] = useState<string[] | null>(null)
+  const [aiOptNote, setAiOptNote] = useState('')
+  const [aiOptVerify, setAiOptVerify] = useState<OptionVerification | null>(null)
   const [showPreview, setShowPreview] = useState(false)
   const [showStimulusPreview, setShowStimulusPreview] = useState(false)
   const [previewAnswers, setPreviewAnswers] = useState<number[]>([])
@@ -755,11 +765,21 @@ export default function TopicQuestions() {
     setImageInfo('')
   }
 
+  const resetAiOptionsState = () => {
+    setAiOptBusy(false)
+    setAiOptHint('')
+    setAiOptError('')
+    setAiOptUndo(null)
+    setAiOptNote('')
+    setAiOptVerify(null)
+  }
+
   const openNew = () => {
     setEditingId(null)
     setForm(emptyForm())
     setError('')
     resetAiImageState()
+    resetAiOptionsState()
     setShowEditor(true)
   }
 
@@ -782,6 +802,7 @@ export default function TopicQuestions() {
     })
     setError('')
     resetAiImageState()
+    resetAiOptionsState()
     setShowEditor(true)
   }
 
@@ -823,6 +844,84 @@ export default function TopicQuestions() {
     setShowEditor(false)
     setEditingId(null)
     setError('')
+  }
+
+  /** Tulis ulang teks pilihan agar bebas pola (mis. terpanjang = benar). Kunci tidak berubah. */
+  const handleRebalanceOptions = async () => {
+    if (aiOptBusy || !subject) return
+    setAiOptError('')
+    setAiOptNote('')
+    setAiOptVerify(null)
+    if (!form.question.trim()) {
+      setAiOptError('Isi pertanyaan terlebih dahulu.')
+      return
+    }
+    if (form.options.some((o) => !o.trim())) {
+      setAiOptError('Isi semua pilihan dulu. AI menulis ulang pilihan yang sudah ada, bukan membuatnya dari nol.')
+      return
+    }
+    if (form.type === 'single' && form.correctAnswers.length !== 1) {
+      setAiOptError('Tandai 1 jawaban benar dulu agar AI tahu kunci yang harus dipertahankan.')
+      return
+    }
+    if (form.type === 'multiple' && form.correctAnswers.length < 1) {
+      setAiOptError('Tandai jawaban benar dulu agar AI tahu kunci yang harus dipertahankan.')
+      return
+    }
+    const before = [...form.options]
+    const key =
+      form.type === 'category'
+        ? form.options.map((_, i) => (form.correctAnswers[i] === 1 ? 1 : 0))
+        : [...form.correctAnswers]
+    setAiOptBusy(true)
+    try {
+      const result = await rewriteOptionsWithAI({
+        subjectName: subject.name,
+        topicName: topic?.name || '',
+        type: form.type,
+        question: form.question,
+        stimulusHtml: form.stimulus,
+        explanation: form.explanation,
+        hasImage: Boolean(form.stimulusImage),
+        options: before,
+        correctAnswers: key,
+        categoryLabels: form.categoryLabels,
+        hint: aiOptHint,
+      })
+      if (result.changed.length > 0) {
+        setForm((prev) =>
+          prev.options.length === before.length ? { ...prev, options: result.options } : prev
+        )
+        setAiOptUndo(before)
+      }
+      const names = result.changed.map((i) =>
+        form.type === 'category' ? String(i + 1) : String.fromCharCode(65 + i)
+      )
+      setAiOptNote(
+        result.changed.length
+          ? `Diubah: ${names.join(', ')}. ${result.note}`
+          : result.note
+      )
+      setAiOptVerify(result.verification)
+    } catch (err: any) {
+      console.error(err)
+      setAiOptError(err?.message || 'Gagal menulis ulang pilihan dengan AI.')
+    } finally {
+      setAiOptBusy(false)
+    }
+  }
+
+  const undoRebalanceOptions = () => {
+    if (!aiOptUndo) return
+    if (aiOptUndo.length !== form.options.length) {
+      setAiOptError('Jumlah pilihan sudah berubah, tidak bisa dikembalikan otomatis.')
+      return
+    }
+    setForm({ ...form, options: [...aiOptUndo] })
+    setAiOptUndo(null)
+    setAiOptNote('')
+    setAiOptVerify(null)
+    setAiOptError('')
   }
 
   const setOption = (index: number, value: string) => {
@@ -1145,6 +1244,9 @@ export default function TopicQuestions() {
   if (!subject) return null
 
   const selected = questions[selectedIndex]
+  const optionPattern = showEditor
+    ? analyzeOptionLength(form.type, form.options, form.correctAnswers, form.categoryLabels)
+    : null
 
 
   const saveAiDrafts = async (drafts: AiDraftQuestion[]) => {
@@ -1586,6 +1688,72 @@ export default function TopicQuestions() {
                 <button type="button" onClick={addOption} className="mt-2 text-sm text-indigo-600 hover:text-indigo-800 font-medium">
                   + Tambah {form.type === 'category' ? 'pernyataan' : 'opsi'}
                 </button>
+              )}
+
+              {/* Peringatan pola panjang (real time, tanpa AI) */}
+              {optionPattern && (
+                <p className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  ⚠ {optionPattern.message}
+                </p>
+              )}
+
+              {/* Seimbangkan pilihan dengan AI */}
+              {isOpenAiConfigured() && (
+                <div className="mt-3 p-3 rounded-xl border border-indigo-100 bg-indigo-50/50">
+                  <input
+                    type="text"
+                    value={aiOptHint}
+                    onChange={(e) => setAiOptHint(e.target.value)}
+                    disabled={aiOptBusy}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-xs mb-2 disabled:opacity-50"
+                    placeholder="Arahan (opsional), mis. buat pengecoh dari kesalahan hitung yang umum"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleRebalanceOptions}
+                      disabled={aiOptBusy}
+                      className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition disabled:opacity-60 ${
+                        optionPattern
+                          ? 'text-white bg-indigo-600 border-indigo-600 hover:bg-indigo-700'
+                          : 'text-indigo-700 bg-white border-indigo-200 hover:bg-indigo-50'
+                      }`}
+                    >
+                      {aiOptBusy ? '⏳ AI sedang menulis ulang…' : '✨ Seimbangkan pilihan dengan AI'}
+                    </button>
+                    {aiOptUndo && !aiOptBusy && (
+                      <button
+                        type="button"
+                        onClick={undoRebalanceOptions}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-lg transition"
+                      >
+                        ↩ Kembalikan pilihan semula
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-1.5">
+                    AI membaca pertanyaan, stimulus, dan semua pilihan beserta kuncinya, lalu menulis ulang
+                    teks pilihan agar panjang &amp; gayanya seimbang. Urutan dan kunci jawaban tidak berubah.
+                  </p>
+                  {aiOptNote && !aiOptBusy && (
+                    <p className="text-xs text-gray-700 mt-1.5">{aiOptNote}</p>
+                  )}
+                  {aiOptVerify && !aiOptBusy && (
+                    <p
+                      className={`text-xs mt-1.5 ${
+                        aiOptVerify.status === 'ok'
+                          ? 'text-emerald-700'
+                          : aiOptVerify.status === 'mismatch'
+                            ? 'text-red-600 font-medium'
+                            : 'text-amber-700'
+                      }`}
+                    >
+                      {aiOptVerify.status === 'ok' ? '✓ ' : aiOptVerify.status === 'mismatch' ? '⚠ ' : 'ℹ '}
+                      {aiOptVerify.message}
+                    </p>
+                  )}
+                  {aiOptError && <p className="text-xs text-red-600 mt-1.5">{aiOptError}</p>}
+                </div>
               )}
             </div>
 
