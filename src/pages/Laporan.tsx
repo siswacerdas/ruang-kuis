@@ -20,8 +20,9 @@ import {
   downloadPdfTable,
   stampFilename,
 } from '../lib/exportGrades'
+import LaporanNilaiTp, { SiswaTpBreakdown } from '../components/LaporanNilaiTp'
 
-type TabKey = 'ringkasan' | 'siswa' | 'tp' | 'latihan'
+type TabKey = 'ringkasan' | 'siswa' | 'nilai-tp' | 'tp' | 'latihan'
 type TrendRange = 'week' | 'month'
 
 function initials(name: string) {
@@ -367,7 +368,8 @@ export default function Laporan() {
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'ringkasan', label: 'Ringkasan' },
     { key: 'siswa', label: 'Per siswa' },
-    { key: 'tp', label: 'Capaian TP' },
+    { key: 'nilai-tp', label: 'Nilai TP' },
+    { key: 'tp', label: 'Rekap TP' },
     { key: 'latihan', label: 'Per latihan' },
   ]
 
@@ -521,10 +523,7 @@ export default function Laporan() {
               type="button"
               disabled={loading || filteredAttempts.length === 0}
               onClick={() => {
-                void downloadPdfTable(
-                  stampFilename('nilai_per_mapel', 'pdf'),
-                  buildNilaiPerMapelTable(exportInput())
-                )
+                downloadPdfTable(stampFilename('nilai_per_mapel', 'pdf'), buildNilaiPerMapelTable(exportInput()))
               }}
               className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
             >
@@ -534,10 +533,7 @@ export default function Laporan() {
               type="button"
               disabled={loading || filteredAttempts.length === 0}
               onClick={() => {
-                void downloadPdfTable(
-                  stampFilename('rekap_siswa', 'pdf'),
-                  buildRekapSiswaTable(exportInput())
-                )
+                downloadPdfTable(stampFilename('rekap_siswa', 'pdf'), buildRekapSiswaTable(exportInput()))
               }}
               className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
             >
@@ -547,10 +543,7 @@ export default function Laporan() {
               type="button"
               disabled={loading || filteredAttempts.length === 0}
               onClick={() => {
-                void downloadPdfTable(
-                  stampFilename('detail_pengerjaan', 'pdf'),
-                  buildDetailAttemptTable(exportInput())
-                )
+                downloadPdfTable(stampFilename('detail_pengerjaan', 'pdf'), buildDetailAttemptTable(exportInput()))
               }}
               className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
             >
@@ -613,7 +606,7 @@ export default function Laporan() {
         ))}
       </div>
 
-      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit mb-5">
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit mb-5 overflow-x-auto">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -622,7 +615,7 @@ export default function Laporan() {
               setTab(t.key)
               if (t.key !== 'siswa') setSelectedStudentKey(null)
             }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap ${
               tab === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -830,16 +823,34 @@ export default function Laporan() {
                     </tbody>
                   </table>
                 </div>
+
+                {selectedStudentKey && (
+                  <SiswaTpBreakdown
+                    studentKey={selectedStudentKey}
+                    attempts={filteredAttempts}
+                    paketMap={paketMap}
+                  />
+                )}
               </div>
             )}
           </div>
         </div>
       )}
 
+      {tab === 'nilai-tp' && (
+        <LaporanNilaiTp
+          attempts={filteredAttempts}
+          paketMap={paketMap}
+          filterSubject={filterSubject}
+          setFilterSubject={setFilterSubject}
+          loading={loading}
+        />
+      )}
+
       {tab === 'tp' && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-900">Capaian per Tujuan Pembelajaran</h2>
+            <h2 className="text-sm font-semibold text-gray-900">Capaian per Tujuan Pembelajaran (agregat)</h2>
           </div>
           {byTp.length === 0 ? (
             <p className="p-8 text-center text-sm text-gray-400">Belum ada data TP.</p>
