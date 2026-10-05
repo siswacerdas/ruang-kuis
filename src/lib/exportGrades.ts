@@ -1,3 +1,5 @@
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import {
   SUBJECTS,
   getSubject,
@@ -343,10 +345,7 @@ export function stampFilename(prefix: string, ext: 'csv' | 'pdf' = 'csv') {
 }
 
 /** Generate & unduh PDF tabel. */
-export async function downloadPdfTable(filename: string, data: TableData) {
-  const { default: jsPDF } = await import('jspdf')
-  const { default: autoTable } = await import('jspdf-autotable')
-
+export function downloadPdfTable(filename: string, data: TableData) {
   const doc = new jsPDF({
     orientation: data.landscape ? 'landscape' : 'portrait',
     unit: 'mm',
@@ -394,7 +393,7 @@ export async function downloadPdfTable(filename: string, data: TableData) {
       0: { halign: 'center', cellWidth: 10 },
     },
     margin: { left: margin, right: margin },
-    didDrawPage: (hook) => {
+    didDrawPage: (hook: { pageNumber: number }) => {
       const pageCount = doc.getNumberOfPages()
       doc.setFontSize(8)
       doc.setTextColor(150)
