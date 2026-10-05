@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { collection, getDocs, query, orderBy } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import {
   SUBJECTS,
@@ -14,14 +13,13 @@ import {
   buildNilaiPerMapelCsv,
   buildRekapSiswaCsv,
   buildDetailAttemptCsv,
+  buildNilaiPerMapelTable,
+  buildRekapSiswaTable,
+  buildDetailAttemptTable,
   downloadCsv,
+  downloadPdfTable,
   stampFilename,
 } from '../lib/exportGrades'
-
-/**
- * Laporan progress siswa — berbasis attempts (kuis).
- * Pola referensi LMS: kartu ringkas, tren skor, velocity waktu pengerjaan, drill-down per siswa.
- */
 
 type TabKey = 'ringkasan' | 'siswa' | 'tp' | 'latihan'
 type TrendRange = 'week' | 'month'
@@ -374,7 +372,6 @@ export default function Laporan() {
   ]
 
   const maxTrendAvg = Math.max(100, ...trendSeries.map((p) => p.avg), 1)
-  const maxMinutes = Math.max(...trendSeries.map((p) => p.minutes), 1)
 
   const exportInput = () => ({
     attempts,
@@ -477,53 +474,89 @@ export default function Laporan() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-5 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-5 space-y-3">
         <div>
           <p className="text-sm font-semibold text-gray-900">Export nilai</p>
           <p className="text-[11px] text-gray-400 mt-0.5">
-            Mengikuti filter mapel & kelas di atas. File CSV (buka di Excel / Google Sheets).
+            Mengikuti filter mapel & kelas di atas. CSV untuk Excel · PDF untuk arsip/cetak.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={loading || filteredAttempts.length === 0}
-            onClick={() => {
-              downloadCsv(stampFilename('nilai_per_mapel'), buildNilaiPerMapelCsv(exportInput()))
-            }}
-            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Nilai per mapel
-          </button>
-          <button
-            type="button"
-            disabled={loading || filteredAttempts.length === 0}
-            onClick={() => {
-              downloadCsv(stampFilename('rekap_siswa'), buildRekapSiswaCsv(exportInput()))
-            }}
-            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Rekap siswa
-          </button>
-          <button
-            type="button"
-            disabled={loading || filteredAttempts.length === 0}
-            onClick={() => {
-              downloadCsv(stampFilename('detail_pengerjaan'), buildDetailAttemptCsv(exportInput()))
-            }}
-            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Detail attempt
-          </button>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 w-10">CSV</span>
+            <button
+              type="button"
+              disabled={loading || filteredAttempts.length === 0}
+              onClick={() => {
+                downloadCsv(stampFilename('nilai_per_mapel', 'csv'), buildNilaiPerMapelCsv(exportInput()))
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              Nilai per mapel
+            </button>
+            <button
+              type="button"
+              disabled={loading || filteredAttempts.length === 0}
+              onClick={() => {
+                downloadCsv(stampFilename('rekap_siswa', 'csv'), buildRekapSiswaCsv(exportInput()))
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              Rekap siswa
+            </button>
+            <button
+              type="button"
+              disabled={loading || filteredAttempts.length === 0}
+              onClick={() => {
+                downloadCsv(stampFilename('detail_pengerjaan', 'csv'), buildDetailAttemptCsv(exportInput()))
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              Detail attempt
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-rose-400 w-10">PDF</span>
+            <button
+              type="button"
+              disabled={loading || filteredAttempts.length === 0}
+              onClick={() => {
+                void downloadPdfTable(
+                  stampFilename('nilai_per_mapel', 'pdf'),
+                  buildNilaiPerMapelTable(exportInput())
+                )
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              Nilai per mapel
+            </button>
+            <button
+              type="button"
+              disabled={loading || filteredAttempts.length === 0}
+              onClick={() => {
+                void downloadPdfTable(
+                  stampFilename('rekap_siswa', 'pdf'),
+                  buildRekapSiswaTable(exportInput())
+                )
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              Rekap siswa
+            </button>
+            <button
+              type="button"
+              disabled={loading || filteredAttempts.length === 0}
+              onClick={() => {
+                void downloadPdfTable(
+                  stampFilename('detail_pengerjaan', 'pdf'),
+                  buildDetailAttemptTable(exportInput())
+                )
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              Detail attempt
+            </button>
+          </div>
         </div>
       </div>
 
@@ -894,12 +927,6 @@ export default function Laporan() {
               </table>
             </div>
           )}
-        </div>
-      )}
-
-      {loading && (
-        <div className="fixed inset-0 pointer-events-none flex items-start justify-center pt-24">
-          <span className="text-xs text-gray-400 bg-white/80 px-3 py-1 rounded-full shadow-sm">Memuat…</span>
         </div>
       )}
     </Layout>
