@@ -21,7 +21,7 @@ export default function SiswaLogin() {
     ;(async () => {
       const s = await ensureStudentSession()
       if (!cancelled && s) {
-        navigate('/kerjakan/token', { replace: true })
+        navigate('/siswa', { replace: true })
         return
       }
       if (!cancelled) setCheckingSession(false)
@@ -91,7 +91,7 @@ export default function SiswaLogin() {
         authUid: cred.user.uid,
       })
 
-      navigate('/kerjakan/token', { replace: true })
+      navigate('/siswa', { replace: true })
     } catch (err: any) {
       console.error(err)
       if (
