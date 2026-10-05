@@ -3,7 +3,13 @@ import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { ensureStudentSession, type StudentSession } from '../lib/studentSession'
 import { Link, useNavigate } from 'react-router-dom'
-import type { LatihanAttempt } from '../types/question'
+import {
+  SUBJECTS,
+  getSubject,
+  type LatihanAttempt,
+  type LatihanPaket,
+  type SubjectKey,
+} from '../types/question'
 
 function toMillis(v: unknown): number | null {
   if (!v) return null
@@ -59,6 +65,7 @@ export default function KerjakanRiwayat() {
   const navigate = useNavigate()
   const [student, setStudent] = useState<StudentSession | null>(null)
   const [attempts, setAttempts] = useState<LatihanAttempt[]>([])
+  const [pakets, setPakets] = useState<LatihanPaket[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortKey>('newest')
@@ -111,6 +118,13 @@ export default function KerjakanRiwayat() {
         if (a.id) map.set(a.id, a)
       })
       setAttempts([...map.values()])
+
+      try {
+        const pSnap = await getDocs(collection(db, 'latihan'))
+        setPakets(pSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanPaket)))
+      } catch (err) {
+        console.warn('load latihan', err)
+      }
     } catch (err) {
       console.error(err)
     } finally {
@@ -147,6 +161,35 @@ export default function KerjakanRiwayat() {
       .sort((a, b) => a.percent - b.percent || a.tp.localeCompare(b.tp, 'id'))
       .slice(0, 8)
   }, [attempts])
+
+  const subjectGrades = useMemo(() => {
+    const paketMap = new Map<string, LatihanPaket>()
+    pakets.forEach((p) => {
+      if (p.id) paketMap.set(p.id, p)
+    })
+    const bySub = new Map<string, { sum: number; n: number }>()
+    attempts.forEach((a) => {
+      const p = paketMap.get(a.latihanId)
+      const sk = p?.subjectKey || 'unknown'
+      const cur = bySub.get(sk) || { sum: 0, n: 0 }
+      cur.sum += a.percent ?? 0
+      cur.n += 1
+      bySub.set(sk, cur)
+    })
+    return [...bySub.entries()]
+      .map(([key, v]) => {
+        const sub = key !== 'unknown' ? getSubject(key as SubjectKey) : undefined
+        return {
+          key,
+          name: sub?.name || 'Tanpa mapel',
+          shortName: sub?.shortName || '—',
+          icon: sub?.icon || '📝',
+          avg: v.n ? Math.round(v.sum / v.n) : 0,
+          n: v.n,
+        }
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, 'id'))
+  }, [attempts, pakets])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -198,12 +241,20 @@ export default function KerjakanRiwayat() {
               </p>
             </div>
           </div>
-          <Link
-            to="/siswa"
-            className="text-xs font-medium text-indigo-600 px-3 py-2 rounded-xl hover:bg-indigo-50 transition shrink-0"
-          >
-            ← Beranda
-          </Link>
+          <div className="flex items-center gap-1 shrink-0">
+            <Link
+              to="/siswa/peringkat"
+              className="text-xs font-medium text-gray-600 px-3 py-2 rounded-xl hover:bg-gray-50 transition"
+            >
+              Peringkat
+            </Link>
+            <Link
+              to="/siswa"
+              className="text-xs font-medium text-indigo-600 px-3 py-2 rounded-xl hover:bg-indigo-50 transition"
+            >
+              ← Beranda
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -221,7 +272,7 @@ export default function KerjakanRiwayat() {
               Riwayatmu, {firstName}
             </h1>
             <p className="text-indigo-100 text-sm sm:text-base leading-relaxed">
-              Lihat skor, waktu pengerjaan, dan capaian TP dari kuis yang sudah kamu selesaikan.
+              Lihat skor, nilai akhir per mapel, dan capaian TP dari kuis yang sudah kamu selesaikan.
             </p>
           </div>
         </section>
@@ -254,6 +305,45 @@ export default function KerjakanRiwayat() {
             </div>
           ))}
         </section>
+
+        {subjectGrades.length > 0 && (
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-900">Nilai akhir per mata pelajaran</h2>
+              <span className="text-[11px] text-gray-400">Rata-rata skor kuis</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {subjectGrades.map((g) => (
+                <div
+                  key={g.key}
+                  className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 flex items-center gap-3"
+                >
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-lg shrink-0">
+                    {g.icon}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{g.name}</p>
+                    <p className="text-[11px] text-gray-400">{g.n} kuis dikerjakan</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p
+                      className={`text-xl font-bold tabular-nums ${
+                        g.avg >= 70
+                          ? 'text-emerald-600'
+                          : g.avg >= 40
+                            ? 'text-amber-600'
+                            : 'text-rose-600'
+                      }`}
+                    >
+                      {g.avg}
+                    </p>
+                    <p className="text-[10px] text-gray-400">nilai akhir</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {tpAgg.length > 0 && (
           <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
