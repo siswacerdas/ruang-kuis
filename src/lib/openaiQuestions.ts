@@ -8,10 +8,7 @@
  */
 
 import type { QuestionType, SubjectKey } from '../types/question'
-<<<<<<< Updated upstream
-=======
 import { compressImageSrc } from './imageCompress'
->>>>>>> Stashed changes
 
 /** Mode stimulus yang diminta guru */
 export type StimulusMode = 'none' | 'text' | 'image'

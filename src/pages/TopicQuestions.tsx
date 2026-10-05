@@ -17,15 +17,11 @@ import { Link, useParams, useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import Layout from '../components/Layout'
 import AiQuestionGenerator from '../components/AiQuestionGenerator'
-<<<<<<< Updated upstream
-import type { AiDraftQuestion } from '../lib/openaiQuestions'
-=======
 import {
   generateStimulusImage,
   isOpenAiConfigured,
   type AiDraftQuestion,
 } from '../lib/openaiQuestions'
->>>>>>> Stashed changes
 import {
   getSubject,
   QUESTION_TYPE_LABELS,
