@@ -353,6 +353,12 @@ export default function KerjakanEntry() {
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             <Link
+              to="/siswa/materi"
+              className="text-xs font-medium text-gray-600 px-3 py-2 rounded-xl hover:bg-gray-50 transition"
+            >
+              Materi
+            </Link>
+            <Link
               to="/siswa/peringkat"
               className="text-xs font-medium text-gray-600 px-3 py-2 rounded-xl hover:bg-gray-50 transition"
             >
@@ -512,155 +518,80 @@ export default function KerjakanEntry() {
                       : 'bg-white text-gray-600 border-gray-200 hover:border-violet-200'
                   }`}
                 >
-                  {s.icon} {s.shortName}
+                  {s.shortName}
                 </button>
               ))}
             </div>
           )}
-        </section>
-
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-900">Kuis untukmu</h2>
-            <span className="text-[11px] text-gray-400">
-              {loadingList ? 'Memuat…' : `${filtered.length} paket`}
-            </span>
-          </div>
 
           {loadingList ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="bg-white rounded-2xl border border-gray-100 h-56 animate-pulse" />
-              ))}
-            </div>
+            <p className="text-center text-sm text-gray-400 py-12">Memuat jadwal…</p>
           ) : filtered.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
-              <p className="text-gray-600 font-medium">Belum ada kuis di sini</p>
-              <p className="text-sm text-gray-400 mt-1">
-                {filter === 'all' && subjectFilter === 'all'
-                  ? 'Tunggu guru membuka paket latihan.'
-                  : 'Coba filter status, mapel, atau pencarian lain.'}
-              </p>
+            <div className="bg-white rounded-2xl border border-dashed border-gray-200 px-5 py-14 text-center">
+              <p className="text-sm text-gray-500">Tidak ada kuis untuk filter ini.</p>
+              <p className="text-xs text-gray-400 mt-1">Coba ubah filter atau tunggu jadwal dari guru.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
               {filtered.map(({ paket: p, resolved, done, blocked }) => {
-                const sub = p.subjectKey ? getSubject(p.subjectKey) : null
-                const subMeta = SUBJECTS.find((s) => s.key === p.subjectKey)
-                const qCount = p.questionCount || p.questionIds?.length || 0
+                const sub = p.subjectKey ? getSubject(p.subjectKey) : undefined
                 const best = p.id ? bestByLatihan[p.id] : undefined
-                const canStart = resolved === 'active' && !blocked
-                const grad = gradientFor(p.id)
-
+                const canEnter = resolved === 'active' && !blocked
                 return (
-                  <article
+                  <button
                     key={p.id}
-                    className="group bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:border-indigo-200 hover:shadow-md transition flex flex-col"
+                    type="button"
+                    onClick={() => selectPaket(p)}
+                    disabled={!canEnter && resolved !== 'active'}
+                    className={`text-left group rounded-2xl border bg-white shadow-sm overflow-hidden transition ${
+                      canEnter
+                        ? 'border-gray-100 hover:border-indigo-200 hover:shadow-md'
+                        : 'border-gray-100 opacity-90'
+                    }`}
                   >
-                    <div
-                      className={`relative h-28 bg-gradient-to-br ${grad} px-4 pt-3 pb-2 flex flex-col justify-between`}
-                    >
+                    <div className={`h-2 bg-gradient-to-r ${gradientFor(p.id)}`} />
+                    <div className="p-4 space-y-3">
                       <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          {sub && (
+                            <span className="text-[11px] font-medium text-indigo-600">
+                              {sub.shortName}
+                            </span>
+                          )}
+                          <h3 className="font-semibold text-gray-900 leading-snug mt-0.5 group-hover:text-indigo-700 transition">
+                            {p.title}
+                          </h3>
+                        </div>
                         <span
-                          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border bg-white/90 ${statusPill(
+                          className={`shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${statusPill(
                             resolved
                           )}`}
                         >
                           {LATIHAN_STATUS_LABELS[resolved]}
                         </span>
+                      </div>
+                      <p className="text-xs text-gray-500">{formatRange(p.startAt, p.endAt)}</p>
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-gray-400">
+                          {p.questionCount || 0} soal
+                          {p.timeLimitMinutes ? ` · ${p.timeLimitMinutes} mnt` : ''}
+                        </span>
                         {done && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-100">
-                            Selesai
+                          <span className="font-medium text-emerald-600">
+                            {best != null ? `Skor terbaik ${best}%` : 'Sudah dikerjakan'}
                           </span>
                         )}
                       </div>
-                      <div className="text-white/90 text-3xl opacity-80 select-none leading-none">
-                        {subMeta?.icon || '📝'}
-                      </div>
+                      {blocked && (
+                        <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg px-2 py-1">
+                          Sudah dikerjakan · ulang tidak diizinkan
+                        </p>
+                      )}
+                      {canEnter && (
+                        <p className="text-xs font-medium text-indigo-600">Ketuk untuk mulai →</p>
+                      )}
                     </div>
-
-                    <div className="p-4 flex flex-col flex-1">
-                      <h3 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-indigo-700 transition">
-                        {p.title}
-                      </h3>
-                      <p className="text-[11px] text-gray-500 mt-1">{formatRange(p.startAt, p.endAt)}</p>
-
-                      <div className="mt-3 flex items-center gap-4">
-                        <div className="flex items-center gap-1.5">
-                          <div
-                            className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-[10px] font-bold tabular-nums ${
-                              best != null
-                                ? best >= 70
-                                  ? 'border-emerald-400 text-emerald-600'
-                                  : best >= 40
-                                    ? 'border-amber-400 text-amber-600'
-                                    : 'border-rose-400 text-rose-600'
-                                : 'border-gray-200 text-gray-400'
-                            }`}
-                          >
-                            {best != null ? `${best}` : '—'}
-                          </div>
-                          <div>
-                            <p className="text-[10px] text-gray-400 leading-none">Skor</p>
-                            <p className="text-[11px] font-medium text-gray-700 leading-tight">
-                              {best != null ? `${best}%` : 'Belum'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="h-8 w-px bg-gray-100" />
-                        <div>
-                          <p className="text-[10px] text-gray-400 leading-none">Soal</p>
-                          <p className="text-[11px] font-medium text-gray-700 leading-tight">
-                            {qCount}
-                            {p.timeLimitMinutes ? ` · ${p.timeLimitMinutes} mnt` : ''}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap gap-1">
-                        {sub && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-600 border border-gray-100">
-                            {subMeta?.icon} {sub.shortName}
-                          </span>
-                        )}
-                        {blocked && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-100">
-                            Tidak bisa diulang
-                          </span>
-                        )}
-                        {canStart && needsToken(p) && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-violet-50 text-violet-700 border border-violet-100">
-                            Perlu token
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="mt-auto pt-4">
-                        <button
-                          type="button"
-                          disabled={!canStart || loading}
-                          onClick={() => selectPaket(p)}
-                          className={`w-full text-sm font-medium py-2.5 rounded-xl transition ${
-                            canStart
-                              ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm shadow-indigo-100'
-                              : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                          }`}
-                        >
-                          {!canStart
-                            ? resolved === 'scheduled'
-                              ? 'Belum dimulai'
-                              : blocked
-                                ? 'Sudah dikerjakan'
-                                : 'Tidak tersedia'
-                            : needsToken(p)
-                              ? 'Mulai dengan token'
-                              : done
-                                ? 'Kerjakan ulang'
-                                : 'Mulai kuis'}
-                        </button>
-                      </div>
-                    </div>
-                  </article>
+                  </button>
                 )
               })}
             </div>
@@ -668,74 +599,53 @@ export default function KerjakanEntry() {
         </section>
       </main>
 
-      {showTokenModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <h3 className="text-base font-semibold text-gray-900">
-              {selected && needsToken(selected) ? 'Token diperlukan' : 'Info'}
-            </h3>
-            <p className="text-sm text-gray-500 mt-1">
-              {error && !needsToken(selected || ({} as LatihanPaket))
-                ? error
-                : selected
-                  ? `Masukkan token dari guru untuk “${selected.title}”.`
-                  : 'Masukkan token.'}
-            </p>
-            {selected && needsToken(selected) && (
-              <form onSubmit={confirmToken} className="mt-4 space-y-3">
-                {error && (
-                  <div className="bg-red-50 border border-red-100 text-red-600 text-sm px-3 py-2 rounded-xl">
-                    {error}
-                  </div>
-                )}
-                <input
-                  ref={tokenRef}
-                  type="text"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value.toUpperCase())}
-                  placeholder="Contoh: AB12CD"
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-center text-lg font-mono tracking-widest uppercase"
-                  maxLength={12}
-                  autoComplete="off"
-                />
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowTokenModal(false)
-                      setError('')
-                      setSelectedId(null)
-                    }}
-                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-60"
-                  >
-                    {loading ? 'Memeriksa…' : 'Mulai'}
-                  </button>
-                </div>
-              </form>
-            )}
-            {selected && !needsToken(selected) && (
+      {showTokenModal && selected && (
+        <div className="fixed inset-0 z-40 bg-gray-900/40 flex items-end sm:items-center justify-center p-0 sm:p-6">
+          <div className="bg-white w-full sm:max-w-md sm:rounded-2xl shadow-xl p-5 sm:p-6">
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{selected.title}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {needsToken(selected)
+                    ? 'Masukkan token dari guru untuk memulai'
+                    : error || 'Tidak dapat membuka paket ini'}
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => {
                   setShowTokenModal(false)
                   setError('')
-                  setSelectedId(null)
+                  setToken('')
                 }}
-                className="mt-4 w-full py-2.5 rounded-xl bg-gray-900 text-white text-sm font-medium"
+                className="text-xs text-gray-500 hover:text-gray-800 px-2 py-1"
               >
                 Tutup
               </button>
+            </div>
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2 mb-3">{error}</p>
+            )}
+            {needsToken(selected) && !error?.includes('sudah mengerjakan') && (
+              <form onSubmit={confirmToken} className="space-y-3">
+                <input
+                  ref={tokenRef}
+                  type="text"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value.toUpperCase())}
+                  placeholder="TOKEN"
+                  className="w-full text-center tracking-[0.3em] font-semibold text-lg border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500/30 outline-none uppercase"
+                  autoComplete="off"
+                  maxLength={12}
+                />
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-indigo-600 text-white text-sm font-medium py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-60 transition"
+                >
+                  {loading ? 'Memulai…' : 'Mulai mengerjakan'}
+                </button>
+              </form>
             )}
           </div>
         </div>
