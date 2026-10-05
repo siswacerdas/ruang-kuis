@@ -19,6 +19,8 @@ import KerjakanEntry from './pages/KerjakanEntry'
 import KerjakanQuiz from './pages/KerjakanQuiz'
 import KerjakanResult from './pages/KerjakanResult'
 import KerjakanRiwayat from './pages/KerjakanRiwayat'
+import Peringkat from './pages/Peringkat'
+import SiswaPeringkat from './pages/SiswaPeringkat'
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -64,6 +66,7 @@ function App() {
         <Route path="/kerjakan/token" element={<Navigate to="/siswa" replace />} />
         <Route path="/kerjakan/hasil" element={<KerjakanResult />} />
         <Route path="/kerjakan/riwayat" element={<KerjakanRiwayat />} />
+        <Route path="/siswa/peringkat" element={<SiswaPeringkat />} />
         <Route path="/kerjakan/:latihanId" element={<KerjakanQuiz />} />
 
         {/* Auth terpadu (Siswa / Guru / Tes) */}
@@ -99,6 +102,7 @@ function App() {
         />
         <Route path="/latihan-soal/:id" element={isAdmin ? <LatihanForm /> : <Navigate to="/login" />} />
         <Route path="/laporan" element={isAdmin ? <Laporan /> : <Navigate to="/login" />} />
+        <Route path="/peringkat" element={isAdmin ? <Peringkat /> : <Navigate to="/login" />} />
         <Route path="/daftar-siswa" element={isAdmin ? <SiswaList /> : <Navigate to="/login" />} />
         <Route
           path="/tujuan-pembelajaran"
