@@ -104,7 +104,7 @@ export default function KerjakanEntry() {
       const s = await ensureStudentSession()
       if (cancelled) return
       if (!s) {
-        navigate('/kerjakan', { replace: true })
+        navigate('/login', { replace: true })
         return
       }
       setStudent(s)
@@ -230,7 +230,7 @@ export default function KerjakanEntry() {
     } catch {
       /* ignore */
     }
-    navigate('/kerjakan', { replace: true })
+    navigate('/login', { replace: true })
   }
 
   const beginSession = (paket: LatihanPaket, tokenUsed?: string) => {
