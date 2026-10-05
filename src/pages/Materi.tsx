@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { SUBJECTS, getSubject, type SubjectKey } from '../types/question'
@@ -11,102 +11,65 @@ import {
   type LessonPdf,
 } from '../lib/lessonMaterials'
 
-const colorMap: Record<
-  string,
-  { card: string; icon: string; ring: string; soft: string }
-> = {
-  rose: {
-    card: 'hover:border-rose-200 hover:shadow-rose-100/80',
-    icon: 'bg-rose-100 text-rose-600',
-    ring: 'ring-rose-200',
-    soft: 'bg-rose-50 text-rose-700',
-  },
-  red: {
-    card: 'hover:border-red-200 hover:shadow-red-100/80',
-    icon: 'bg-red-100 text-red-600',
-    ring: 'ring-red-200',
-    soft: 'bg-red-50 text-red-700',
-  },
-  emerald: {
-    card: 'hover:border-emerald-200 hover:shadow-emerald-100/80',
-    icon: 'bg-emerald-100 text-emerald-600',
-    ring: 'ring-emerald-200',
-    soft: 'bg-emerald-50 text-emerald-700',
-  },
-  purple: {
-    card: 'hover:border-purple-200 hover:shadow-purple-100/80',
-    icon: 'bg-purple-100 text-purple-600',
-    ring: 'ring-purple-200',
-    soft: 'bg-purple-50 text-purple-700',
-  },
-  amber: {
-    card: 'hover:border-amber-200 hover:shadow-amber-100/80',
-    icon: 'bg-amber-100 text-amber-600',
-    ring: 'ring-amber-200',
-    soft: 'bg-amber-50 text-amber-700',
-  },
-  blue: {
-    card: 'hover:border-blue-200 hover:shadow-blue-100/80',
-    icon: 'bg-blue-100 text-blue-600',
-    ring: 'ring-blue-200',
-    soft: 'bg-blue-50 text-blue-700',
-  },
-  teal: {
-    card: 'hover:border-teal-200 hover:shadow-teal-100/80',
-    icon: 'bg-teal-100 text-teal-600',
-    ring: 'ring-teal-200',
-    soft: 'bg-teal-50 text-teal-700',
-  },
-  indigo: {
-    card: 'hover:border-indigo-200 hover:shadow-indigo-100/80',
-    icon: 'bg-indigo-100 text-indigo-600',
-    ring: 'ring-indigo-200',
-    soft: 'bg-indigo-50 text-indigo-700',
-  },
-}
+const accent: Record<string, { bar: string; icon: string; badge: string }>
+  = {
+    rose: { bar: 'bg-rose-500', icon: 'bg-rose-50 text-rose-600', badge: 'text-rose-700 bg-rose-50' },
+    red: { bar: 'bg-red-500', icon: 'bg-red-50 text-red-600', badge: 'text-red-700 bg-red-50' },
+    emerald: { bar: 'bg-emerald-500', icon: 'bg-emerald-50 text-emerald-600', badge: 'text-emerald-700 bg-emerald-50' },
+    purple: { bar: 'bg-purple-500', icon: 'bg-purple-50 text-purple-600', badge: 'text-purple-700 bg-purple-50' },
+    amber: { bar: 'bg-amber-500', icon: 'bg-amber-50 text-amber-600', badge: 'text-amber-800 bg-amber-50' },
+    blue: { bar: 'bg-blue-500', icon: 'bg-blue-50 text-blue-600', badge: 'text-blue-700 bg-blue-50' },
+    teal: { bar: 'bg-teal-500', icon: 'bg-teal-50 text-teal-600', badge: 'text-teal-700 bg-teal-50' },
+    indigo: { bar: 'bg-indigo-500', icon: 'bg-indigo-50 text-indigo-600', badge: 'text-indigo-700 bg-indigo-50' },
+  }
 
 function PdfViewer({ pdf, onClose }: { pdf: LessonPdf; onClose: () => void }) {
   const subject = getSubject(pdf.subjectKey)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   return (
     <div
-      className="fixed inset-0 z-40 bg-gray-900/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center p-0 sm:p-6"
+      className="fixed inset-0 z-40 bg-slate-900/60 flex items-end sm:items-center justify-center p-0 sm:p-5"
       onClick={onClose}
       role="presentation"
     >
       <div
-        className="bg-white w-full sm:max-w-5xl h-[94vh] sm:h-[88vh] sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        className="bg-white w-full sm:max-w-5xl h-[95vh] sm:h-[90vh] sm:rounded-xl shadow-2xl flex flex-col overflow-hidden border border-slate-200/80"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={pdf.title}
       >
-        <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-gray-100 bg-white">
-          <div className="min-w-0 flex items-center gap-3">
-            <div className="hidden sm:flex w-9 h-9 rounded-lg bg-rose-50 text-rose-600 items-center justify-center text-[10px] font-bold shrink-0">
-              PDF
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate">{pdf.title}</p>
-              <p className="text-xs text-gray-400 truncate">
-                {subject?.name}
-                {subject ? ' · ' : ''}
-                {formatBytes(pdf.sizeBytes)}
-              </p>
-            </div>
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b border-slate-100">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-900 truncate tracking-tight">{pdf.title}</p>
+            <p className="text-xs text-slate-500 mt-0.5 truncate">
+              {[subject?.name, formatBytes(pdf.sizeBytes)].filter(Boolean).join(' · ')}
+            </p>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <a
               href={viewUrl(pdf.driveFileId)}
               target="_blank"
               rel="noreferrer"
-              className="text-xs font-medium text-indigo-600 px-3 py-2 rounded-xl hover:bg-indigo-50 transition"
+              className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition"
             >
-              Buka di Drive
+              <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              Google Drive
             </a>
             <button
               type="button"
               onClick={onClose}
-              className="text-xs font-medium text-gray-600 px-3 py-2 rounded-xl hover:bg-gray-100 transition"
+              className="text-xs font-medium text-slate-600 px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition"
             >
               Tutup
             </button>
@@ -115,7 +78,7 @@ function PdfViewer({ pdf, onClose }: { pdf: LessonPdf; onClose: () => void }) {
         <iframe
           title={pdf.title}
           src={previewUrl(pdf.driveFileId)}
-          className="flex-1 w-full bg-gray-50"
+          className="flex-1 w-full bg-slate-50"
           allow="autoplay"
         />
       </div>
@@ -154,92 +117,78 @@ function MateriBody({
       const cb = counts[b.key] || 0
       if (ca > 0 && cb === 0) return -1
       if (ca === 0 && cb > 0) return 1
-      return 0
+      return a.name.localeCompare(b.name, 'id')
     })
     return showEmpty ? list : list.filter((s) => (counts[s.key] || 0) > 0)
   }, [counts, showEmpty])
 
+  /* —— Detail mapel —— */
   if (subject) {
-    const c = colorMap[subject.color] || colorMap.indigo
+    const a = accent[subject.color] || accent.indigo
     return (
-      <div className="space-y-5">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="space-y-6">
+        <nav className="flex items-center gap-2 text-xs text-slate-500">
           <button
             type="button"
             onClick={() => onSelect('')}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800 px-2.5 py-1.5 rounded-xl hover:bg-indigo-50 transition"
+            className="font-medium text-indigo-600 hover:text-indigo-800 transition"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Semua mapel
+            Materi
           </button>
-        </div>
+          <span className="text-slate-300">/</span>
+          <span className="text-slate-700 font-medium truncate">{subject.name}</span>
+        </nav>
 
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-4 flex items-center gap-4">
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${c.icon}`}>
+        <header className="flex items-start gap-4">
+          <div className={`w-12 h-12 rounded-lg flex items-center justify-center text-xl shrink-0 ${a.icon}`}>
             {subject.icon}
           </div>
-          <div className="min-w-0">
-            <h2 className="text-lg font-bold text-gray-900">{subject.name}</h2>
-            <p className="text-xs text-gray-500 mt-0.5">
+          <div className="min-w-0 pt-0.5">
+            <h2 className="text-xl font-semibold text-slate-900 tracking-tight">{subject.name}</h2>
+            <p className="text-sm text-slate-500 mt-1">
               {pdfs.length > 0
-                ? `${pdfs.length} presentasi PDF siap dibuka`
-                : 'Belum ada presentasi untuk mapel ini'}
+                ? `${pdfs.length} dokumen presentasi`
+                : 'Belum ada dokumen untuk mapel ini'}
             </p>
           </div>
-        </div>
+        </header>
 
         {pdfs.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-dashed border-gray-200 px-5 py-14 text-center">
-            <div className="w-12 h-12 rounded-xl bg-gray-50 text-gray-300 flex items-center justify-center mx-auto mb-3">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-            </div>
-            <p className="text-sm font-medium text-gray-700">Belum ada PDF</p>
-            <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto">
-              Presentasi untuk mapel ini belum diunggah di folder Pustaka Belajar.
+          <div className="rounded-xl border border-dashed border-slate-200 bg-white px-6 py-16 text-center">
+            <p className="text-sm font-medium text-slate-700">Dokumen belum tersedia</p>
+            <p className="text-sm text-slate-400 mt-1 max-w-sm mx-auto">
+              Presentasi PDF untuk mapel ini belum diunggah ke Pustaka Belajar.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100">
             {pdfs.map((pdf, i) => (
               <button
                 key={pdf.id}
                 type="button"
                 onClick={() => setOpen(pdf)}
-                className="text-left group bg-white rounded-2xl border border-gray-100 p-4 shadow-sm hover:border-indigo-200 hover:shadow-md transition"
+                className="w-full text-left group flex items-center gap-4 px-4 sm:px-5 py-4 hover:bg-slate-50/80 transition"
               >
-                <div className="flex items-start gap-3">
-                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-rose-50 to-orange-50 text-rose-600 flex flex-col items-center justify-center shrink-0 border border-rose-100/80">
-                    <span className="text-[10px] font-bold leading-none">PDF</span>
-                    <span className="text-[9px] text-rose-400 mt-0.5 tabular-nums">{i + 1}</span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-gray-900 group-hover:text-indigo-700 transition leading-snug">
-                      {pdf.title}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <span>{formatBytes(pdf.sizeBytes)}</span>
-                      <span className="text-gray-300">·</span>
-                      <span className="text-indigo-500 font-medium group-hover:underline">Buka pratinjau</span>
-                    </p>
-                  </div>
-                  <svg
-                    className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 shrink-0 mt-1 transition"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
+                <span className="w-8 h-8 rounded-md bg-slate-100 text-slate-500 text-xs font-semibold tabular-nums flex items-center justify-center shrink-0 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition">
+                  {String(i + 1).padStart(2, '0')}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-slate-900 group-hover:text-indigo-700 transition truncate">
+                    {pdf.title}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5 tabular-nums">{formatBytes(pdf.sizeBytes)} · PDF</p>
                 </div>
+                <span className="hidden sm:inline-flex text-xs font-medium text-indigo-600 opacity-0 group-hover:opacity-100 transition shrink-0">
+                  Pratinjau
+                </span>
+                <svg
+                  className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 shrink-0 transition"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
               </button>
             ))}
           </div>
@@ -250,53 +199,51 @@ function MateriBody({
     )
   }
 
+  /* —— Daftar mapel —— */
   return (
-    <div className="space-y-5">
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700 text-white p-5 sm:p-6 shadow-sm">
-        <div className="absolute inset-0 opacity-20 pointer-events-none">
-          <div className="absolute -top-8 -right-8 w-40 h-40 bg-white rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-8 w-32 h-32 bg-indigo-300 rounded-full blur-3xl" />
-        </div>
-        <div className="relative z-10">
-          <p className="text-indigo-100 text-[11px] font-semibold uppercase tracking-wide mb-1">
-            Pustaka Belajar
-          </p>
-          <h2 className="text-xl sm:text-2xl font-bold leading-tight">Presentasi materi</h2>
-          <p className="text-indigo-100/90 text-sm mt-1.5 max-w-lg">
-            Pilih mata pelajaran, lalu buka PDF. File tersimpan di Google Drive dan ditampilkan sebagai
-            pratinjau.
-          </p>
-          <div className="flex flex-wrap gap-3 mt-4">
-            <div className="bg-white/15 backdrop-blur-sm rounded-xl px-3.5 py-2">
-              <p className="text-[10px] text-indigo-100/80 uppercase tracking-wide">Presentasi</p>
-              <p className="text-lg font-bold tabular-nums">{totalPdfs}</p>
-            </div>
-            <div className="bg-white/15 backdrop-blur-sm rounded-xl px-3.5 py-2">
-              <p className="text-[10px] text-indigo-100/80 uppercase tracking-wide">Mapel siap</p>
-              <p className="text-lg font-bold tabular-nums">{mapelWithPdfs}</p>
-            </div>
+    <div className="space-y-6">
+      <header className="border-b border-slate-200/80 pb-5">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Pustaka Belajar</p>
+        <h2 className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight mt-1">
+          Materi pelajaran
+        </h2>
+        <p className="text-sm text-slate-500 mt-1.5 max-w-2xl leading-relaxed">
+          Koleksi presentasi PDF per mata pelajaran. Pilih mapel untuk membuka dokumen.
+        </p>
+        <dl className="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-lg">
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <dt className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Dokumen</dt>
+            <dd className="text-xl font-semibold text-slate-900 tabular-nums mt-0.5">{totalPdfs}</dd>
           </div>
-        </div>
-      </div>
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3">
+            <dt className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Mapel siap</dt>
+            <dd className="text-xl font-semibold text-slate-900 tabular-nums mt-0.5">{mapelWithPdfs}</dd>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 col-span-2 sm:col-span-1">
+            <dt className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">Total mapel</dt>
+            <dd className="text-xl font-semibold text-slate-900 tabular-nums mt-0.5">{SUBJECTS.length}</dd>
+          </div>
+        </dl>
+      </header>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-gray-500">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-slate-500">
           {showEmpty
-            ? `Menampilkan semua ${SUBJECTS.length} mapel`
-            : `${mapelWithPdfs} mapel punya presentasi`}
+            ? `Semua ${SUBJECTS.length} mata pelajaran`
+            : `${mapelWithPdfs} mata pelajaran dengan dokumen`}
         </p>
         <button
           type="button"
           onClick={() => setShowEmpty((v) => !v)}
-          className="text-xs font-medium text-gray-600 px-3 py-1.5 rounded-full border border-gray-200 bg-white hover:border-indigo-200 hover:text-indigo-700 transition"
+          className="text-xs font-medium text-slate-600 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:border-slate-300 hover:text-slate-900 transition"
         >
-          {showEmpty ? 'Sembunyikan mapel kosong' : 'Tampilkan semua mapel'}
+          {showEmpty ? 'Hanya yang tersedia' : 'Tampilkan semua'}
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         {orderedSubjects.map((s) => {
-          const c = colorMap[s.color] || colorMap.indigo
+          const a = accent[s.color] || accent.indigo
           const n = counts[s.key] || 0
           const has = n > 0
           return (
@@ -304,33 +251,34 @@ function MateriBody({
               key={s.key}
               type="button"
               onClick={() => onSelect(s.key)}
-              className={`text-left group bg-white rounded-2xl border border-gray-100 p-4 sm:p-5 shadow-sm hover:shadow-md ${c.card} transition-all ${!
-                has ? 'opacity-75' : ''
-              }`}
+              className={`text-left group relative bg-white rounded-xl border border-slate-200 overflow-hidden transition
+                hover:border-slate-300 hover:shadow-sm
+                ${!has ? 'opacity-60' : ''}`}
             >
-              <div className="flex items-start gap-3.5">
-                <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-xl ${c.icon}`}>
+              <div className={`absolute left-0 top-0 bottom-0 w-1 ${has ? a.bar : 'bg-slate-200'}`} />
+              <div className="pl-4 pr-4 py-4 flex items-start gap-3">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-lg shrink-0 ${a.icon}`}>
                   {s.icon}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-gray-900 group-hover:text-indigo-700 transition leading-snug">
+                  <h3 className="text-sm font-semibold text-slate-900 group-hover:text-indigo-700 transition leading-snug">
                     {s.name}
                   </h3>
-                  <p className="text-[11px] text-gray-400 mt-0.5">{s.shortName}</p>
-                  <div className="mt-3">
+                  <p className="text-xs text-slate-400 mt-0.5">{s.shortName}</p>
+                  <p className="mt-2.5">
                     {has ? (
-                      <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${c.soft}`}>
-                        <span className="tabular-nums">{n}</span> presentasi
+                      <span className={`inline-flex text-[11px] font-medium px-2 py-0.5 rounded-md ${a.badge}`}>
+                        {n} dokumen
                       </span>
                     ) : (
-                      <span className="inline-flex text-[11px] text-gray-400 px-2 py-0.5 rounded-full bg-gray-50">
-                        Belum ada presentasi
+                      <span className="inline-flex text-[11px] font-medium text-slate-400 px-2 py-0.5 rounded-md bg-slate-50">
+                        Kosong
                       </span>
                     )}
-                  </div>
+                  </p>
                 </div>
                 <svg
-                  className="w-5 h-5 text-gray-300 group-hover:text-indigo-400 shrink-0 mt-1 transition"
+                  className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 shrink-0 mt-1 transition"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -371,21 +319,21 @@ export default function Materi({ audience }: { audience: 'admin' | 'student' }) 
 
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-20">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3">
+      <header className="bg-white border-b border-slate-200/80 sticky top-0 z-20">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-gray-900">Materi pelajaran</p>
-            <p className="text-xs text-gray-500 truncate">Presentasi PDF Pustaka Belajar</p>
+            <p className="text-sm font-semibold text-slate-900 tracking-tight">Materi pelajaran</p>
+            <p className="text-[11px] text-slate-500">Pustaka Belajar</p>
           </div>
           <Link
             to="/siswa"
-            className="text-xs font-medium text-indigo-600 px-3 py-2 rounded-xl hover:bg-indigo-50 transition shrink-0"
+            className="text-xs font-medium text-slate-600 px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 hover:text-slate-900 transition shrink-0"
           >
             Beranda
           </Link>
         </div>
       </header>
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <MateriBody selectedKey={selectedKey} onSelect={onSelect} />
       </main>
     </div>
