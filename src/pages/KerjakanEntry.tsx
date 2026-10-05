@@ -23,11 +23,19 @@ import {
 } from '../types/question'
 
 /**
- * Beranda siswa setelah login:
- * - Jadwal kuis (aktif / terjadwal) dalam garis waktu
- * - Status sudah/belum dikerjakan
- * - Klik kartu → langsung mulai (atau token bila requireToken)
+ * Beranda / dashboard siswa — ruang bernapas sebelum mengerjakan kuis.
  */
+
+type FilterKey = 'all' | 'active' | 'scheduled' | 'finished' | 'done'
+
+const CARD_GRADIENTS = [
+  'from-indigo-500 via-violet-500 to-purple-600',
+  'from-sky-400 via-blue-500 to-indigo-600',
+  'from-emerald-400 via-teal-500 to-cyan-600',
+  'from-amber-400 via-orange-500 to-rose-500',
+  'from-fuchsia-500 via-pink-500 to-rose-500',
+  'from-violet-500 via-purple-500 to-indigo-600',
+]
 
 function toMillis(v: unknown): number | null {
   if (!v) return null
@@ -59,32 +67,18 @@ function formatRange(start: unknown, end: unknown): string {
   return 'Jadwal belum diatur'
 }
 
-function formatDayLabel(ms: number) {
-  const d = new Date(ms)
-  const today = new Date()
-  const sameDay =
-    d.getFullYear() === today.getFullYear() &&
-    d.getMonth() === today.getMonth() &&
-    d.getDate() === today.getDate()
-  if (sameDay) return 'Hari ini'
-  return d.toLocaleDateString('id-ID', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'short',
-  })
-}
-
-function statusStyle(st: LatihanStatus): string {
+function statusPill(st: LatihanStatus): string {
   if (st === 'active') return 'bg-emerald-50 text-emerald-700 border-emerald-100'
   if (st === 'scheduled') return 'bg-amber-50 text-amber-800 border-amber-100'
   if (st === 'finished') return 'bg-gray-100 text-gray-500 border-gray-200'
   return 'bg-gray-50 text-gray-400 border-gray-100'
 }
 
-function cardAccent(st: LatihanStatus): string {
-  if (st === 'active') return 'border-l-emerald-500'
-  if (st === 'scheduled') return 'border-l-amber-400'
-  return 'border-l-gray-300'
+function gradientFor(id?: string) {
+  let h = 0
+  const s = id || 'x'
+  for (let i = 0; i < s.length; i++) h = (h + s.charCodeAt(i) * (i + 1)) % CARD_GRADIENTS.length
+  return CARD_GRADIENTS[h]
 }
 
 export default function KerjakanEntry() {
@@ -96,9 +90,14 @@ export default function KerjakanEntry() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [pakets, setPakets] = useState<LatihanPaket[]>([])
+  const [attempts, setAttempts] = useState<LatihanAttempt[]>([])
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set())
+  const [bestByLatihan, setBestByLatihan] = useState<Record<string, number>>({})
   const [loadingList, setLoadingList] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [showTokenModal, setShowTokenModal] = useState(false)
+  const [filter, setFilter] = useState<FilterKey>('all')
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -137,13 +136,24 @@ export default function KerjakanEntry() {
         .filter((p) => p.status !== 'draft' && p.status !== 'archived')
 
       const done = new Set<string>()
+      const best: Record<string, number> = {}
+      const attList: LatihanAttempt[] = []
       ;[...(aById?.docs || []), ...(aByName?.docs || [])].forEach((d) => {
-        const a = d.data() as LatihanAttempt
-        if (a.latihanId) done.add(a.latihanId)
+        const a = { id: d.id, ...d.data() } as LatihanAttempt
+        attList.push(a)
+        if (a.latihanId) {
+          done.add(a.latihanId)
+          const pct = a.percent ?? 0
+          if (best[a.latihanId] == null || pct > best[a.latihanId]) {
+            best[a.latihanId] = pct
+          }
+        }
       })
 
       setPakets(list)
       setDoneIds(done)
+      setBestByLatihan(best)
+      setAttempts(attList)
     } catch (err) {
       console.error(err)
     } finally {
@@ -151,59 +161,57 @@ export default function KerjakanEntry() {
     }
   }
 
-  const urgentPakets = useMemo(() => {
+  const myPakets = useMemo(() => {
     if (!student) return []
-    return pakets.filter((p) => {
-      if (!isPaketForStudent(p, student)) return false
-      if (resolveLatihanStatus(p) !== 'active') return false
-      const h = hoursUntilEnd(p)
-      return h != null && h > 0 && h <= 24
-    })
-  }, [pakets, student])
-
-  const schedule = useMemo(() => {
-    if (!student) return []
-    const rows = pakets
+    return pakets
       .filter((p) => isPaketForStudent(p, student))
       .map((p) => {
         const resolved = resolveLatihanStatus(p)
-        const start = toMillis(p.startAt) || 0
         const done = p.id ? doneIds.has(p.id) : false
         const blocked = done && !canRetryPaket(p)
-        return { paket: p, resolved, start, done, blocked }
+        const start = toMillis(p.startAt) || 0
+        return { paket: p, resolved, done, blocked, start }
       })
       .filter((r) => r.resolved === 'active' || r.resolved === 'scheduled' || r.resolved === 'finished')
       .sort((a, b) => {
-        const order = { active: 0, scheduled: 1, finished: 2, draft: 3, archived: 4 } as Record<
-          string,
-          number
-        >
+        const order = { active: 0, scheduled: 1, finished: 2 } as Record<string, number>
         const d = (order[a.resolved] ?? 9) - (order[b.resolved] ?? 9)
         if (d !== 0) return d
         return a.start - b.start
       })
-
-    const groups: { dayKey: string; label: string; items: typeof rows }[] = []
-    const map = new Map<string, typeof rows>()
-    rows.forEach((r) => {
-      const ms = r.start || toMillis(r.paket.endAt) || Date.now()
-      const d = new Date(ms)
-      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-      if (!map.has(key)) map.set(key, [])
-      map.get(key)!.push(r)
-    })
-    ;[...map.entries()]
-      .sort((a, b) => {
-        const sa = a[1][0]?.start || 0
-        const sb = b[1][0]?.start || 0
-        return sa - sb
-      })
-      .forEach(([key, items]) => {
-        const ms = items[0]?.start || Date.now()
-        groups.push({ dayKey: key, label: formatDayLabel(ms), items })
-      })
-    return groups
   }, [pakets, student, doneIds])
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return myPakets.filter((r) => {
+      if (filter === 'active' && r.resolved !== 'active') return false
+      if (filter === 'scheduled' && r.resolved !== 'scheduled') return false
+      if (filter === 'finished' && r.resolved !== 'finished') return false
+      if (filter === 'done' && !r.done) return false
+      if (q) {
+        const title = (r.paket.title || '').toLowerCase()
+        const sub = r.paket.subjectKey ? getSubject(r.paket.subjectKey)?.shortName || '' : ''
+        if (!title.includes(q) && !sub.toLowerCase().includes(q)) return false
+      }
+      return true
+    })
+  }, [myPakets, filter, search])
+
+  const stats = useMemo(() => {
+    const n = attempts.length
+    const avg = n ? Math.round(attempts.reduce((s, a) => s + (a.percent || 0), 0) / n) : 0
+    const active = myPakets.filter((r) => r.resolved === 'active' && !r.blocked).length
+    const doneCount = myPakets.filter((r) => r.done).length
+    return { n, avg, active, doneCount, total: myPakets.length }
+  }, [attempts, myPakets])
+
+  const urgentPakets = useMemo(() => {
+    return myPakets.filter((r) => {
+      if (r.resolved !== 'active' || r.blocked) return false
+      const h = hoursUntilEnd(r.paket)
+      return h != null && h > 0 && h <= 24
+    })
+  }, [myPakets])
 
   const selected = selectedId ? pakets.find((p) => p.id === selectedId) : null
 
@@ -249,20 +257,21 @@ export default function KerjakanEntry() {
     return null
   }
 
-  /** Klik kartu jadwal: langsung masuk jika tidak wajib token; jika wajib → fokus form token */
   const selectPaket = async (p: LatihanPaket) => {
     setSelectedId(p.id || null)
     setError('')
+    setToken('')
     const err = assertCanEnter(p)
     if (err) {
       setError(err)
+      setShowTokenModal(true)
       return
     }
     if (needsToken(p)) {
-      setTimeout(() => tokenRef.current?.focus(), 50)
+      setShowTokenModal(true)
+      setTimeout(() => tokenRef.current?.focus(), 80)
       return
     }
-    // Tanpa token: login + jadwal aktif + penugasan
     setLoading(true)
     try {
       beginSession(p)
@@ -271,69 +280,30 @@ export default function KerjakanEntry() {
     }
   }
 
-  const startWithToken = async (tRaw: string) => {
-    if (!student) return
+  const confirmToken = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selected) return
     setError('')
-    const t = tRaw.trim().toUpperCase()
+    const t = token.trim().toUpperCase()
     if (!t) {
-      setError('Masukkan token latihan dari guru')
+      setError('Masukkan token dari guru')
       return
     }
-
+    if (selected.token && t !== selected.token.toUpperCase()) {
+      setError('Token tidak cocok untuk paket ini')
+      return
+    }
+    const err = assertCanEnter(selected)
+    if (err) {
+      setError(err)
+      return
+    }
     setLoading(true)
     try {
-      const snap = await getDocs(query(collection(db, 'latihan'), where('token', '==', t)))
-      if (snap.empty) {
-        setError('Token tidak ditemukan. Periksa lagi dengan guru.')
-        return
-      }
-      const docSnap = snap.docs[0]
-      const paket = { id: docSnap.id, ...docSnap.data() } as LatihanPaket
-
-      const err = assertCanEnter(paket)
-      if (err) {
-        setError(err)
-        return
-      }
-      if (!needsToken(paket)) {
-        // Token diisi tapi paket tidak mewajibkannya — tetap izinkan masuk
-      }
-      beginSession(paket, t)
-    } catch (err) {
-      console.error(err)
-      setError('Gagal memeriksa token. Coba lagi.')
+      beginSession(selected, t)
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    // Jika paket terpilih wajib token, validasi token cocok ke paket itu
-    if (selected && needsToken(selected)) {
-      const t = token.trim().toUpperCase()
-      if (!t) {
-        setError('Paket ini mewajibkan token dari guru')
-        return
-      }
-      if (selected.token && t !== selected.token.toUpperCase()) {
-        setError('Token tidak cocok untuk paket yang dipilih')
-        return
-      }
-      const err = assertCanEnter(selected)
-      if (err) {
-        setError(err)
-        return
-      }
-      setLoading(true)
-      try {
-        beginSession(selected, t)
-      } finally {
-        setLoading(false)
-      }
-      return
-    }
-    await startWithToken(token)
   }
 
   if (!student) {
@@ -345,200 +315,394 @@ export default function KerjakanEntry() {
   }
 
   const firstName = student.fullName.split(/\s+/)[0]
+  const initial = (student.fullName.trim()[0] || 'S').toUpperCase()
+
+  const filters: { key: FilterKey; label: string }[] = [
+    { key: 'all', label: 'Semua' },
+    { key: 'active', label: 'Aktif' },
+    { key: 'scheduled', label: 'Terjadwal' },
+    { key: 'done', label: 'Sudah dikerjakan' },
+    { key: 'finished', label: 'Berakhir' },
+  ]
 
   return (
-    <div className="min-h-screen bg-[#F5F6FA] p-4 pb-12">
-      <div className="max-w-lg mx-auto space-y-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide">Ruang Kuis</p>
-            <h1 className="text-xl font-bold text-gray-900 mt-0.5">Halo, {firstName}!</h1>
-            <p className="text-sm text-gray-500">
-              {student.className ? `Kelas ${student.className}` : 'Siswa'}
-              {student.nickname ? ` · ${student.nickname}` : ''}
-            </p>
+    <div className="min-h-screen bg-[#F5F6FA]">
+      {/* Top bar */}
+      <header className="bg-white border-b border-gray-100 sticky top-0 z-20">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-sm shadow-sm shrink-0">
+              {initial}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate">Halo, {firstName}!</p>
+              <p className="text-xs text-gray-500 truncate">
+                {student.className ? `Kelas ${student.className}` : 'Siswa'}
+                {student.nickname ? ` · ${student.nickname}` : ''}
+                {' · '}
+                <span className="text-indigo-600 font-medium">Ruang Kuis</span>
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <Link
               to="/kerjakan/riwayat"
-              className="text-xs font-medium text-indigo-600 px-2.5 py-1.5 rounded-lg hover:bg-indigo-50"
+              className="text-xs font-medium text-indigo-600 px-3 py-2 rounded-xl hover:bg-indigo-50 transition"
             >
               Riwayat
             </Link>
             <button
               type="button"
               onClick={handleLogout}
-              className="text-xs text-gray-500 hover:text-red-600 px-2.5 py-1.5"
+              className="text-xs text-gray-500 hover:text-red-600 px-3 py-2 rounded-xl hover:bg-red-50 transition"
             >
               Keluar
             </button>
           </div>
         </div>
+      </header>
 
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+        {/* Welcome banner */}
+        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700 text-white p-6 sm:p-8 shadow-sm">
+          <div className="absolute inset-0 opacity-20 pointer-events-none">
+            <div className="absolute -top-10 -right-10 w-48 h-48 bg-white rounded-full blur-3xl" />
+            <div className="absolute bottom-0 left-10 w-40 h-40 bg-indigo-300 rounded-full blur-3xl" />
+          </div>
+          <div className="relative z-10 max-w-xl">
+            <p className="text-indigo-100 text-xs font-semibold uppercase tracking-wide mb-1">
+              Beranda siswa
+            </p>
+            <h1 className="text-2xl sm:text-3xl font-bold leading-tight mb-2">
+              Siap belajar hari ini, {firstName}?
+            </h1>
+            <p className="text-indigo-100 text-sm sm:text-base leading-relaxed">
+              Lihat jadwal kuis, cek progressmu, lalu mulai saat kamu siap. Tidak perlu buru-buru.
+            </p>
+          </div>
+        </section>
+
+        {/* Stats */}
+        <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: 'Kuis tersedia', value: loadingList ? '…' : String(stats.total), tone: 'text-indigo-600' },
+            { label: 'Sedang aktif', value: loadingList ? '…' : String(stats.active), tone: 'text-emerald-600' },
+            { label: 'Sudah dikerjakan', value: loadingList ? '…' : String(stats.doneCount), tone: 'text-sky-600' },
+            {
+              label: 'Rata-rata skor',
+              value: loadingList ? '…' : stats.n ? `${stats.avg}%` : '—',
+              tone: 'text-violet-600',
+            },
+          ].map((c) => (
+            <div
+              key={c.label}
+              className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3.5"
+            >
+              <p className="text-[11px] text-gray-400 font-medium">{c.label}</p>
+              <p className={`text-2xl font-bold mt-0.5 tabular-nums ${c.tone}`}>{c.value}</p>
+            </div>
+          ))}
+        </section>
+
+        {/* Urgent */}
         {urgentPakets.length > 0 && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-1.5">
-            <p className="text-xs font-semibold text-amber-900 uppercase tracking-wide">
+          <section className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+            <p className="text-xs font-semibold text-amber-900 uppercase tracking-wide mb-2">
               Segera berakhir
             </p>
-            {urgentPakets.map((p) => {
-              const h = hoursUntilEnd(p)
-              const label =
-                h == null
-                  ? ''
-                  : h < 1
-                    ? `${Math.max(1, Math.round(h * 60))} menit lagi`
-                    : `${Math.round(h)} jam lagi`
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => selectPaket(p)}
-                  className="block w-full text-left text-sm text-amber-950 hover:underline"
-                >
-                  <span className="font-medium">{p.title}</span>
-                  <span className="text-amber-800/80"> · {label}</span>
-                </button>
-              )
-            })}
-          </div>
+            <div className="flex flex-wrap gap-2">
+              {urgentPakets.map(({ paket: p }) => {
+                const h = hoursUntilEnd(p)
+                const label =
+                  h == null
+                    ? ''
+                    : h < 1
+                      ? `${Math.max(1, Math.round(h * 60))} mnt lagi`
+                      : `${Math.round(h)} jam lagi`
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => selectPaket(p)}
+                    className="inline-flex items-center gap-1.5 text-sm bg-white border border-amber-200 text-amber-950 px-3 py-1.5 rounded-xl hover:border-amber-300 transition"
+                  >
+                    <span className="font-medium">{p.title}</span>
+                    <span className="text-amber-700/80 text-xs">· {label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
         )}
 
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <h2 className="text-sm font-semibold text-gray-900 mb-1">
-            {selected && needsToken(selected) ? 'Token diperlukan' : 'Token (opsional)'}
-          </h2>
-          <p className="text-xs text-gray-500 mb-3">
-            {selected && needsToken(selected)
-              ? 'Guru mewajibkan token untuk paket ini.'
-              : 'Sebagian besar kuis cukup diklik dari jadwal. Token hanya jika guru mengaktifkannya.'}
-            {selected && (
-              <span className="block mt-1 text-indigo-600 font-medium">
-                Dipilih: {selected.title}
-                {needsToken(selected) ? ' · wajib token' : ' · tanpa token'}
-              </span>
-            )}
-          </p>
-          <form onSubmit={handleSubmit} className="space-y-3">
-            {error && (
-              <div className="bg-red-50 border border-red-100 text-red-600 text-sm px-3 py-2 rounded-xl">
-                {error}
-              </div>
-            )}
-            <input
-              ref={tokenRef}
-              type="text"
-              value={token}
-              onChange={(e) => setToken(e.target.value.toUpperCase())}
-              placeholder="Contoh: AB12CD"
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-center text-lg font-mono tracking-widest uppercase"
-              maxLength={12}
-              autoComplete="off"
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-medium py-3 rounded-xl transition"
+        {/* Toolbar */}
+        <section className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+          <div className="flex flex-wrap gap-1.5">
+            {filters.map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setFilter(f.key)}
+                className={`text-xs font-medium px-3 py-1.5 rounded-full border transition ${
+                  filter === f.key
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-200'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div className="relative w-full sm:w-64">
+            <svg
+              className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              {loading ? 'Memeriksa...' : 'Mulai latihan'}
-            </button>
-          </form>
-        </div>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"
+              />
+            </svg>
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Cari kuis…"
+              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none"
+            />
+          </div>
+        </section>
 
-        <div>
+        {/* Card grid */}
+        <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-900">Jadwal kuis</h2>
+            <h2 className="text-sm font-semibold text-gray-900">Kuis untukmu</h2>
             <span className="text-[11px] text-gray-400">
-              {loadingList ? 'Memuat…' : `${pakets.length} paket`}
+              {loadingList ? 'Memuat…' : `${filtered.length} paket`}
             </span>
           </div>
 
           {loadingList ? (
-            <p className="text-sm text-gray-400 text-center py-8">Memuat jadwal...</p>
-          ) : schedule.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-400">
-              Belum ada jadwal latihan. Tunggu guru membuka paket.
-            </div>
-          ) : (
-            <div className="space-y-5">
-              {schedule.map((group) => (
-                <div key={group.dayKey}>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 px-1">
-                    {group.label}
-                  </p>
-                  <div className="relative space-y-2 pl-3 border-l-2 border-gray-100">
-                    {group.items.map(({ paket: p, resolved, done, blocked }) => {
-                      const sub = p.subjectKey ? getSubject(p.subjectKey) : null
-                      const subMeta = SUBJECTS.find((s) => s.key === p.subjectKey)
-                      const isSel = selectedId === p.id
-                      const canStart = resolved === 'active' && !blocked
-
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => selectPaket(p)}
-                          className={`w-full text-left bg-white rounded-xl border shadow-sm pl-3 pr-3 py-3 border-l-4 transition ${cardAccent(
-                            resolved
-                          )} ${
-                            isSel
-                              ? 'border-indigo-300 ring-2 ring-indigo-100'
-                              : 'border-gray-100 hover:border-indigo-200'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                                <span
-                                  className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${statusStyle(
-                                    resolved
-                                  )}`}
-                                >
-                                  {LATIHAN_STATUS_LABELS[resolved]}
-                                </span>
-                                {done && (
-                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-100">
-                                    Sudah dikerjakan
-                                  </span>
-                                )}
-                                {blocked && (
-                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-100">
-                                    Tidak bisa diulang
-                                  </span>
-                                )}
-                                {sub && (
-                                  <span className="text-[10px] text-gray-500">
-                                    {subMeta?.icon} {sub.shortName}
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-sm font-semibold text-gray-900 truncate">{p.title}</p>
-                              <p className="text-[11px] text-gray-500 mt-0.5">
-                                {formatRange(p.startAt, p.endAt)}
-                              </p>
-                              <p className="text-[11px] text-gray-400 mt-0.5">
-                                {p.questionCount || p.questionIds?.length || 0} soal
-                                {p.timeLimitMinutes
-                                  ? ` · batas ${p.timeLimitMinutes} mnt`
-                                  : ''}
-                                {canStart && !done
-                                  ? needsToken(p)
-                                    ? ' · ketuk lalu masukkan token'
-                                    : ' · ketuk untuk mulai'
-                                  : ''}
-                                {blocked ? ' · sudah dikerjakan' : ''}
-                              </p>
-                            </div>
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="bg-white rounded-2xl border border-gray-100 h-56 animate-pulse"
+                />
               ))}
             </div>
+          ) : filtered.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+              <p className="text-gray-600 font-medium">Belum ada kuis di sini</p>
+              <p className="text-sm text-gray-400 mt-1">
+                {filter === 'all'
+                  ? 'Tunggu guru membuka paket latihan.'
+                  : 'Coba filter atau pencarian lain.'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map(({ paket: p, resolved, done, blocked }) => {
+                const sub = p.subjectKey ? getSubject(p.subjectKey) : null
+                const subMeta = SUBJECTS.find((s) => s.key === p.subjectKey)
+                const qCount = p.questionCount || p.questionIds?.length || 0
+                const best = p.id ? bestByLatihan[p.id] : undefined
+                const canStart = resolved === 'active' && !blocked
+                const grad = gradientFor(p.id)
+
+                return (
+                  <article
+                    key={p.id}
+                    className="group bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:border-indigo-200 hover:shadow-md transition flex flex-col"
+                  >
+                    <div
+                      className={`relative h-28 bg-gradient-to-br ${grad} px-4 pt-3 pb-2 flex flex-col justify-between`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span
+                          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border bg-white/90 ${statusPill(
+                            resolved
+                          )}`}
+                        >
+                          {LATIHAN_STATUS_LABELS[resolved]}
+                        </span>
+                        {done && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-100">
+                            Selesai
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-white/90 text-3xl opacity-80 select-none leading-none">
+                        {subMeta?.icon || '📝'}
+                      </div>
+                    </div>
+
+                    <div className="p-4 flex flex-col flex-1">
+                      <h3 className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 group-hover:text-indigo-700 transition">
+                        {p.title}
+                      </h3>
+                      <p className="text-[11px] text-gray-500 mt-1">{formatRange(p.startAt, p.endAt)}</p>
+
+                      <div className="mt-3 flex items-center gap-4">
+                        <div className="flex items-center gap-1.5">
+                          <div
+                            className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-[10px] font-bold tabular-nums ${
+                              best != null
+                                ? best >= 70
+                                  ? 'border-emerald-400 text-emerald-600'
+                                  : best >= 40
+                                    ? 'border-amber-400 text-amber-600'
+                                    : 'border-rose-400 text-rose-600'
+                                : 'border-gray-200 text-gray-400'
+                            }`}
+                          >
+                            {best != null ? `${best}` : '—'}
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-gray-400 leading-none">Skor</p>
+                            <p className="text-[11px] font-medium text-gray-700 leading-tight">
+                              {best != null ? `${best}%` : 'Belum'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="h-8 w-px bg-gray-100" />
+                        <div>
+                          <p className="text-[10px] text-gray-400 leading-none">Soal</p>
+                          <p className="text-[11px] font-medium text-gray-700 leading-tight">
+                            {qCount}
+                            {p.timeLimitMinutes ? ` · ${p.timeLimitMinutes} mnt` : ''}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-1">
+                        {sub && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-600 border border-gray-100">
+                            {subMeta?.icon} {sub.shortName}
+                          </span>
+                        )}
+                        {blocked && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-100">
+                            Tidak bisa diulang
+                          </span>
+                        )}
+                        {canStart && needsToken(p) && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-violet-50 text-violet-700 border border-violet-100">
+                            Perlu token
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-auto pt-4">
+                        <button
+                          type="button"
+                          disabled={!canStart || loading}
+                          onClick={() => selectPaket(p)}
+                          className={`w-full text-sm font-medium py-2.5 rounded-xl transition ${
+                            canStart
+                              ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm shadow-indigo-100'
+                              : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          }`}
+                        >
+                          {!canStart
+                            ? resolved === 'scheduled'
+                              ? 'Belum dimulai'
+                              : blocked
+                                ? 'Sudah dikerjakan'
+                                : 'Tidak tersedia'
+                            : needsToken(p)
+                              ? 'Mulai dengan token'
+                              : done
+                                ? 'Kerjakan ulang'
+                                : 'Mulai kuis'}
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
           )}
+        </section>
+      </main>
+
+      {/* Token modal */}
+      {showTokenModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <h3 className="text-base font-semibold text-gray-900">
+              {selected && needsToken(selected) ? 'Token diperlukan' : 'Info'}
+            </h3>
+            <p className="text-sm text-gray-500 mt-1">
+              {error && !needsToken(selected || ({} as LatihanPaket))
+                ? error
+                : selected
+                  ? `Masukkan token dari guru untuk “${selected.title}”.`
+                  : 'Masukkan token.'}
+            </p>
+            {selected && needsToken(selected) && (
+              <form onSubmit={confirmToken} className="mt-4 space-y-3">
+                {error && (
+                  <div className="bg-red-50 border border-red-100 text-red-600 text-sm px-3 py-2 rounded-xl">
+                    {error}
+                  </div>
+                )}
+                <input
+                  ref={tokenRef}
+                  type="text"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value.toUpperCase())}
+                  placeholder="Contoh: AB12CD"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-center text-lg font-mono tracking-widest uppercase"
+                  maxLength={12}
+                  autoComplete="off"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTokenModal(false)
+                      setError('')
+                      setSelectedId(null)
+                    }}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-60"
+                  >
+                    {loading ? 'Memeriksa…' : 'Mulai'}
+                  </button>
+                </div>
+              </form>
+            )}
+            {selected && !needsToken(selected) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTokenModal(false)
+                  setError('')
+                  setSelectedId(null)
+                }}
+                className="mt-4 w-full py-2.5 rounded-xl bg-gray-900 text-white text-sm font-medium"
+              >
+                Tutup
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
