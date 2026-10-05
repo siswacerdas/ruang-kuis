@@ -70,7 +70,7 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
       ),
     },
     {
-      path: '/siswa',
+      path: '/daftar-siswa',
       label: 'Daftar Siswa',
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -82,9 +82,7 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
 
   return (
     <div className="min-h-screen bg-[#F5F6FA] flex">
-      {/* Sidebar */}
       <aside className="w-64 bg-white border-r border-gray-100 flex flex-col shrink-0 hidden md:flex">
-        {/* Logo */}
         <div className="px-6 py-5 border-b border-gray-100">
           <Link to="/dashboard" className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-sm">
@@ -99,7 +97,6 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
           </Link>
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 px-3 py-5 space-y-1">
           <p className="px-3 mb-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
             Menu
@@ -116,18 +113,13 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                 }`}
               >
-                <span className={isActive ? 'text-indigo-600' : 'text-gray-400'}>
-                  {item.icon}
-                </span>
+                <span className={isActive ? 'text-indigo-600' : 'text-gray-400'}>{item.icon}</span>
                 {item.label}
               </Link>
             )
           })}
-
-
         </nav>
 
-        {/* Logout */}
         <div className="px-3 py-4 border-t border-gray-100">
           <button
             onClick={handleLogout}
@@ -141,13 +133,10 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
         </div>
       </aside>
 
-      {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top bar (mobile + title) */}
         <header className="bg-white border-b border-gray-100 px-4 md:px-8 py-4 sticky top-0 z-10">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
-              {/* Mobile logo */}
               <Link to="/dashboard" className="md:hidden flex items-center gap-2 shrink-0">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
                   <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -157,18 +146,13 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
               </Link>
               <div className="min-w-0">
                 {title && (
-                  <h1 className="text-lg md:text-xl font-semibold text-gray-900 truncate">
-                    {title}
-                  </h1>
+                  <h1 className="text-lg md:text-xl font-semibold text-gray-900 truncate">{title}</h1>
                 )}
-                {subtitle && (
-                  <p className="text-sm text-gray-500 truncate">{subtitle}</p>
-                )}
+                {subtitle && <p className="text-sm text-gray-500 truncate">{subtitle}</p>}
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {actions}
-              {/* Mobile logout */}
               <button
                 onClick={handleLogout}
                 className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100"
@@ -181,7 +165,6 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
             </div>
           </div>
 
-          {/* Mobile nav */}
           <nav className="md:hidden flex gap-1 mt-3 -mx-1 overflow-x-auto pb-1">
             {navItems.map((item) => {
               const isActive = location.pathname === item.path
@@ -190,9 +173,7 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
                   key={item.path}
                   to={item.path}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap ${
-                    isActive
-                      ? 'bg-indigo-50 text-indigo-700'
-                      : 'text-gray-600 hover:bg-gray-50'
+                    isActive ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'
                   }`}
                 >
                   {item.icon}
@@ -203,10 +184,7 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
           </nav>
         </header>
 
-        {/* Content */}
-        <main className="flex-1 p-4 md:p-8 overflow-auto">
-          {children}
-        </main>
+        <main className="flex-1 p-4 md:p-8 overflow-auto">{children}</main>
       </div>
     </div>
   )
