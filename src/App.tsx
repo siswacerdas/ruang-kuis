@@ -60,7 +60,8 @@ function App() {
       <Routes>
         {/* Siswa */}
         <Route path="/kerjakan" element={<SiswaLogin />} />
-        <Route path="/kerjakan/token" element={<KerjakanEntry />} />
+        <Route path="/siswa" element={<KerjakanEntry />} />
+        <Route path="/kerjakan/token" element={<Navigate to="/siswa" replace />} />
         <Route path="/kerjakan/hasil" element={<KerjakanResult />} />
         <Route path="/kerjakan/riwayat" element={<KerjakanRiwayat />} />
         <Route path="/kerjakan/:latihanId" element={<KerjakanQuiz />} />
@@ -69,31 +70,46 @@ function App() {
         <Route
           path="/login"
           element={
-            isAdmin ? <Navigate to="/dashboard" /> : isStudent ? <Navigate to="/kerjakan/token" /> : <Login />
+            isAdmin ? <Navigate to="/dashboard" /> : isStudent ? <Navigate to="/siswa" /> : <Login />
           }
         />
 
         {/* Admin pages */}
-        <Route path="/dashboard" element={isAdmin ? <Dashboard /> : <Navigate to={isStudent ? '/kerjakan/token' : '/login'} />} />
+        <Route
+          path="/dashboard"
+          element={isAdmin ? <Dashboard /> : <Navigate to={isStudent ? '/siswa' : '/login'} />}
+        />
         <Route path="/bank-soal" element={isAdmin ? <BankSoal /> : <Navigate to="/login" />} />
-        <Route path="/bank-soal/:subjectKey" element={isAdmin ? <SubjectTopics /> : <Navigate to="/login" />} />
-        <Route path="/bank-soal/:subjectKey/:topicId" element={isAdmin ? <TopicQuestions /> : <Navigate to="/login" />} />
+        <Route
+          path="/bank-soal/:subjectKey"
+          element={isAdmin ? <SubjectTopics /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/bank-soal/:subjectKey/:topicId"
+          element={isAdmin ? <TopicQuestions /> : <Navigate to="/login" />}
+        />
         <Route path="/latihan-soal" element={isAdmin ? <LatihanSoal /> : <Navigate to="/login" />} />
-        <Route path="/latihan-soal/baru" element={isAdmin ? <LatihanForm /> : <Navigate to="/login" />} />
-        <Route path="/latihan-soal/:id/hasil" element={isAdmin ? <LatihanHasil /> : <Navigate to="/login" />} />
+        <Route
+          path="/latihan-soal/baru"
+          element={isAdmin ? <LatihanForm /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/latihan-soal/:id/hasil"
+          element={isAdmin ? <LatihanHasil /> : <Navigate to="/login" />}
+        />
         <Route path="/latihan-soal/:id" element={isAdmin ? <LatihanForm /> : <Navigate to="/login" />} />
         <Route path="/laporan" element={isAdmin ? <Laporan /> : <Navigate to="/login" />} />
-        <Route path="/siswa" element={isAdmin ? <SiswaList /> : <Navigate to="/login" />} />
-        <Route path="/tujuan-pembelajaran" element={isAdmin ? <TujuanPembelajaran /> : <Navigate to="/login" />} />
+        <Route path="/daftar-siswa" element={isAdmin ? <SiswaList /> : <Navigate to="/login" />} />
+        <Route
+          path="/tujuan-pembelajaran"
+          element={isAdmin ? <TujuanPembelajaran /> : <Navigate to="/login" />}
+        />
 
         <Route path="/questions" element={<Navigate to="/bank-soal" replace />} />
         <Route
           path="/"
           element={
-            <Navigate
-              to={isAdmin ? '/dashboard' : isStudent ? '/kerjakan/token' : '/login'}
-              replace
-            />
+            <Navigate to={isAdmin ? '/dashboard' : isStudent ? '/siswa' : '/login'} replace />
           }
         />
       </Routes>
