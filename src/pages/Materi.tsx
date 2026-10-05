@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import StudentNav from '../components/StudentNav'
 import Layout from '../components/Layout'
 import { SUBJECTS, getSubject, type SubjectKey } from '../types/question'
 import {
@@ -122,7 +123,6 @@ function MateriBody({
     return showEmpty ? list : list.filter((s) => (counts[s.key] || 0) > 0)
   }, [counts, showEmpty])
 
-  /* —— Detail mapel —— */
   if (subject) {
     const a = accent[subject.color] || accent.indigo
     return (
@@ -199,7 +199,6 @@ function MateriBody({
     )
   }
 
-  /* —— Daftar mapel —— */
   return (
     <div className="space-y-6">
       <header className="border-b border-slate-200/80 pb-5">
@@ -325,17 +324,12 @@ export default function Materi({ audience }: { audience: 'admin' | 'student' }) 
             <p className="text-sm font-semibold text-slate-900 tracking-tight">Materi pelajaran</p>
             <p className="text-[11px] text-slate-500">Pustaka Belajar</p>
           </div>
-          <Link
-            to="/siswa"
-            className="text-xs font-medium text-slate-600 px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 hover:text-slate-900 transition shrink-0"
-          >
-            Beranda
-          </Link>
         </div>
       </header>
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-24">
         <MateriBody selectedKey={selectedKey} onSelect={onSelect} />
       </main>
+      <StudentNav />
     </div>
   )
 }
