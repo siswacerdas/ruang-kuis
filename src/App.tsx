@@ -65,7 +65,7 @@ function App() {
         <Route path="/kerjakan/riwayat" element={<KerjakanRiwayat />} />
         <Route path="/kerjakan/:latihanId" element={<KerjakanQuiz />} />
 
-        {/* Admin auth */}
+        {/* Auth terpadu (Siswa / Guru / Tes) */}
         <Route
           path="/login"
           element={
@@ -91,7 +91,8 @@ function App() {
           path="/"
           element={
             <Navigate
-              to={isAdmin ? '/dashboard' : isStudent ? '/kerjakan/token' : '/kerjakan'}
+              to={isAdmin ? '/dashboard' : isStudent ? '/kerjakan/token' : '/login'}
+              replace
             />
           }
         />
