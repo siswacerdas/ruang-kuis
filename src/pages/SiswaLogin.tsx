@@ -4,7 +4,7 @@ import { collection, getDocs, query, orderBy } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 import { ensureStudentSession, setStudentSession } from '../lib/studentSession'
 import { useNavigate, Link } from 'react-router-dom'
-import type { Student } from '../types/student'
+import { isDummyStudent, type Student } from '../types/student'
 
 export default function SiswaLogin() {
   const navigate = useNavigate()
@@ -16,7 +16,6 @@ export default function SiswaLogin() {
   const [loading, setLoading] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
 
-  // Jika sudah login (Auth + sesi / bisa di-recover), langsung ke dashboard siswa
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -49,7 +48,7 @@ export default function SiswaLogin() {
       }
       const list = snap.docs
         .map((d) => ({ id: d.id, ...d.data() } as Student))
-        .filter((s) => s.active !== false)
+        .filter((s) => s.active !== false && !isDummyStudent(s))
         .sort((a, b) => a.fullName.localeCompare(b.fullName, 'id'))
       setStudents(list)
       if (list.length === 0) {
