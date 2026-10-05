@@ -20,6 +20,7 @@ import AiQuestionGenerator from '../components/AiQuestionGenerator'
 import {
   generateStimulusImage,
   isOpenAiConfigured,
+  improveStimulusWithAI,
   rewriteOptionsWithAI,
   type AiDraftQuestion,
   type OptionVerification,
@@ -686,6 +687,20 @@ export default function TopicQuestions() {
   const [aiOptUndo, setAiOptUndo] = useState<string[] | null>(null)
   const [aiOptNote, setAiOptNote] = useState('')
   const [aiOptVerify, setAiOptVerify] = useState<OptionVerification | null>(null)
+  // Perbaiki stimulus teks dengan AI (editor soal)
+  const [aiStimBusy, setAiStimBusy] = useState(false)
+  const [aiStimHint, setAiStimHint] = useState('')
+  const [aiStimError, setAiStimError] = useState('')
+  const [aiStimUndo, setAiStimUndo] = useState<string | null>(null)
+  const [aiStimNote, setAiStimNote] = useState('')
+  const [aiStimWarnings, setAiStimWarnings] = useState<string[]>([])
+  const [aiStimVerify, setAiStimVerify] = useState<OptionVerification | null>(null)
+  // Dinaikkan agar StimulusRichEditor dipasang ulang setelah teks diubah dari luar (AI / kembalikan)
+  const [stimEditorKey, setStimEditorKey] = useState(0)
+  const formRef = useRef(form)
+  useEffect(() => {
+    formRef.current = form
+  }, [form])
   const [showPreview, setShowPreview] = useState(false)
   const [showStimulusPreview, setShowStimulusPreview] = useState(false)
   const [previewAnswers, setPreviewAnswers] = useState<number[]>([])
@@ -774,12 +789,23 @@ export default function TopicQuestions() {
     setAiOptVerify(null)
   }
 
+  const resetAiStimState = () => {
+    setAiStimBusy(false)
+    setAiStimHint('')
+    setAiStimError('')
+    setAiStimUndo(null)
+    setAiStimNote('')
+    setAiStimWarnings([])
+    setAiStimVerify(null)
+  }
+
   const openNew = () => {
     setEditingId(null)
     setForm(emptyForm())
     setError('')
     resetAiImageState()
     resetAiOptionsState()
+    resetAiStimState()
     setShowEditor(true)
   }
 
@@ -803,6 +829,7 @@ export default function TopicQuestions() {
     setError('')
     resetAiImageState()
     resetAiOptionsState()
+    resetAiStimState()
     setShowEditor(true)
   }
 
@@ -909,6 +936,81 @@ export default function TopicQuestions() {
     } finally {
       setAiOptBusy(false)
     }
+  }
+
+  /** Perbaiki stimulus teks agar pas dengan pertanyaan & pilihan. Pertanyaan, opsi, kunci tidak berubah. */
+  const handleImproveStimulus = async () => {
+    if (aiStimBusy || !subject) return
+    setAiStimError('')
+    setAiStimNote('')
+    setAiStimWarnings([])
+    setAiStimVerify(null)
+    if (!form.question.trim()) {
+      setAiStimError('Isi pertanyaan terlebih dahulu.')
+      return
+    }
+    if (form.options.some((o) => !o.trim())) {
+      setAiStimError('Isi semua pilihan dulu agar AI memahami hubungan stimulus dengan jawaban.')
+      return
+    }
+    if (form.type === 'single' && form.correctAnswers.length !== 1) {
+      setAiStimError('Tandai 1 jawaban benar dulu agar AI tahu kunci soal ini.')
+      return
+    }
+    if (form.type === 'multiple' && form.correctAnswers.length < 1) {
+      setAiStimError('Tandai jawaban benar dulu agar AI tahu kunci soal ini.')
+      return
+    }
+    const before = form.stimulus
+    const key =
+      form.type === 'category'
+        ? form.options.map((_, i) => (form.correctAnswers[i] === 1 ? 1 : 0))
+        : [...form.correctAnswers]
+    setAiStimBusy(true)
+    try {
+      const result = await improveStimulusWithAI({
+        subjectName: subject.name,
+        topicName: topic?.name || '',
+        type: form.type,
+        question: form.question,
+        stimulusHtml: before,
+        explanation: form.explanation,
+        hasImage: Boolean(form.stimulusImage),
+        options: [...form.options],
+        correctAnswers: key,
+        categoryLabels: form.categoryLabels,
+        hint: aiStimHint,
+      })
+      // Guru mengetik saat AI bekerja → jangan timpa pekerjaannya
+      if (formRef.current.stimulus !== before) {
+        setAiStimError('Stimulus diubah saat AI bekerja, jadi hasil AI tidak dipasang. Coba lagi.')
+        return
+      }
+      if (result.changed) {
+        setForm((prev) => ({ ...prev, stimulus: result.stimulusHtml }))
+        setStimEditorKey((k) => k + 1)
+        setAiStimUndo(before)
+      }
+      setAiStimNote(result.note)
+      setAiStimWarnings(result.warnings)
+      setAiStimVerify(result.changed ? result.verification : null)
+    } catch (err: any) {
+      console.error(err)
+      setAiStimError(err?.message || 'Gagal memperbaiki stimulus dengan AI.')
+    } finally {
+      setAiStimBusy(false)
+    }
+  }
+
+  const undoImproveStimulus = () => {
+    if (aiStimUndo == null) return
+    setForm((prev) => ({ ...prev, stimulus: aiStimUndo }))
+    setStimEditorKey((k) => k + 1)
+    setAiStimUndo(null)
+    setAiStimNote('')
+    setAiStimWarnings([])
+    setAiStimVerify(null)
+    setAiStimError('')
   }
 
   const undoRebalanceOptions = () => {
@@ -1247,6 +1349,8 @@ export default function TopicQuestions() {
   const optionPattern = showEditor
     ? analyzeOptionLength(form.type, form.options, form.correctAnswers, form.categoryLabels)
     : null
+  const hasStimulusText =
+    form.stimulus.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim().length > 0
 
 
   const saveAiDrafts = async (drafts: AiDraftQuestion[]) => {
@@ -1437,10 +1541,75 @@ export default function TopicQuestions() {
                   Stimulus / bacaan <span className="text-gray-400 font-normal">(opsional)</span>
                 </label>
                 <StimulusRichEditor
+                  key={stimEditorKey}
                   value={form.stimulus}
                   onChange={(html) => setForm({ ...form, stimulus: html })}
                   onPreview={() => setShowStimulusPreview(true)}
                 />
+
+                {/* Perbaiki stimulus teks dengan AI */}
+                {isOpenAiConfigured() && (hasStimulusText || aiStimUndo != null) && (
+                  <div className="mt-3 p-3 rounded-xl border border-indigo-100 bg-indigo-50/50">
+                    <input
+                      type="text"
+                      value={aiStimHint}
+                      onChange={(e) => setAiStimHint(e.target.value)}
+                      disabled={aiStimBusy}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-xs mb-2 disabled:opacity-50"
+                      placeholder="Arahan (opsional), mis. buat lebih singkat atau sederhanakan bahasanya"
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleImproveStimulus}
+                        disabled={aiStimBusy || !hasStimulusText}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-700 bg-white border border-indigo-200 hover:bg-indigo-50 disabled:opacity-60 px-3 py-1.5 rounded-lg transition"
+                      >
+                        {aiStimBusy ? '⏳ AI sedang memperbaiki…' : '✨ Perbaiki stimulus dengan AI'}
+                      </button>
+                      {aiStimUndo != null && !aiStimBusy && (
+                        <button
+                          type="button"
+                          onClick={undoImproveStimulus}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-lg transition"
+                        >
+                          ↩ Kembalikan stimulus semula
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1.5">
+                      AI membaca pertanyaan, semua pilihan, dan kuncinya, lalu merapikan stimulus agar jelas dan
+                      pas dengan soal tanpa membocorkan jawaban. Pertanyaan, pilihan, dan kunci tidak berubah.
+                    </p>
+                    {aiStimNote && !aiStimBusy && (
+                      <p className="text-xs text-gray-700 mt-1.5">{aiStimNote}</p>
+                    )}
+                    {!aiStimBusy &&
+                      aiStimWarnings.map((w) => (
+                        <p
+                          key={w}
+                          className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 mt-1.5"
+                        >
+                          ⚠ {w}
+                        </p>
+                      ))}
+                    {aiStimVerify && !aiStimBusy && (
+                      <p
+                        className={`text-xs mt-1.5 ${
+                          aiStimVerify.status === 'ok'
+                            ? 'text-emerald-700'
+                            : aiStimVerify.status === 'mismatch'
+                              ? 'text-red-600 font-medium'
+                              : 'text-amber-700'
+                        }`}
+                      >
+                        {aiStimVerify.status === 'ok' ? '✓ ' : aiStimVerify.status === 'mismatch' ? '⚠ ' : 'ℹ '}
+                        {aiStimVerify.message}
+                      </p>
+                    )}
+                    {aiStimError && <p className="text-xs text-red-600 mt-1.5">{aiStimError}</p>}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">

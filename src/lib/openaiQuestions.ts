@@ -9,6 +9,7 @@
 
 import type { QuestionType, SubjectKey } from '../types/question'
 import { compressImageSrc } from './imageCompress'
+import { sanitizeAiStimulusHtml } from './stimulusHtml'
 
 /** Mode stimulus yang diminta guru */
 export type StimulusMode = 'none' | 'text' | 'image'
@@ -743,7 +744,9 @@ function buildRewriteRequest(input: RewriteOptionsInput): string {
 async function verifyOptionKey(
   key: string,
   input: RewriteOptionsInput,
-  newOptions: string[]
+  newOptions: string[],
+  /** Yang diubah AI, untuk kalimat saran ("pilihan" / "stimulus") */
+  what: string = 'pilihan'
 ): Promise<OptionVerification> {
   if (input.hasImage) {
     return {
@@ -777,7 +780,7 @@ async function verifyOptionKey(
         ? { status: 'ok', message: 'Pemeriksa AI menjawab soal tanpa melihat kunci dan hasilnya sama dengan kunci Anda.' }
         : {
             status: 'mismatch',
-            message: `Pemeriksa AI menilai pernyataan nomor ${diff.join(', ')} berbeda dari kunci Anda. Periksa manual atau kembalikan pilihan semula.`,
+            message: `Pemeriksa AI menilai pernyataan nomor ${diff.join(', ')} berbeda dari kunci Anda. Periksa manual atau kembalikan ${what} semula.`,
           }
     }
 
@@ -789,7 +792,7 @@ async function verifyOptionKey(
       ? { status: 'ok', message: 'Pemeriksa AI menjawab soal tanpa melihat kunci dan hasilnya sama dengan kunci Anda.' }
       : {
           status: 'mismatch',
-          message: `Pemeriksa AI memilih ${show(got)}, sedangkan kunci Anda ${show(want)}. Periksa manual atau kembalikan pilihan semula.`,
+          message: `Pemeriksa AI memilih ${show(got)}, sedangkan kunci Anda ${show(want)}. Periksa manual atau kembalikan ${what} semula.`,
         }
   } catch {
     return { status: 'skipped', message: 'Pemeriksaan otomatis gagal dijalankan. Cek kunci jawaban secara manual.' }
@@ -851,4 +854,205 @@ export async function rewriteOptionsWithAI(
       : await verifyOptionKey(key, input, options)
 
   return { options, changed, note, verification }
+}
+
+/* ============================================================================
+ * PERBAIKI STIMULUS TEKS (editor soal)
+ * Menulis ulang stimulus yang sudah ada agar jelas, runtut, dan pas dengan
+ * pertanyaan + pilihan jawaban, tanpa membocorkan atau mengubah kunci.
+ * Alur: (1) AI memperbaiki stimulus → (2) cek lokal (angka hilang, jawaban tersalin)
+ *       → (3) pemeriksa AI menjawab soal secara buta memakai stimulus baru.
+ * ============================================================================ */
+
+export type ImproveStimulusInput = RewriteOptionsInput & {
+  /** Stimulus saat ini (HTML dari editor atau teks polos). Wajib terisi. */
+  stimulusHtml: string
+}
+
+export type ImproveStimulusResult = {
+  /** HTML bersih (hanya tag yang aman untuk editor guru & halaman siswa) */
+  stimulusHtml: string
+  changed: boolean
+  note: string
+  /** Peringatan hasil cek lokal (angka hilang, jawaban tersalin, panjang berubah drastis) */
+  warnings: string[]
+  verification: OptionVerification
+}
+
+const STIMULUS_IMPROVE_GUIDANCE = `Kamu adalah editor stimulus soal asesmen untuk siswa SD kelas 5 di Indonesia (Kurikulum Merdeka).
+TUGASMU: memperbaiki STIMULUS TEKS sebuah soal agar lebih baik: jelas, runtut, akurat, dan pas dengan pertanyaan serta pilihan jawabannya. Pertanyaan, pilihan jawaban, dan kunci TIDAK boleh berubah; kamu hanya mengubah stimulus.
+
+FORMAT MASUKAN
+Kamu menerima: stimulus saat ini (HTML atau teks polos), pertanyaan, daftar opsi dengan status kunci, dan pembahasan guru (jika ada).
+- [KUNCI BENAR] = opsi yang benar menurut guru; [SALAH – pengecoh] = opsi yang salah.
+- Untuk soal kategori, setiap pernyataan diberi label kuncinya.
+
+LANGKAH BERPIKIR (lakukan dalam pikiranmu, jangan ditulis)
+1. Pahami pertanyaan dan MENGAPA kunci benar. Tentukan informasi apa dari stimulus yang harus dibaca siswa untuk sampai ke kunci.
+2. Pahami tiap pengecoh: kesalahan berpikir apa yang diwakilinya. Stimulus harus cukup agar siswa yang teliti bisa menolak pengecoh itu.
+3. Nilai stimulus saat ini: apa yang kurang (kurang jelas, tidak runtut, ejaan/tata bahasa, terlalu panjang, tidak relevan, data penting tidak ada, istilah terlalu sulit).
+4. Perbaiki seperlunya, lalu periksa lagi aturan di bawah.
+
+HUBUNGAN STIMULUS – PERTANYAAN – OPSI (WAJIB)
+1. Stimulus harus memuat semua informasi/data yang dibutuhkan untuk menjawab; pertanyaan harus tetap TIDAK bisa dijawab tanpa membaca stimulus.
+2. Stimulus TIDAK boleh menyatakan jawaban secara langsung: jangan menyalin teks opsi benar, jangan menarik kesimpulan yang persis sama dengan kunci. Siswa harus mengolah informasi sendiri.
+3. Stimulus harus mendukung kunci dan tidak boleh bertentangan dengannya. Tidak boleh ada informasi yang membuat pengecoh menjadi benar.
+4. Stimulus tidak boleh memuat informasi yang membuat soal menjadi ambigu (dua opsi sama-sama benar).
+
+ATURAN ISI
+1. Pertahankan semua fakta, angka, nama, satuan, tanggal, dan data yang dipakai untuk menjawab. Jangan menghapus data penting; jangan mengubah nilai angka.
+2. Jangan mengarang fakta baru yang bisa memengaruhi jawaban. Menambah konteks umum yang aman (latar cerita, nama tokoh, tempat) boleh, selama tidak mengubah jawaban.
+3. Bahasa Indonesia baku sesuai PUEBI, kalimat efektif, ramah anak kelas 5, istilah sulit dijelaskan atau diganti. Panjang wajar: sekitar 2–6 kalimat atau data singkat; jangan bertele-tele.
+4. Ubah SEMINIMAL yang perlu. Jika stimulus sudah baik, kembalikan sama persis dan jelaskan di "note".
+5. Jika soal punya gambar stimulus (yang tidak bisa kamu lihat): jangan mengarang isi gambar dan jangan menghapus rujukan ke gambar.
+6. Ikuti arahan guru jika ada, selama tidak melanggar aturan di atas.
+
+ATURAN FORMAT (HTML)
+- Gunakan HANYA tag: <p>, <br>, <b>, <i>, <u>, <sub>, <sup>.
+- Satu paragraf = satu <p>. Data baris-per-baris (mis. "Apel: 5 buah") ditulis dalam satu <p> dengan <br> di antara baris. Jangan memakai tabel, daftar (ul/ol/li), gambar, judul (h1–h6), class, atau style.
+- Jika stimulus lama memuat <span class="math-tex" data-latex="...">...</span> (persamaan), salin persis; jangan membuat yang baru.
+
+FORMAT KELUARAN
+Balas HANYA JSON valid: {"stimulus":"<p>...</p>","note":"..."}
+- "stimulus": HTML stimulus yang sudah diperbaiki.
+- "note": 1–2 kalimat Bahasa Indonesia: apa yang diperbaiki dan mengapa (atau bahwa stimulus sudah baik).`
+
+function buildImproveStimulusRequest(input: ImproveStimulusInput): string {
+  const keys = describeKey(input)
+  const typeLabel =
+    input.type === 'single'
+      ? 'Pilihan ganda (tepat 1 jawaban benar)'
+      : input.type === 'multiple'
+        ? 'Pilihan ganda kompleks (lebih dari satu jawaban benar mungkin)'
+        : `Kategori (tiap pernyataan dinilai ${(input.categoryLabels?.length ? input.categoryLabels : ['Benar', 'Salah']).join(' / ')})`
+  const lines = input.options.map(
+    (o, i) =>
+      `${input.type === 'category' ? i + 1 : OPTION_LETTERS[i] || i + 1}. ${keys[i]} ${o.trim()}`
+  )
+  return [
+    `Mapel: ${input.subjectName}`,
+    `Materi: ${input.topicName}`,
+    `Jenis soal: ${typeLabel}`,
+    `PERTANYAAN: ${input.question.trim()}`,
+    `STIMULUS SAAT INI (yang harus diperbaiki):\n${input.stimulusHtml.trim()}`,
+    input.hasImage ? 'CATATAN: soal ini memiliki gambar stimulus yang TIDAK bisa kamu lihat.' : '',
+    input.explanation?.trim() ? `PEMBAHASAN GURU: ${htmlToPlainText(input.explanation)}` : '',
+    `DAFTAR OPSI (tidak boleh diubah):\n${lines.join('\n')}`,
+    input.hint?.trim() ? `ARAHAN GURU: ${input.hint.trim()}` : '',
+    'Perbaiki stimulus sesuai aturan.',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+const normText = (t: string) => t.toLowerCase().replace(/\s+/g, ' ').trim()
+
+/** Angka dalam teks, dinormalisasi (tanpa pemisah ribuan/desimal) untuk perbandingan. */
+function numberTokens(plain: string): { raw: string; token: string }[] {
+  return (plain.match(/\d+(?:[.,]\d+)*/g) || []).map((raw) => ({
+    raw,
+    token: raw.replace(/[.,]/g, ''),
+  }))
+}
+
+function stimulusWarnings(input: ImproveStimulusInput, oldPlain: string, newPlain: string): string[] {
+  const out: string[] = []
+
+  // 1. Angka dari stimulus lama yang hilang
+  const have = new Set(numberTokens(newPlain).map((n) => n.token))
+  const missing = [
+    ...new Set(
+      numberTokens(oldPlain)
+        .filter((n) => !have.has(n.token))
+        .map((n) => n.raw)
+    ),
+  ]
+  if (missing.length) {
+    out.push(
+      `Angka dari stimulus lama tidak ditemukan lagi: ${missing.slice(0, 6).join(', ')}${missing.length > 6 ? ', …' : ''}. Pastikan tidak ada data penting yang hilang.`
+    )
+  }
+
+  // 2. Stimulus memuat kalimat jawaban benar secara persis
+  if (input.type !== 'category') {
+    const n = normText(newPlain)
+    const leaked = input.correctAnswers
+      .filter((i) => {
+        const opt = normText(input.options[i] || '')
+        return opt.length >= 12 && n.includes(opt)
+      })
+      .map((i) => OPTION_LETTERS[i] || String(i + 1))
+    if (leaked.length) {
+      out.push(
+        `Stimulus memuat teks yang sama persis dengan jawaban benar (opsi ${leaked.join(', ')}). Siswa bisa menjawab hanya dengan menyalin.`
+      )
+    }
+  }
+
+  // 3. Panjang berubah drastis
+  if (oldPlain.length >= 80 && newPlain.length < oldPlain.length * 0.5) {
+    out.push('Stimulus menjadi jauh lebih pendek dari sebelumnya. Cek apakah ada informasi yang hilang.')
+  } else if (newPlain.length > 450 && newPlain.length > oldPlain.length * 2.2) {
+    out.push('Stimulus menjadi jauh lebih panjang. Pertimbangkan meringkas agar sesuai untuk siswa SD.')
+  }
+  return out
+}
+
+/**
+ * Perbaiki stimulus teks agar sesuai konteks pertanyaan dan pilihan jawaban.
+ * Pertanyaan, opsi, dan kunci tidak berubah; hasil diperiksa lokal dan oleh AI kedua.
+ */
+export async function improveStimulusWithAI(
+  input: ImproveStimulusInput
+): Promise<ImproveStimulusResult> {
+  const key = import.meta.env.VITE_OPENAI_API_KEY?.trim()
+  if (!key) {
+    throw new Error(
+      'VITE_OPENAI_API_KEY belum diisi. Tambahkan di file .env lalu restart npm run dev.'
+    )
+  }
+  const oldPlain = htmlToPlainText(input.stimulusHtml)
+  if (!oldPlain) throw new Error('Stimulus masih kosong. Tulis stimulus terlebih dahulu.')
+  if (!input.question.trim()) throw new Error('Isi pertanyaan terlebih dahulu.')
+  if (input.options.length < 2 || input.options.some((o) => !o.trim())) {
+    throw new Error('Isi semua pilihan terlebih dahulu agar AI memahami hubungan stimulus dengan jawaban.')
+  }
+
+  const parsed = await callOpenAiJson(
+    key,
+    STIMULUS_IMPROVE_GUIDANCE,
+    buildImproveStimulusRequest(input),
+    0.4
+  )
+
+  const html = sanitizeAiStimulusHtml(typeof parsed?.stimulus === 'string' ? parsed.stimulus : '')
+  const newPlain = htmlToPlainText(html)
+  if (!newPlain) throw new Error('AI tidak mengembalikan stimulus. Coba lagi.')
+
+  const changed = normText(newPlain) !== normText(oldPlain)
+  const note =
+    typeof parsed?.note === 'string' && parsed.note.trim()
+      ? parsed.note.trim()
+      : changed
+        ? 'Stimulus diperbaiki agar lebih jelas dan sesuai soal.'
+        : 'Stimulus sudah baik, tidak ada yang diubah.'
+
+  if (!changed) {
+    return {
+      stimulusHtml: input.stimulusHtml,
+      changed: false,
+      note,
+      warnings: [],
+      verification: { status: 'ok', message: 'Tidak ada perubahan.' },
+    }
+  }
+
+  const warnings = stimulusWarnings(input, oldPlain, newPlain)
+  const verification = await verifyOptionKey(
+    key,
+    { ...input, stimulusHtml: html },
+    input.options,
+    'stimulus'
+  )
+  return { stimulusHtml: html, changed: true, note, warnings, verification }
 }
