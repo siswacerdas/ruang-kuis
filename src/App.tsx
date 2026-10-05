@@ -21,6 +21,7 @@ import KerjakanResult from './pages/KerjakanResult'
 import KerjakanRiwayat from './pages/KerjakanRiwayat'
 import Peringkat from './pages/Peringkat'
 import SiswaPeringkat from './pages/SiswaPeringkat'
+import Materi from './pages/Materi'
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -63,6 +64,7 @@ function App() {
         {/* Siswa */}
         <Route path="/kerjakan" element={<SiswaLogin />} />
         <Route path="/siswa" element={<KerjakanEntry />} />
+        <Route path="/siswa/materi" element={isStudent || isAdmin ? <Materi audience="student" /> : <Navigate to="/login" />} />
         <Route path="/kerjakan/token" element={<Navigate to="/siswa" replace />} />
         <Route path="/kerjakan/hasil" element={<KerjakanResult />} />
         <Route path="/kerjakan/riwayat" element={<KerjakanRiwayat />} />
@@ -108,6 +110,7 @@ function App() {
           path="/tujuan-pembelajaran"
           element={isAdmin ? <TujuanPembelajaran /> : <Navigate to="/login" />}
         />
+        <Route path="/materi" element={isAdmin ? <Materi audience="admin" /> : <Navigate to="/login" />} />
 
         <Route path="/questions" element={<Navigate to="/bank-soal" replace />} />
         <Route
