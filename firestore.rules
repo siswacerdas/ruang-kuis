@@ -51,6 +51,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Katalog presentasi PDF (Google Drive fileId) — siswa baca, admin tulis
+    match /lessonMaterials/{materialId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
