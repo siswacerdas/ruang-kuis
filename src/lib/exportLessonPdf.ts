@@ -115,8 +115,8 @@ export function exportLessonToPdf(
     throw new Error('Popup diblokir. Izinkan jendela popup untuk mengunduh PDF.')
   }
 
-  const safeTitle = title.replace(/</g, '<').replace(/>/g, '>')
-  const safeSubject = subjectName.replace(/</g, '<').replace(/>/g, '>')
+  const safeTitle = title.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const safeSubject = subjectName.replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
   w.document.open()
   w.document.write(`<!DOCTYPE html>

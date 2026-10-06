@@ -11,6 +11,7 @@ export type LessonStyle = 'penjelasan' | 'ringkas' | 'latihan'
 export type LessonSection = {
   id: string
   heading: string
+  /** HTML aman (subset tag) untuk isi bagian */
   bodyHtml: string
   callout?: string
   needsImage?: boolean
@@ -58,14 +59,14 @@ Tugas: buat materi LENGKAP yang bisa dipelajari sendiri tanpa guru di samping �
 {
   "title": "string",
   "introHtml": "<p>...</p>",
-  "objectives": ["tujuan 1", "tujuan 2", ...],
+  "objectives": ["tujuan 1", "tujuan 2", ...],  // 3–6 item
   "sections": [
     {
       "id": "s1",
       "heading": "Judul bagian",
       "bodyHtml": "<p>...</p><ul><li>...</li></ul>",
       "callout": "opsional: 1 kalimat kunci / ingat",
-      "needsImage": true,
+      "needsImage": true/false,
       "imagePrompt": "English prompt only if needsImage"
     }
   ],
@@ -116,6 +117,7 @@ function buildUserPrompt(opts: GenerateLessonOptions): string {
     .join('\n')
 }
 
+/** Sanitasi HTML subset aman untuk materi. */
 export function sanitizeLessonHtml(html: string): string {
   if (!html || typeof html !== 'string') return ''
   let s = html
@@ -125,12 +127,14 @@ export function sanitizeLessonHtml(html: string): string {
     .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')
     .replace(/javascript:/gi, '')
 
+  // Hapus tag selain allowlist; biarkan konten teksnya
   s = s.replace(/<\/?([a-zA-Z0-9]+)(\s[^>]*)?>/g, (full, tag: string) => {
     const t = tag.toLowerCase()
     const allowed = new Set(['p', 'ul', 'ol', 'li', 'strong', 'em', 'b', 'i', 'br', 'span', 'figure', 'figcaption', 'img', 'blockquote', 'div'])
     if (!allowed.has(t)) return ''
     if (t === 'br') return '<br/>'
     if (t === 'img') {
+      // hanya izinkan src data: atau https relatif aman — filter di build
       const srcM = full.match(/\ssrc\s*=\s*("([^"]*)"|'([^']*)')/i)
       const altM = full.match(/\salt\s*=\s*("([^"]*)"|'([^']*)')/i)
       const src = (srcM?.[2] || srcM?.[3] || '').trim()
@@ -140,6 +144,7 @@ export function sanitizeLessonHtml(html: string): string {
       return `<img src="${src.replace(/"/g, '')}" alt="${alt.replace(/"/g, '')}" />`
     }
     if (full.startsWith('</')) return `</${t}>`
+    // strip attributes kecuali class terbatas pada div/span
     if (t === 'div' || t === 'span') {
       const classM = full.match(/\sclass\s*=\s*("([^"]*)"|'([^']*)')/i)
       const cls = (classM?.[2] || classM?.[3] || '').replace(/[^a-zA-Z0-9_\-\s]/g, '').trim()
@@ -219,10 +224,10 @@ function buildHtmlContent(lesson: Omit<GeneratedLesson, 'htmlContent'>): string 
 
 function escapeText(t: string): string {
   return String(t || '')
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/"/g, '"')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
 
 async function callOpenAI(apiKey: string, model: string, system: string, user: string): Promise<any> {
@@ -351,6 +356,7 @@ export async function generateLessonWithOpenAI(
         .slice(0, 6)
     : []
 
+  // Batasi gambar maks 4
   let imageSlots = 0
   sections = sections.map((s) => {
     if (s.needsImage && imageSlots < 4) {

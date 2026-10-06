@@ -280,6 +280,7 @@ export async function saveLessonMaterial(
     updatedAt: serverTimestamp(),
   }
   if (kind === 'presentation') {
+    // Firestore menolak undefined di nested slides — bersihkan dulu
     payload.slides = stripUndefined(material.slides)
     if (material.outline?.trim()) payload.outline = material.outline.trim()
     if (material.generatedBy) payload.generatedBy = material.generatedBy

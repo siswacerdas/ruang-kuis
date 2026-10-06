@@ -2,13 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import StudentNav from '../components/StudentNav'
 import Layout from '../components/Layout'
-import AiPresentationGenerator from '../components/AiPresentationGenerator'
+import AiLessonGenerator from '../components/AiLessonGenerator'
+import LessonViewer from '../components/LessonViewer'
 import PresentationViewer from '../components/PresentationViewer'
 import { SUBJECTS, getSubject, type SubjectKey } from '../types/question'
 import {
   deleteLessonMaterial,
   fetchLessonMaterials,
   formatBytes,
+  isHtmlLesson,
   isPresentation,
   parseDriveFileId,
   pdfsForSubject,
@@ -329,9 +331,11 @@ function MateriBody({
       alert('Data ini masih seed statis. Klik "Migrasi seed ke Firestore" dulu agar bisa dihapus.')
       return
     }
-    const extra = isPresentation(pdf)
-      ? ' Presentasi AI akan dihapus dari katalog.'
-      : ' File di Google Drive tidak ikut terhapus.'
+    const extra = isHtmlLesson(pdf)
+      ? ' Materi belajar AI akan dihapus dari katalog.'
+      : isPresentation(pdf)
+        ? ' Presentasi AI akan dihapus dari katalog.'
+        : ' File di Google Drive tidak ikut terhapus.'
     if (!confirm(`Hapus materi "${pdf.title}"?${extra}`)) return
     setDeletingId(pdf.id)
     try {
@@ -380,7 +384,7 @@ function MateriBody({
                 onClick={() => setShowAiGen(true)}
                 className="px-4 py-2 rounded-xl border border-violet-200 bg-violet-50 text-violet-800 text-sm font-medium hover:bg-violet-100"
               >
-                ✨ Buat presentasi AI
+                ✨ Buat materi belajar AI
               </button>
               <button
                 type="button"
@@ -398,8 +402,8 @@ function MateriBody({
             <p className="text-sm font-medium text-slate-700">Dokumen belum tersedia</p>
             <p className="text-sm text-slate-400 mt-1 max-w-sm mx-auto">
               {isAdmin
-                ? 'Klik "Tambah materi" untuk PDF Drive, atau "Buat presentasi AI".'
-                : 'Presentasi untuk mapel ini belum tersedia.'}
+                ? 'Klik "Tambah materi" untuk PDF Drive, atau "Buat materi belajar AI".'
+                : 'Materi untuk mapel ini belum tersedia.'}
             </p>
           </div>
         ) : (
@@ -417,9 +421,11 @@ function MateriBody({
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-slate-900 group-hover:text-indigo-700 transition truncate">{pdf.title}</p>
                     <p className="text-xs text-slate-400 mt-0.5 tabular-nums">
-                      {isPresentation(pdf)
-                        ? `${pdf.slides?.length || 0} slide · Presentasi AI`
-                        : `${formatBytes(pdf.sizeBytes)} · PDF`}
+                      {isHtmlLesson(pdf)
+                        ? `${pdf.sectionsCount || '—'} bagian · Materi AI`
+                        : isPresentation(pdf)
+                          ? `${pdf.slides?.length || 0} slide · Presentasi AI`
+                          : `${formatBytes(pdf.sizeBytes)} · PDF`}
                     </p>
                   </div>
                   <span className="hidden sm:inline-flex text-xs font-medium text-indigo-600 opacity-0 group-hover:opacity-100 transition shrink-0">
@@ -431,7 +437,7 @@ function MateriBody({
                 </button>
                 {isAdmin && (
                   <div className="flex items-center gap-1 shrink-0">
-                    {!isPresentation(pdf) && (
+                    {!isPresentation(pdf) && !isHtmlLesson(pdf) && (
                       <button
                         type="button"
                         onClick={() => openEdit(pdf)}
@@ -455,7 +461,15 @@ function MateriBody({
           </div>
         )}
 
-        {open && isPresentation(open) && open.slides && open.slides.length > 0 ? (
+        {open && isHtmlLesson(open) && open.htmlContent ? (
+          <LessonViewer
+            title={open.title}
+            subjectName={subject?.name || open.subjectKey}
+            htmlContent={open.htmlContent}
+            onClose={() => setOpen(null)}
+            showExport
+          />
+        ) : open && isPresentation(open) && open.slides && open.slides.length > 0 ? (
           <PresentationViewer
             title={open.title}
             subjectName={subject?.name || open.subjectKey}
@@ -477,7 +491,7 @@ function MateriBody({
           />
         )}
         {showAiGen && (
-          <AiPresentationGenerator
+          <AiLessonGenerator
             open={showAiGen}
             onClose={() => setShowAiGen(false)}
             defaultSubjectKey={subject.key}
@@ -603,7 +617,15 @@ function MateriBody({
         })}
       </div>
 
-      {open && isPresentation(open) && open.slides && open.slides.length > 0 ? (
+      {open && isHtmlLesson(open) && open.htmlContent ? (
+        <LessonViewer
+          title={open.title}
+          subjectName={getSubject(open.subjectKey)?.name || open.subjectKey}
+          htmlContent={open.htmlContent}
+          onClose={() => setOpen(null)}
+          showExport
+        />
+      ) : open && isPresentation(open) && open.slides && open.slides.length > 0 ? (
         <PresentationViewer
           title={open.title}
           subjectName={getSubject(open.subjectKey)?.name || open.subjectKey}
@@ -615,7 +637,7 @@ function MateriBody({
         <PdfViewer pdf={open} onClose={() => setOpen(null)} />
       ) : null}
       {showAiGen && (
-        <AiPresentationGenerator
+        <AiLessonGenerator
           open={showAiGen}
           onClose={() => setShowAiGen(false)}
           defaultSubjectKey={selectedKey ? (selectedKey as SubjectKey) : undefined}
@@ -686,7 +708,7 @@ export default function Materi({ audience }: { audience: 'admin' | 'student' }) 
   if (audience === 'admin') {
     const subject = selectedKey ? getSubject(selectedKey as SubjectKey) : undefined
     return (
-      <Layout title="Materi" subtitle={subject ? subject.name : 'Presentasi PDF per mata pelajaran'}>
+      <Layout title="Materi" subtitle={subject ? subject.name : 'Materi belajar & PDF per mata pelajaran'}>
         <MateriBody
           selectedKey={selectedKey}
           onSelect={onSelect}
