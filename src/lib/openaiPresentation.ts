@@ -118,8 +118,11 @@ function normalizeSlide(raw: any, index: number): PresentationSlide | null {
   const layout = VALID_LAYOUTS.has(layoutRaw) ? layoutRaw : 'content'
   let bullets: string[] | undefined
   if (Array.isArray(raw.bullets)) {
-    bullets = raw.bullets.map((b: unknown) => String(b ?? '').trim()).filter(Boolean).slice(0, 6)
-    if (bullets.length === 0) bullets = undefined
+    const list = raw.bullets
+      .map((b: unknown) => String(b ?? '').trim())
+      .filter(Boolean)
+      .slice(0, 6) as string[]
+    bullets = list.length === 0 ? undefined : list
   }
   const body = raw.body ? String(raw.body).trim().slice(0, 600) : undefined
   const callout = raw.callout ? String(raw.callout).trim().slice(0, 200) : undefined
