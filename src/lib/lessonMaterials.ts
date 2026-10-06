@@ -146,28 +146,46 @@ export function slugId(title: string, subjectKey: string): string {
   return `${subjectKey}__${base || 'materi'}-${Date.now().toString(36)}`
 }
 
+function staticSeed(): LessonPdf[] {
+  return LESSON_PDFS.map((p) => ({ ...p, isStatic: true }))
+}
+
+/**
+ * Ambil katalog dari Firestore.
+ * Jika koleksi kosong / rules belum di-deploy (permission-denied),
+ * jatuh ke seed statis agar materi tetap tampil.
+ */
 export async function fetchLessonMaterials(): Promise<LessonPdf[]> {
-  const snap = await getDocs(collection(db, 'lessonMaterials'))
-  if (snap.empty) {
-    return LESSON_PDFS.map((p) => ({ ...p, isStatic: true }))
+  try {
+    const snap = await getDocs(collection(db, 'lessonMaterials'))
+    if (snap.empty) return staticSeed()
+    return snap.docs
+      .map((d) => {
+        const data = d.data()
+        return {
+          id: d.id,
+          subjectKey: data.subjectKey as SubjectKey,
+          title: String(data.title || ''),
+          fileName: String(data.fileName || ''),
+          sizeBytes: Number(data.sizeBytes) || 0,
+          driveFileId: String(data.driveFileId || ''),
+          isStatic: false,
+          createdAt: data.createdAt ?? null,
+          updatedAt: data.updatedAt ?? null,
+        } satisfies LessonPdf
+      })
+      .filter((p) => p.title && p.driveFileId)
+      .sort((a, b) => a.subjectKey.localeCompare(b.subjectKey) || a.title.localeCompare(b.title, 'id'))
+  } catch (e: unknown) {
+    const code = (e as { code?: string })?.code || ''
+    const msg = String((e as { message?: string })?.message || e)
+    // Rules belum di-deploy / koleksi belum diizinkan → tampilkan seed
+    if (code === 'permission-denied' || /insufficient permissions|permission-denied/i.test(msg)) {
+      console.warn('[lessonMaterials] Firestore permission denied — memakai seed lokal. Deploy firestore.rules.')
+      return staticSeed()
+    }
+    throw e
   }
-  return snap.docs
-    .map((d) => {
-      const data = d.data()
-      return {
-        id: d.id,
-        subjectKey: data.subjectKey as SubjectKey,
-        title: String(data.title || ''),
-        fileName: String(data.fileName || ''),
-        sizeBytes: Number(data.sizeBytes) || 0,
-        driveFileId: String(data.driveFileId || ''),
-        isStatic: false,
-        createdAt: data.createdAt ?? null,
-        updatedAt: data.updatedAt ?? null,
-      } satisfies LessonPdf
-    })
-    .filter((p) => p.title && p.driveFileId)
-    .sort((a, b) => a.subjectKey.localeCompare(b.subjectKey) || a.title.localeCompare(b.title, 'id'))
 }
 
 export async function saveLessonMaterial(
