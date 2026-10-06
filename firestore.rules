@@ -7,7 +7,7 @@ service cloud.firestore {
     }
 
     match /topics/{topicId} {
-      allow read: if isAdmin();
+      allow read: if true;
       allow write: if isAdmin();
     }
 
@@ -35,7 +35,33 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // Baca daftar untuk dropdown login (email fiktif); tulis hanya admin
+    // Sesi latihan mandiri (sementara)
+    match /practiceSessions/{sessionId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll([
+             'studentId', 'studentName', 'subjectKey', 'questionIds', 'status'
+           ])
+        && request.resource.data.status == 'in_progress'
+        && request.resource.data.questionIds is list
+        && request.resource.data.questionIds.size() >= 1
+        && request.resource.data.questionIds.size() <= 20;
+      allow update, delete: if isAdmin();
+    }
+
+    // Hasil latihan mandiri (riwayat)
+    match /practiceAttempts/{attemptId} {
+      allow create: if isAdmin()
+        && request.resource.data.keys().hasAll([
+             'studentId', 'studentName', 'subjectKey', 'answers', 'score', 'total', 'percent', 'title'
+           ])
+        && request.resource.data.studentName is string
+        && request.resource.data.score is number
+        && request.resource.data.total is number;
+      allow read: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
     match /students/{studentId} {
       allow read: if true;
       allow write: if isAdmin();
@@ -51,7 +77,6 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Katalog presentasi PDF (Google Drive fileId) — siswa baca, admin tulis
     match /lessonMaterials/{materialId} {
       allow read: if true;
       allow write: if isAdmin();
