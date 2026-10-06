@@ -8,6 +8,8 @@ import {
   where,
   documentId,
   orderBy,
+  deleteDoc,
+  writeBatch,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { Link, useParams, useNavigate } from 'react-router-dom'
@@ -62,6 +64,8 @@ export default function LatihanHasil() {
   const [questions, setQuestions] = useState<Question[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'overview' | 'questions'>('overview')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deletingAll, setDeletingAll] = useState(false)
   const [popup, setPopup] = useState<{
     attempt: LatihanAttempt
     question: Question
@@ -88,7 +92,6 @@ export default function LatihanHasil() {
       const p = { id: pSnap.id, ...pSnap.data() } as LatihanPaket
       setPaket(p)
 
-      // Attempts
       let aSnap
       try {
         aSnap = await getDocs(
@@ -106,7 +109,6 @@ export default function LatihanHasil() {
       const atts = aSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanAttempt))
       setAttempts(atts)
 
-      // Questions in package order
       if (p.questionIds?.length) {
         const ids = p.questionIds
         const chunks: string[][] = []
@@ -128,7 +130,59 @@ export default function LatihanHasil() {
     }
   }
 
-  /** % benar per nomor soal */
+  /** Hapus satu attempt → siswa bisa mengerjakan lagi (jika allowRetry off, ini satu-satunya cara reset). */
+  const handleDeleteAttempt = async (att: LatihanAttempt) => {
+    if (!att.id) return
+    if (
+      !confirm(
+        `Hapus hasil ${att.studentName}?\nSkor ${att.score}/${att.total} (${att.percent}%) akan hilang.\nSiswa bisa mengerjakan ulang paket ini.`
+      )
+    )
+      return
+    setDeletingId(att.id)
+    try {
+      await deleteDoc(doc(db, 'attempts', att.id))
+      setAttempts((prev) => prev.filter((a) => a.id !== att.id))
+      if (popup?.attempt.id === att.id) setPopup(null)
+    } catch (err) {
+      console.error(err)
+      alert('Gagal menghapus hasil. Pastikan Anda login sebagai admin.')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  /** Hapus semua attempt paket ini. */
+  const handleDeleteAll = async () => {
+    if (attempts.length === 0) return
+    if (
+      !confirm(
+        `Hapus SEMUA ${attempts.length} hasil pengerjaan paket ini?\nTindakan ini tidak bisa dibatalkan.`
+      )
+    )
+      return
+    if (!confirm('Konfirmasi sekali lagi: hapus semua hasil?')) return
+    setDeletingAll(true)
+    try {
+      const BATCH = 400
+      for (let i = 0; i < attempts.length; i += BATCH) {
+        const batch = writeBatch(db)
+        attempts.slice(i, i + BATCH).forEach((a) => {
+          if (a.id) batch.delete(doc(db, 'attempts', a.id))
+        })
+        await batch.commit()
+      }
+      setAttempts([])
+      setPopup(null)
+    } catch (err) {
+      console.error(err)
+      alert('Gagal menghapus sebagian/semua hasil.')
+      if (id) await load(id)
+    } finally {
+      setDeletingAll(false)
+    }
+  }
+
   const questionStats = useMemo(() => {
     return questions.map((q) => {
       if (attempts.length === 0) return { correct: 0, total: 0, percent: 0 }
@@ -179,22 +233,37 @@ export default function LatihanHasil() {
       title={paket.title}
       subtitle="Riwayat & hasil pengerjaan siswa"
       actions={
-        <Link
-          to="/latihan-soal"
-          className="text-sm text-gray-600 hover:text-indigo-600 px-3 py-2 rounded-lg hover:bg-gray-50"
-        >
-          ← Daftar latihan
-        </Link>
+        <div className="flex items-center gap-2 flex-wrap">
+          {attempts.length > 0 && (
+            <button
+              type="button"
+              onClick={handleDeleteAll}
+              disabled={deletingAll}
+              className="text-sm text-red-600 hover:text-red-700 px-3 py-2 rounded-lg hover:bg-red-50 border border-red-100 disabled:opacity-50"
+            >
+              {deletingAll ? 'Menghapus...' : 'Reset semua hasil'}
+            </button>
+          )}
+          <Link
+            to="/latihan-soal"
+            className="text-sm text-gray-600 hover:text-indigo-600 px-3 py-2 rounded-lg hover:bg-gray-50"
+          >
+            ← Daftar latihan
+          </Link>
+        </div>
       }
     >
-      {/* Header meta */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5">
         <div className="flex flex-wrap items-center gap-2 mb-3">
-          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-            status === 'active' ? 'bg-emerald-50 text-emerald-700' :
-            status === 'finished' ? 'bg-blue-50 text-blue-700' :
-            'bg-gray-100 text-gray-600'
-          }`}>
+          <span
+            className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+              status === 'active'
+                ? 'bg-emerald-50 text-emerald-700'
+                : status === 'finished'
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'bg-gray-100 text-gray-600'
+            }`}
+          >
             {LATIHAN_STATUS_LABELS[status]}
           </span>
           {subject && (
@@ -205,6 +274,15 @@ export default function LatihanHasil() {
           <span className="text-xs text-gray-400">
             Token <span className="font-mono font-semibold text-gray-700">{paket.token}</span>
           </span>
+          {paket.allowRetry ? (
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800">
+              Ulang diizinkan
+            </span>
+          ) : (
+            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-50 text-gray-500">
+              1x saja (reset = hapus hasil)
+            </span>
+          )}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
           <div>
@@ -230,14 +308,15 @@ export default function LatihanHasil() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 mb-4">
         {(['overview', 'questions'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
-              tab === t ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 border border-gray-100 hover:bg-gray-50'
+              tab === t
+                ? 'bg-indigo-600 text-white'
+                : 'bg-white text-gray-600 border border-gray-100 hover:bg-gray-50'
             }`}
           >
             {t === 'overview' ? 'Overview' : 'Per soal'}
@@ -254,7 +333,6 @@ export default function LatihanHasil() {
           </p>
         </div>
       ) : tab === 'overview' ? (
-        /* ===== MATRIX TABLE (ref style) ===== */
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[640px]">
@@ -272,6 +350,7 @@ export default function LatihanHasil() {
                       </div>
                     </th>
                   ))}
+                  <th className="px-3 py-3 font-medium text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -312,17 +391,29 @@ export default function LatihanHasil() {
                             title="Detail jawaban"
                           >
                             {ans == null ? (
-                              <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-300 text-[10px] flex items-center justify-center">—</span>
+                              <span className="w-5 h-5 rounded-full bg-gray-100 text-gray-300 text-[10px] flex items-center justify-center">
+                                —
+                              </span>
                             ) : ok ? (
                               <span className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center">
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2.5}
+                                    d="M5 13l4 4L19 7"
+                                  />
                                 </svg>
                               </span>
                             ) : (
                               <span className="w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center">
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2.5}
+                                    d="M6 18L18 6M6 6l12 12"
+                                  />
                                 </svg>
                               </span>
                             )}
@@ -330,6 +421,17 @@ export default function LatihanHasil() {
                         </td>
                       )
                     })}
+                    <td className="px-3 py-3 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAttempt(att)}
+                        disabled={deletingId === att.id || deletingAll}
+                        className="text-xs text-red-500 hover:underline disabled:opacity-50"
+                        title="Hapus hasil agar siswa bisa mengerjakan ulang"
+                      >
+                        {deletingId === att.id ? '...' : 'Reset'}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -337,7 +439,6 @@ export default function LatihanHasil() {
           </div>
         </div>
       ) : (
-        /* ===== PER SOAL ===== */
         <div className="space-y-3">
           {questions.map((q, i) => {
             const st = questionStats[i]
@@ -355,11 +456,15 @@ export default function LatihanHasil() {
                       {QUESTION_TYPE_LABELS[q.type]}
                     </span>
                   </div>
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                    st.percent >= 70 ? 'bg-emerald-50 text-emerald-700' :
-                    st.percent >= 40 ? 'bg-amber-50 text-amber-700' :
-                    'bg-red-50 text-red-600'
-                  }`}>
+                  <span
+                    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      st.percent >= 70
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : st.percent >= 40
+                          ? 'bg-amber-50 text-amber-700'
+                          : 'bg-red-50 text-red-600'
+                    }`}
+                  >
                     {st.percent}% benar ({st.correct}/{st.total})
                   </span>
                 </div>
@@ -370,7 +475,6 @@ export default function LatihanHasil() {
         </div>
       )}
 
-      {/* Popup detail jawaban (ref style) */}
       {popup && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30"
@@ -386,7 +490,11 @@ export default function LatihanHasil() {
                 <span>·</span>
                 <span>{QUESTION_TYPE_LABELS[popup.question.type]}</span>
               </div>
-              <button type="button" onClick={() => setPopup(null)} className="text-gray-400 hover:text-gray-600 p-1">
+              <button
+                type="button"
+                onClick={() => setPopup(null)}
+                className="text-gray-400 hover:text-gray-600 p-1"
+              >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -399,21 +507,27 @@ export default function LatihanHasil() {
             <div className="grid grid-cols-2 gap-3 mb-4 text-xs">
               <div className="bg-gray-50 rounded-xl px-3 py-2">
                 <p className="text-gray-400">Waktu jawab</p>
-                <p className="font-semibold text-gray-800">
-                  {formatDuration(popup.answer.timeMs)}
-                </p>
+                <p className="font-semibold text-gray-800">{formatDuration(popup.answer.timeMs)}</p>
               </div>
               <div className="bg-gray-50 rounded-xl px-3 py-2">
                 <p className="text-gray-400">Hasil</p>
-                <p className={`font-semibold ${popup.answer.isCorrect ? 'text-emerald-600' : 'text-red-600'}`}>
+                <p
+                  className={`font-semibold ${
+                    popup.answer.isCorrect ? 'text-emerald-600' : 'text-red-600'
+                  }`}
+                >
                   {popup.answer.isCorrect ? 'Benar' : 'Salah'}
                 </p>
               </div>
             </div>
 
-            <div className={`rounded-xl px-3 py-3 text-sm mb-3 ${
-              popup.answer.isCorrect ? 'bg-emerald-50 border border-emerald-100' : 'bg-red-50 border border-red-100'
-            }`}>
+            <div
+              className={`rounded-xl px-3 py-3 text-sm mb-3 ${
+                popup.answer.isCorrect
+                  ? 'bg-emerald-50 border border-emerald-100'
+                  : 'bg-red-50 border border-red-100'
+              }`}
+            >
               <p className="text-xs font-semibold text-gray-500 mb-1">
                 Jawaban {popup.attempt.studentName}
               </p>
@@ -464,6 +578,15 @@ export default function LatihanHasil() {
                 )}
               </div>
             )}
+
+            <button
+              type="button"
+              onClick={() => handleDeleteAttempt(popup.attempt)}
+              disabled={deletingId === popup.attempt.id}
+              className="mt-4 w-full text-sm text-red-600 border border-red-100 rounded-xl py-2 hover:bg-red-50 disabled:opacity-50"
+            >
+              {deletingId === popup.attempt.id ? 'Menghapus...' : 'Reset hasil siswa ini'}
+            </button>
           </div>
         </div>
       )}
