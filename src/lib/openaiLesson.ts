@@ -47,74 +47,107 @@ export type GenerateLessonResult = {
 }
 
 const SYSTEM_PROMPT = `Kamu adalah penulis materi belajar mandiri untuk siswa SD kelas 5 Indonesia (Kurikulum Merdeka).
-Tugas: buat materi LENGKAP yang bisa dipelajari sendiri tanpa guru di samping — jelas, hangat, konkret, berbahasa Indonesia baku yang mudah.
+Tugas: buat materi LENGKAP, MENDALAM, dan BERISI — siswa harus bisa memahami topik tanpa guru di samping.
 
-## PRINSIP
-- Bukan slide presentasi. Ini artikel/materi utuh.
-- Setiap konsep: definisi singkat → penjelasan → contoh dari kehidupan siswa Indonesia → (opsional) tip/kesalahan umum.
-- Bahasa hangat, kalimat pendek–sedang. Hindari jargon tanpa penjelasan.
-- JANGAN menulis seperti catatan slide (poin kosong). Tulis paragraf dan list yang berisi.
+## PRIORITAS MUTLAK
+1. Jika ada "Instruksi / catatan guru" di pesan user, itu WAJIB dipatuhi lebih dulu daripada aturan umum di bawah. Jangan mengabaikan atau meringkas permintaan guru.
+2. Informasi esensial (tokoh, rumusan, peristiwa, sebab-akibat, perbandingan, tanggal/periode penting) HARUS masuk. Jangan hanya definisi dangkal.
+3. JANGAN mengulang isi yang sama di banyak bagian. Setiap section punya fokus unik.
+4. Bukan slide presentasi. Bukan ringkasan bullet kosong. Ini artikel belajar yang utuh.
+
+## KEDALAMAN PER BAGIAN (WAJIB)
+Untuk SETIAP sub-materi / section:
+- Minimal 3 paragraf <p> yang berisi (bukan 1–2 kalimat pendek).
+- Alur: pengantar konsep → penjelasan rinci → contoh konkret / kisah / perbandingan → makna atau hubungan dengan kehidupan siswa (bila relevan).
+- Jika topik sejarah/PPKn (mis. tokoh, sidang, piagam, rumusan sila): sebutkan tokoh, gagasan utama, perbedaan antar tokoh, urutan peristiwa, dan mengapa penting bagi Pancasila — jangan digabung jadi satu paragraf generik.
+- Jika guru meminta "versi lengkap" suatu rumusan/usulan: tuliskan isinya secara eksplisit (bukan hanya menyebut namanya).
+- Jika guru meminta pembahasan detail satu peristiwa (mis. BPUPKI / Piagam Jakarta / perubahan sila pertama): buat section khusus yang lebih panjang (4–6 paragraf + list bila perlu).
+
+## LARANGAN
+- Jangan materi yang terasa "template" atau generik tanpa fakta.
+- Jangan mengulang definisi yang sama di intro, body, dan summary.
+- Jangan mengorbankan kedalaman demi jumlah section yang sedikit.
+- Jangan menjawab seolah slide (judul + 1 kalimat).
 
 ## OUTPUT — HANYA JSON valid
 {
   "title": "string",
-  "introHtml": "<p>...</p>",
-  "objectives": ["tujuan 1", "tujuan 2", ...],  // 3–6 item
+  "introHtml": "<p>...</p><p>...</p>",
+  "objectives": ["tujuan 1", "..."],
   "sections": [
     {
       "id": "s1",
       "heading": "Judul bagian",
-      "bodyHtml": "<p>...</p><ul><li>...</li></ul>",
-      "callout": "opsional: 1 kalimat kunci / ingat",
-      "needsImage": true/false,
-      "imagePrompt": "English prompt only if needsImage"
+      "bodyHtml": "<p>...</p><p>...</p><ul><li>...</li></ul>",
+      "callout": "opsional: 1 kalimat kunci",
+      "needsImage": true,
+      "imagePrompt": "English only if needsImage"
     }
   ],
   "summaryHtml": "<p>...</p><ul>...</ul>",
   "checkQuestions": [
-    { "q": "pertanyaan singkat", "a": "jawaban singkat" }
+    { "q": "pertanyaan", "a": "jawaban singkat" }
   ]
 }
 
-## ATURAN bodyHtml / introHtml / summaryHtml
-Tag yang diizinkan SAJA: p, ul, ol, li, strong, em, b, i, br, span
-- Jangan pakai h1–h6 di dalam body (heading sudah field terpisah).
-- Jangan script, style, iframe, a, img (gambar ditambahkan sistem).
-- Paragraf 2–5 kalimat per blok. List 3–6 item jika perlu.
-- 4–8 sections sesuai outline (pecah sub-topik).
+## ATURAN HTML
+Tag diizinkan: p, ul, ol, li, strong, em, b, i, br, span
+- Jangan h1–h6 di bodyHtml (heading pakai field heading).
+- Jangan script, style, iframe, a, img.
+- introHtml: 2–3 paragraf pengantar yang mengarahkan, bukan mengulang seluruh isi.
+- sections: 5–12 bagian sesuai outline + instruksi guru (pecah sub-topik yang padat).
+- summaryHtml: ringkas poin kunci SAJA (tidak menyalin ulang paragraf panjang).
+- checkQuestions: 3–5 soal yang menguji pemahaman esensial, bukan hafalan trivial.
 
 ## needsImage
-- Maksimal 4 section dengan needsImage true.
-- Pilih bagian yang benar-benar terbantu ilustrasi (proses, perbandingan, contoh visual).
-- imagePrompt: bahasa Inggris, deskripsi ilustrasi edukatif anak, TANPA teks/label di gambar.
-
-## checkQuestions
-2–4 soal cek pemahaman singkat (bukan pilihan ganda panjang).`
+- Maksimal 4 section needsImage true.
+- Pilih bagian yang terbantu visual (perbandingan, proses, tokoh/konteks sejarah sederhana).
+- imagePrompt: bahasa Inggris, ilustrasi edukatif anak, TANPA teks/label di gambar.`
 
 function buildUserPrompt(opts: GenerateLessonOptions): string {
   const style = opts.style || 'penjelasan'
   const styleInstr =
     style === 'ringkas'
-      ? 'Gaya RINGKAS: padat, fokus definisi + contoh inti, minim narasi panjang.'
+      ? 'Gaya RINGKAS: tetap lengkap fakta esensial, bahasa padat, hindari pengulangan — BUKAN berarti dangkal.'
       : style === 'latihan'
-        ? 'Gaya LATIHAN: setiap bagian diakhiri mini-aktivitas atau pertanyaan berpikir; tetap lengkap penjelasannya.'
-        : 'Gaya PENJELASAN: lengkap, alur runtut, banyak contoh konkret.'
+        ? 'Gaya LATIHAN: penjelasan lengkap + di akhir beberapa section beri pertanyaan berpikir singkat untuk siswa.'
+        : 'Gaya PENJELASAN: mendalam, runtut, kaya contoh dan fakta esensial.'
 
-  return [
+  const extra = opts.extraContext?.trim()
+  const parts: string[] = [
     `Mapel: ${opts.subjectName} (${opts.subjectKey})`,
     `Judul materi: ${opts.title}`,
     '',
     styleInstr,
     '',
-    'Outline materi & sub-materi:',
+    '=== OUTLINE MATERI & SUB-MATERI ===',
     opts.outline.trim(),
-    '',
-    opts.extraContext?.trim() ? `Catatan guru: ${opts.extraContext.trim()}` : '',
-    '',
-    'Hasilkan JSON materi belajar mandiri yang lengkap sesuai skema.',
   ]
-    .filter((l) => l !== undefined && l !== '')
-    .join('\n')
+
+  if (extra) {
+    parts.push(
+      '',
+      '=== INSTRUKSI / CATATAN GURU (PRIORITAS TERTINGGI — WAJIB DIPATUHI) ===',
+      extra,
+      '',
+      'Patuhi instruksi guru di atas secara penuh: kembangkan section yang diminta secara DETAIL,',
+      'lengkapi fakta esensial, jangan meringkas berlebihan, dan jangan mengulang isi antar section.',
+    )
+  } else {
+    parts.push(
+      '',
+      'Kembangkan setiap butir outline menjadi section yang jelas dan berisi.',
+      'Jangan merangkum berlebihan; pastikan informasi esensial tidak terlewat.',
+    )
+  }
+
+  parts.push(
+    '',
+    'Kembalikan JSON materi belajar mandiri sesuai skema.',
+    'Target: materi terasa ditulis ahli (bukan template singkat).',
+  )
+
+  return parts.join('\n')
 }
 
 /** Sanitasi HTML subset aman untuk materi. */
@@ -127,14 +160,28 @@ export function sanitizeLessonHtml(html: string): string {
     .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')
     .replace(/javascript:/gi, '')
 
-  // Hapus tag selain allowlist; biarkan konten teksnya
   s = s.replace(/<\/?([a-zA-Z0-9]+)(\s[^>]*)?>/g, (full, tag: string) => {
     const t = tag.toLowerCase()
-    const allowed = new Set(['p', 'ul', 'ol', 'li', 'strong', 'em', 'b', 'i', 'br', 'span', 'figure', 'figcaption', 'img', 'blockquote', 'div'])
+    const allowed = new Set([
+      'p',
+      'ul',
+      'ol',
+      'li',
+      'strong',
+      'em',
+      'b',
+      'i',
+      'br',
+      'span',
+      'figure',
+      'figcaption',
+      'img',
+      'blockquote',
+      'div',
+    ])
     if (!allowed.has(t)) return ''
     if (t === 'br') return '<br/>'
     if (t === 'img') {
-      // hanya izinkan src data: atau https relatif aman — filter di build
       const srcM = full.match(/\ssrc\s*=\s*("([^"]*)"|'([^']*)')/i)
       const altM = full.match(/\salt\s*=\s*("([^"]*)"|'([^']*)')/i)
       const src = (srcM?.[2] || srcM?.[3] || '').trim()
@@ -144,7 +191,6 @@ export function sanitizeLessonHtml(html: string): string {
       return `<img src="${src.replace(/"/g, '')}" alt="${alt.replace(/"/g, '')}" />`
     }
     if (full.startsWith('</')) return `</${t}>`
-    // strip attributes kecuali class terbatas pada div/span
     if (t === 'div' || t === 'span') {
       const classM = full.match(/\sclass\s*=\s*("([^"]*)"|'([^']*)')/i)
       const cls = (classM?.[2] || classM?.[3] || '').replace(/[^a-zA-Z0-9_\-\s]/g, '').trim()
@@ -166,7 +212,7 @@ function normalizeSection(raw: any, index: number): LessonSection | null {
     heading: heading.slice(0, 120),
     bodyHtml,
   }
-  if (raw.callout) section.callout = String(raw.callout).trim().slice(0, 280)
+  if (raw.callout) section.callout = String(raw.callout).trim().slice(0, 400)
   const needsImage = Boolean(raw.needsImage)
   if (needsImage) {
     section.needsImage = true
@@ -207,13 +253,17 @@ function buildHtmlContent(lesson: Omit<GeneratedLesson, 'htmlContent'>): string 
   }
 
   if (lesson.summaryHtml) {
-    parts.push(`<section class="rk-summary"><h2>Ringkasan</h2><div class="rk-body">${lesson.summaryHtml}</div></section>`)
+    parts.push(
+      `<section class="rk-summary"><h2>Ringkasan</h2><div class="rk-body">${lesson.summaryHtml}</div></section>`,
+    )
   }
 
   if (lesson.checkQuestions?.length) {
     parts.push(`<section class="rk-check"><h2>Cek pemahaman</h2><ol>`)
     for (const cq of lesson.checkQuestions) {
-      parts.push(`<li><p class="rk-q">${escapeText(cq.q)}</p><p class="rk-a"><em>Jawaban:</em> ${escapeText(cq.a)}</p></li>`)
+      parts.push(
+        `<li><p class="rk-q">${escapeText(cq.q)}</p><p class="rk-a"><em>Jawaban:</em> ${escapeText(cq.a)}</p></li>`,
+      )
     }
     parts.push(`</ol></section>`)
   }
@@ -224,10 +274,10 @@ function buildHtmlContent(lesson: Omit<GeneratedLesson, 'htmlContent'>): string 
 
 function escapeText(t: string): string {
   return String(t || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+    .replace(/&/g, '&')
+    .replace(/</g, '<')
+    .replace(/>/g, '>')
+    .replace(/"/g, '"')
 }
 
 async function callOpenAI(apiKey: string, model: string, system: string, user: string): Promise<any> {
@@ -239,8 +289,8 @@ async function callOpenAI(apiKey: string, model: string, system: string, user: s
     },
     body: JSON.stringify({
       model,
-      temperature: 0.55,
-      max_tokens: 8000,
+      temperature: 0.45,
+      max_tokens: 14000,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: system },
@@ -270,7 +320,7 @@ function resolveImageModel(): string {
 
 async function generateLessonImage(
   prompt: string,
-  apiKey: string
+  apiKey: string,
 ): Promise<{ url?: string; error?: string }> {
   const fullPrompt = [
     prompt.trim(),
@@ -318,12 +368,12 @@ async function generateLessonImage(
 }
 
 export async function generateLessonWithOpenAI(
-  opts: GenerateLessonOptions
+  opts: GenerateLessonOptions,
 ): Promise<GenerateLessonResult> {
   const key = import.meta.env.VITE_OPENAI_API_KEY?.trim()
   if (!key) {
     throw new Error(
-      'VITE_OPENAI_API_KEY belum diisi. Tambahkan di file .env lalu restart npm run dev.'
+      'VITE_OPENAI_API_KEY belum diisi. Tambahkan di file .env lalu restart npm run dev.',
     )
   }
   const outline = opts.outline.trim()
@@ -356,7 +406,6 @@ export async function generateLessonWithOpenAI(
         .slice(0, 6)
     : []
 
-  // Batasi gambar maks 4
   let imageSlots = 0
   sections = sections.map((s) => {
     if (s.needsImage && imageSlots < 4) {
