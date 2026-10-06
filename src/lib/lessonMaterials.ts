@@ -11,8 +11,8 @@ import type { SubjectKey } from '../types/question'
 import type { PresentationSlide } from './openaiPresentation'
 import { db } from './firebase'
 
-/** drive = PDF Google Drive (default, data lama); presentation = slide AI di Firestore */
-export type LessonMaterialKind = 'drive' | 'presentation'
+/** drive = PDF Google Drive; presentation = slide AI lama; html-lesson = materi belajar mandiri HTML */
+export type LessonMaterialKind = 'drive' | 'presentation' | 'html-lesson'
 
 export interface LessonPdf {
   id: string
@@ -20,7 +20,7 @@ export interface LessonPdf {
   title: string
   fileName: string
   sizeBytes: number
-  /** Kosong untuk presentasi AI murni */
+  /** Kosong untuk materi AI (presentasi / html-lesson) */
   driveFileId: string
   /** true jika data masih dari seed statis (belum di Firestore) */
   isStatic?: boolean
@@ -28,6 +28,10 @@ export interface LessonPdf {
   kind?: LessonMaterialKind
   /** Isi slide (hanya kind === 'presentation') */
   slides?: PresentationSlide[]
+  /** HTML materi belajar mandiri (kind === 'html-lesson') */
+  htmlContent?: string
+  /** Jumlah bagian (html-lesson), opsional */
+  sectionsCount?: number
   /** Outline sumber generate AI */
   outline?: string
   generatedBy?: string
@@ -37,6 +41,14 @@ export interface LessonPdf {
 
 export function isPresentation(m: Pick<LessonPdf, 'kind' | 'slides'>): boolean {
   return m.kind === 'presentation' || (Array.isArray(m.slides) && m.slides.length > 0)
+}
+
+export function isHtmlLesson(m: Pick<LessonPdf, 'kind' | 'htmlContent'>): boolean {
+  return m.kind === 'html-lesson' || (typeof m.htmlContent === 'string' && m.htmlContent.length > 0)
+}
+
+export function isAiMaterial(m: Pick<LessonPdf, 'kind' | 'slides' | 'htmlContent'>): boolean {
+  return isPresentation(m) || isHtmlLesson(m)
 }
 
 /** Katalog presentasi dari folder Drive Pustaka Belajar (siapa pun yang punya tautan). */
@@ -197,11 +209,14 @@ export async function fetchLessonMaterials(): Promise<LessonPdf[]> {
     return snap.docs
       .map((d) => {
         const data = d.data()
-        const kind: LessonMaterialKind =
-          data.kind === 'presentation' || (Array.isArray(data.slides) && data.slides.length > 0)
-            ? 'presentation'
-            : 'drive'
+        let kind: LessonMaterialKind = 'drive'
+        if (data.kind === 'html-lesson' || (typeof data.htmlContent === 'string' && data.htmlContent.length > 0)) {
+          kind = 'html-lesson'
+        } else if (data.kind === 'presentation' || (Array.isArray(data.slides) && data.slides.length > 0)) {
+          kind = 'presentation'
+        }
         const slides = Array.isArray(data.slides) ? (data.slides as PresentationSlide[]) : undefined
+        const htmlContent = typeof data.htmlContent === 'string' ? data.htmlContent : undefined
         return {
           id: d.id,
           subjectKey: data.subjectKey as SubjectKey,
@@ -211,6 +226,8 @@ export async function fetchLessonMaterials(): Promise<LessonPdf[]> {
           driveFileId: String(data.driveFileId || ''),
           kind,
           slides,
+          htmlContent,
+          sectionsCount: data.sectionsCount != null ? Number(data.sectionsCount) : undefined,
           outline: data.outline ? String(data.outline) : undefined,
           generatedBy: data.generatedBy ? String(data.generatedBy) : undefined,
           isStatic: false,
@@ -218,7 +235,7 @@ export async function fetchLessonMaterials(): Promise<LessonPdf[]> {
           updatedAt: data.updatedAt ?? null,
         } satisfies LessonPdf
       })
-      .filter((p) => p.title && (p.driveFileId || isPresentation(p)))
+      .filter((p) => p.title && (p.driveFileId || isPresentation(p) || isHtmlLesson(p)))
       .sort((a, b) => a.subjectKey.localeCompare(b.subjectKey) || a.title.localeCompare(b.title, 'id'))
   } catch (e: unknown) {
     const code = (e as { code?: string })?.code || ''
@@ -236,16 +253,21 @@ export async function saveLessonMaterial(
 ): Promise<string> {
   const isNew = !material.id
   const id = material.id || slugId(material.title, material.subjectKey)
-  const kind: LessonMaterialKind =
-    material.kind === 'presentation' || (material.slides && material.slides.length > 0)
-      ? 'presentation'
-      : 'drive'
+  let kind: LessonMaterialKind = 'drive'
+  if (material.kind === 'html-lesson' || (material.htmlContent && material.htmlContent.length > 0)) {
+    kind = 'html-lesson'
+  } else if (material.kind === 'presentation' || (material.slides && material.slides.length > 0)) {
+    kind = 'presentation'
+  }
 
   if (kind === 'drive' && !material.driveFileId?.trim()) {
     throw new Error('Tautan Google Drive atau File ID wajib untuk materi PDF.')
   }
   if (kind === 'presentation' && (!material.slides || material.slides.length === 0)) {
     throw new Error('Presentasi AI harus memiliki minimal satu slide.')
+  }
+  if (kind === 'html-lesson' && !material.htmlContent?.trim()) {
+    throw new Error('Materi belajar AI harus memiliki konten HTML.')
   }
 
   const payload: Record<string, unknown> = {
@@ -258,10 +280,15 @@ export async function saveLessonMaterial(
     updatedAt: serverTimestamp(),
   }
   if (kind === 'presentation') {
-    // Firestore menolak undefined di nested slides — bersihkan dulu
     payload.slides = stripUndefined(material.slides)
     if (material.outline?.trim()) payload.outline = material.outline.trim()
     if (material.generatedBy) payload.generatedBy = material.generatedBy
+  }
+  if (kind === 'html-lesson') {
+    payload.htmlContent = material.htmlContent
+    if (material.outline?.trim()) payload.outline = material.outline.trim()
+    if (material.generatedBy) payload.generatedBy = material.generatedBy
+    if (material.sectionsCount != null) payload.sectionsCount = material.sectionsCount
   }
   if (isNew) payload.createdAt = serverTimestamp()
 
