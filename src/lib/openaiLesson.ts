@@ -1,1 +1,2 @@
-PLACEHOLDER_WILL_FAIL
+/** see artifacts/openaiLesson.ts — temporary note */
+export {}
