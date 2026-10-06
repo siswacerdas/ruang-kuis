@@ -125,16 +125,12 @@ export function formatBytes(n: number): string {
 export function parseDriveFileId(input: string): string {
   const raw = input.trim()
   if (!raw) return ''
-  // https://drive.google.com/file/d/FILE_ID/...
   const m1 = raw.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
   if (m1) return m1[1]
-  // https://drive.google.com/open?id=FILE_ID
   const m2 = raw.match(/[?&]id=([a-zA-Z0-9_-]+)/)
   if (m2) return m2[1]
-  // https://docs.google.com/...?id=FILE_ID
   const m3 = raw.match(/\/d\/([a-zA-Z0-9_-]+)/)
   if (m3) return m3[1]
-  // ID mentah (tanpa spasi/slash)
   if (/^[a-zA-Z0-9_-]{10,}$/.test(raw)) return raw
   return ''
 }
@@ -153,7 +149,6 @@ export function slugId(title: string, subjectKey: string): string {
 export async function fetchLessonMaterials(): Promise<LessonPdf[]> {
   const snap = await getDocs(collection(db, 'lessonMaterials'))
   if (snap.empty) {
-    // Fallback seed sampai admin migrasi / menambah data
     return LESSON_PDFS.map((p) => ({ ...p, isStatic: true }))
   }
   return snap.docs
@@ -178,20 +173,18 @@ export async function fetchLessonMaterials(): Promise<LessonPdf[]> {
 export async function saveLessonMaterial(
   material: Omit<LessonPdf, 'isStatic' | 'createdAt' | 'updatedAt'> & { id?: string }
 ): Promise<string> {
+  const isNew = !material.id
   const id = material.id || slugId(material.title, material.subjectKey)
-  await setDoc(
-    doc(db, 'lessonMaterials', id),
-    {
-      subjectKey: material.subjectKey,
-      title: material.title.trim(),
-      fileName: (material.fileName || '').trim(),
-      sizeBytes: Number(material.sizeBytes) || 0,
-      driveFileId: material.driveFileId.trim(),
-      updatedAt: serverTimestamp(),
-      createdAt: serverTimestamp(),
-    },
-    { merge: true }
-  )
+  const payload: Record<string, unknown> = {
+    subjectKey: material.subjectKey,
+    title: material.title.trim(),
+    fileName: (material.fileName || '').trim(),
+    sizeBytes: Number(material.sizeBytes) || 0,
+    driveFileId: material.driveFileId.trim(),
+    updatedAt: serverTimestamp(),
+  }
+  if (isNew) payload.createdAt = serverTimestamp()
+  await setDoc(doc(db, 'lessonMaterials', id), payload, { merge: true })
   return id
 }
 
