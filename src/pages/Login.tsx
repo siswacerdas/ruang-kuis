@@ -276,11 +276,30 @@ export default function Login() {
               />
             </svg>
           </div>
-          <h2 className="text-3xl font-bold mb-4 leading-tight">Ruang Kuis</h2>
-          <p className="text-indigo-100 text-lg leading-relaxed">
-            Pilih nama dari daftar. Siswa asli, guru, dan akun dummy (uji sistem) terpisah di tab
-            masing-masing.
+          <p className="text-indigo-200 text-sm font-medium tracking-wide mb-3">
+            Belajar · Latihan · Tumbuh
           </p>
+          <h2 className="text-3xl font-bold mb-4 leading-tight">
+            Setiap soal adalah langkah maju
+          </h2>
+          <p className="text-indigo-100 text-lg leading-relaxed">
+            Ruang Kuis menemani siswa berlatih dengan tenang, membantu guru melihat capaian belajar,
+            dan memberi orang tua gambaran yang jelas tentang progress ananda.
+          </p>
+          <ul className="mt-8 space-y-3 text-indigo-100/95 text-sm">
+            <li className="flex gap-2.5 items-start">
+              <span className="mt-1 w-1.5 h-1.5 rounded-full bg-white/80 shrink-0" />
+              <span>Kuis resmi dari guru dan latihan mandiri kapan saja</span>
+            </li>
+            <li className="flex gap-2.5 items-start">
+              <span className="mt-1 w-1.5 h-1.5 rounded-full bg-white/80 shrink-0" />
+              <span>Hasil terhubung ke tujuan pembelajaran yang mudah dipahami</span>
+            </li>
+            <li className="flex gap-2.5 items-start">
+              <span className="mt-1 w-1.5 h-1.5 rounded-full bg-white/80 shrink-0" />
+              <span>Ringkasan dikirim ke orang tua setelah kuis selesai</span>
+            </li>
+          </ul>
         </div>
       </div>
 
@@ -299,15 +318,16 @@ export default function Login() {
             </div>
             <div>
               <p className="font-semibold text-gray-900 text-lg">Ruang Kuis</p>
-              <p className="text-xs text-gray-400">Login</p>
+              <p className="text-xs text-gray-500">Tempat berlatih dan tumbuh</p>
             </div>
           </div>
 
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 md:p-8">
             <div className="mb-5">
-              <h1 className="text-2xl font-bold text-gray-900">Masuk</h1>
-              <p className="text-gray-500 mt-1 text-sm">
-                Pilih tab sesuai peran, lalu pilih nama dari daftar
+              <h1 className="text-2xl font-bold text-gray-900">Selamat datang</h1>
+              <p className="text-gray-500 mt-1 text-sm leading-relaxed">
+                Pilih tab <span className="text-gray-700 font-medium">Siswa</span> atau{' '}
+                <span className="text-gray-700 font-medium">Guru</span>, lalu masuk dengan namamu.
               </p>
             </div>
 
@@ -481,9 +501,9 @@ export default function Login() {
             )}
 
             <p className="text-center text-xs text-gray-400 mt-6">
-              Pintasan siswa:{' '}
+              Sudah siap belajar?{' '}
               <Link to="/kerjakan" className="text-indigo-600 hover:underline">
-                /kerjakan
+                Mulai dari sini
               </Link>
             </p>
           </div>
