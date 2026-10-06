@@ -167,6 +167,25 @@ function staticSeed(): LessonPdf[] {
 }
 
 /**
+ * Hapus undefined secara rekursif — Firestore menolak field undefined.
+ */
+export function stripUndefined<T>(value: T): T {
+  if (value === null || value === undefined) return value
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefined(item)).filter((item) => item !== undefined) as T
+  }
+  if (typeof value === 'object' && value.constructor === Object) {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v === undefined) continue
+      out[k] = stripUndefined(v)
+    }
+    return out as T
+  }
+  return value
+}
+
+/**
  * Ambil katalog dari Firestore.
  * Jika koleksi kosong / rules belum di-deploy (permission-denied),
  * jatuh ke seed statis agar materi tetap tampil.
@@ -239,12 +258,15 @@ export async function saveLessonMaterial(
     updatedAt: serverTimestamp(),
   }
   if (kind === 'presentation') {
-    payload.slides = material.slides
+    // Firestore menolak undefined di nested slides — bersihkan dulu
+    payload.slides = stripUndefined(material.slides)
     if (material.outline?.trim()) payload.outline = material.outline.trim()
     if (material.generatedBy) payload.generatedBy = material.generatedBy
   }
   if (isNew) payload.createdAt = serverTimestamp()
-  await setDoc(doc(db, 'lessonMaterials', id), payload, { merge: true })
+
+  const clean = stripUndefined(payload)
+  await setDoc(doc(db, 'lessonMaterials', id), clean, { merge: true })
   return id
 }
 
