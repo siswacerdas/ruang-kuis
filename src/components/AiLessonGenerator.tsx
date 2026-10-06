@@ -167,6 +167,7 @@ export default function AiLessonGenerator({
         outline: outline.trim(),
         generatedBy: 'openai-lesson',
         sectionsCount: lesson.sections.length,
+        status: 'draft',
       })
       onSaved()
       onClose()
@@ -184,7 +185,7 @@ export default function AiLessonGenerator({
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
             <div>
               <h2 className="text-base font-semibold text-gray-900">✨ Buat materi belajar AI</h2>
-              <p className="text-xs text-gray-500">Materi mandiri lengkap (HTML) + unduh PDF</p>
+              <p className="text-xs text-gray-500">Materi mandiri lengkap (HTML) + unduh PDF · simpan sebagai draft</p>
             </div>
             <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-700 text-sm px-2">
               Tutup
@@ -289,7 +290,7 @@ export default function AiLessonGenerator({
                 className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm font-mono text-[13px] leading-relaxed"
               />
               <p className="text-[11px] text-gray-400 mt-1">
-                Satu baris = materi. Awali sub-materi dengan &quot;- &quot;. Boleh diedit setelah pilih dari buku.
+                Satu baris = materi. Awali sub-materi dengan "- ". Boleh diedit setelah pilih dari buku.
               </p>
             </label>
 
@@ -408,7 +409,7 @@ export default function AiLessonGenerator({
                 disabled={saving}
                 className="text-sm font-medium bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl"
               >
-                {saving ? 'Menyimpan…' : 'Simpan ke katalog Materi'}
+                {saving ? 'Menyimpan…' : 'Simpan sebagai draft'}
               </button>
             </div>
           )}
