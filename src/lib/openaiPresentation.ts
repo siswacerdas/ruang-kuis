@@ -1,8 +1,6 @@
 /**
  * Generate presentasi materi pelajaran via OpenAI.
- * Target kualitas: densitas visual (kartu/alur/contoh), bukan dinding teks atau slide kosong.
- *
- * Tidak mengubah alur generate soal (openaiQuestions.ts).
+ * Target: densitas visual + jumlah slide sesuai target user.
  */
 
 import { compressImageSrc } from './imageCompress'
@@ -65,93 +63,95 @@ export type GeneratePresentationResult = {
   imageWarnings: string[]
 }
 
-const SYSTEM_PROMPT = `Kamu adalah desainer presentasi pembelajaran IPAS/mapel SD kelas 5 Indonesia (Kurikulum Merdeka).
-Target: presentasi yang PADAT secara VISUAL (kartu, poin bernomor, alur, contoh) — bukan slide kosong dan bukan dinding teks.
+const SYSTEM_PROMPT = `Kamu adalah desainer presentasi pembelajaran SD kelas 5 Indonesia (Kurikulum Merdeka).
+Tugas: buat presentasi HTML-ready dengan densitas VISUAL (kartu, poin bernomor, alur, contoh).
 
-## STANDAR KUALITAS (wajib) — densitas VISUAL, bukan dinding teks
-Setiap slide konten HARUS terasa "penuh" seperti infografis, TANPA paragraf panjang:
-- body: 1–2 kalimat definisi saja (maks ~40 kata). Jangan esai.
-- WAJIB isi ruang dengan STRUKTUR: cards (2–4 kolom) ATAU bullets 4–6 poin ATAU flow + examples.
-- Setiap bullet 8–16 kata (informatif, bukan fragmen 2–3 kata).
-- cards: tiap kartu punya title + 1 kalimat body ATAU 2 bullets contoh.
-- examples: 3–5 contoh konkret singkat.
-- footer: 1 kalimat pesan kunci.
-- LARANGAN: slide hanya judul + 1 kalimat body (terasa kosong).
-- LARANGAN: body > 3 kalimat / dinding teks (berat dibaca anak SD).
-- Keseimbangan ideal: ~30% teks definisi + ~70% struktur visual (kartu/poin/alur/contoh).
+## JUMLAH SLIDE — WAJIB DIPATUHI
+- User memberi TARGET jumlah slide. Kamu HARUS menghasilkan antara (target-2) sampai (target+2) slide.
+- Contoh: target 14 → minimal 12, ideal 14, maksimal 16.
+- Jika outline pendek, PECAH tiap topik jadi beberapa slide (definisi / ciri / contoh / latihan).
+- JANGAN pernah mengembalikan hanya 2–4 slide jika target ≥ 10. Itu GAGAL total.
+
+## STANDAR KUALITAS — densitas VISUAL
+Setiap slide konten:
+- body: 1–2 kalimat definisi (maks ~40 kata). Bukan esai.
+- WAJIB struktur: cards (2–4) ATAU bullets 4–6 poin ATAU flow + examples.
+- Bullet 8–16 kata, informatif.
+- cards: title + body singkat ATAU 2 bullets contoh.
+- examples: 3–5 contoh konkret.
+- footer: 1 kalimat kunci (opsional).
+- LARANGAN: slide hanya judul + 1 kalimat.
+- LARANGAN: body > 3 kalimat.
 
 ## Format output
-Balas HANYA JSON valid (tanpa markdown):
+HANYA JSON valid:
 {"slides":[ ... ]}
 
-Setiap slide:
-- id: string unik (s1, s2, ...)
-- layout: "title" | "section" | "content" | "bullets" | "cards" | "compare" | "image-focus" | "quote" | "summary" | "activity" | "assessment"
-- title: string menarik (maks ~10 kata)
-- body: string opsional — 1–2 kalimat definisi (maks ~40 kata)
-- bullets: string[] — 4–6 poin; tiap poin 8–16 kata
-- cards: [{title, body?, bullets?, badge?}] — 2–4 kartu sejajar
-- examples: string[] — 3–5 contoh konkret
-- flow: string[] — 3–6 langkah berurutan
-- callout: string — 1 kalimat fakta menarik
-- activity: string — instruksi aktivitas
-- footer: string — 1 kalimat penutup
-- imagePrompt: string|null — prompt Inggris HANYA jika needsImage true
-- needsImage: boolean — true maks 4 slide
+Field tiap slide:
+- id, layout, title (wajib)
+- body, bullets, cards, examples, flow, callout, activity, footer (sesuai kebutuhan)
+- needsImage (boolean, maks 4 true), imagePrompt (English, hanya jika needsImage)
 
-## Struktur presentasi wajib
-1. Slide 1: "title" — judul + 1 kalimat ajakan + callout.
-2. Slide 2: "bullets" atau "section" — 5–7 tujuan pembelajaran (poin sedang, bukan kalimat panjang).
-3. Isi: prefer "cards" / "compare" / "bullets" bergantian.
-4. Minimal 1 slide "activity".
-5. Akhiri "summary" + opsional "quote".
-6. Target slide user (±2). Jangan slide tipis.
+layout: title | section | content | bullets | cards | compare | image-focus | quote | summary | activity | assessment
 
-## Aturan konten
-- Akurat SD kelas 5; contoh Indonesia bila relevan.
-- Bahasa hangat, bukan formal kaku.
-- Prefer cards untuk 2–4 konsep sejajar.
-- bullets: "Seekor kelinci = individu", bukan hanya "Kelinci".
-- imagePrompt (English): colorful children's educational illustration, no text overlays.
+## Struktur wajib (sesuaikan jumlah dengan TARGET)
+1. title — judul + ajakan + callout
+2. bullets — 5–7 tujuan pembelajaran
+3. Beberapa slide isi (cards/compare/bullets) — 1 sub-topik per slide
+4. activity — minimal 1
+5. summary — ringkasan poin
+6. quote (opsional) — pesan penutup
 
-## Contoh densitas BENAR
-Slide konsep hierarki:
-- body: satu kalimat definisi singkat
-- cards: 3 kartu (Individu / Populasi / Komunitas) + contoh di tiap kartu
-- flow: Individu → Populasi → Komunitas → Ekosistem
-- footer: satu kalimat kunci
+## Contoh pemecahan outline pendek
+Outline "Teks eksplanasi" saja → tetap 12–14 slide:
+title, tujuan, pengertian, ciri-ciri, struktur (per bagian), fakta vs opini, contoh teks, langkah menulis, activity, kesalahan umum, tips, summary, quote.
 
-Slide kosong ATAU dinding teks = DILARANG.`
+Bahasa hangat SD. Contoh Indonesia. Prefer cards untuk konsep sejajar.`
 
-function buildUserPrompt(opts: GeneratePresentationOptions): string {
+function buildUserPrompt(opts: GeneratePresentationOptions, target: number): string {
   const style = opts.style || 'interaktif'
-  const target = Math.max(8, Math.min(opts.targetSlides || 14, 22))
   const styleInstr =
     style === 'ringkas'
       ? 'Gaya RINGKAS: padat struktur (kartu/poin), minim narasi.'
       : style === 'cerita'
-        ? 'Gaya CERITA: alur lembut, tetap pakai kartu/contoh, bukan paragraf panjang.'
+        ? 'Gaya CERITA: alur lembut, tetap kartu/contoh, bukan paragraf panjang.'
         : 'Gaya INTERAKTIF: callout + activity, konten utama via kartu/poin bernomor.'
 
   return [
     `Mapel: ${opts.subjectName} (${opts.subjectKey})`,
-    `Judul presentasi: ${opts.title}`,
-    `Target sekitar ${target} slide (±2). Prioritas: densitas visual (kartu/poin/alur), bukan teks panjang.`,
+    `Judul: ${opts.title}`,
+    '',
+    `=== TARGET SLIDE: ${target} ===`,
+    `WAJIB hasilkan ${target - 2} sampai ${target + 2} slide. Ideal: tepat ${target}.`,
+    `Jika outline singkat, PECAH menjadi banyak slide (satu konsep per slide).`,
+    `Jangan berhenti di 2–5 slide.`,
+    '',
     styleInstr,
     '',
-    'Outline materi (baris "- " = sub-materi):',
+    'Outline materi:',
     opts.outline.trim(),
     '',
     opts.extraContext?.trim() ? `Catatan guru: ${opts.extraContext.trim()}` : '',
-    'Setiap slide konten: 1–2 kalimat definisi + struktur visual (cards/bullets/flow/examples). Siap pakai di kelas ~30–45 menit.',
+    '',
+    `Kembalikan JSON {"slides":[...]} berisi sekitar ${target} slide.`,
+    'Setiap slide konten: 1–2 kalimat definisi + struktur visual (cards/bullets/flow/examples).',
   ]
     .filter((l) => l !== undefined && l !== '')
     .join('\n')
 }
 
 const VALID_LAYOUTS = new Set<SlideLayout>([
-  'title', 'section', 'content', 'bullets', 'cards', 'compare',
-  'image-focus', 'quote', 'summary', 'activity', 'assessment',
+  'title',
+  'section',
+  'content',
+  'bullets',
+  'cards',
+  'compare',
+  'image-focus',
+  'quote',
+  'summary',
+  'activity',
+  'assessment',
 ])
 
 function normalizeCard(raw: any): SlideCard | null {
@@ -160,7 +160,10 @@ function normalizeCard(raw: any): SlideCard | null {
   if (!title) return null
   const card: SlideCard = { title: title.slice(0, 60) }
   if (Array.isArray(raw.bullets)) {
-    const list = raw.bullets.map((b: unknown) => String(b ?? '').trim()).filter(Boolean).slice(0, 6) as string[]
+    const list = raw.bullets
+      .map((b: unknown) => String(b ?? '').trim())
+      .filter(Boolean)
+      .slice(0, 6) as string[]
     if (list.length) card.bullets = list
   }
   if (raw.body) card.body = String(raw.body).trim().slice(0, 400)
@@ -177,7 +180,10 @@ function normalizeSlide(raw: any, index: number): PresentationSlide | null {
 
   let bullets: string[] | undefined
   if (Array.isArray(raw.bullets)) {
-    const list = raw.bullets.map((b: unknown) => String(b ?? '').trim()).filter(Boolean).slice(0, 10) as string[]
+    const list = raw.bullets
+      .map((b: unknown) => String(b ?? '').trim())
+      .filter(Boolean)
+      .slice(0, 10) as string[]
     if (list.length) bullets = list
   }
 
@@ -189,13 +195,19 @@ function normalizeSlide(raw: any, index: number): PresentationSlide | null {
 
   let examples: string[] | undefined
   if (Array.isArray(raw.examples)) {
-    const list = raw.examples.map((e: unknown) => String(e ?? '').trim()).filter(Boolean).slice(0, 8) as string[]
+    const list = raw.examples
+      .map((e: unknown) => String(e ?? '').trim())
+      .filter(Boolean)
+      .slice(0, 8) as string[]
     if (list.length) examples = list
   }
 
   let flow: string[] | undefined
   if (Array.isArray(raw.flow)) {
-    const list = raw.flow.map((f: unknown) => String(f ?? '').trim()).filter(Boolean).slice(0, 8) as string[]
+    const list = raw.flow
+      .map((f: unknown) => String(f ?? '').trim())
+      .filter(Boolean)
+      .slice(0, 8) as string[]
     if (list.length) flow = list
   }
 
@@ -277,32 +289,26 @@ async function generateSlideImage(
   return { error: errors.join(' | ') || 'Gagal generate gambar' }
 }
 
-export async function generatePresentationWithOpenAI(
-  opts: GeneratePresentationOptions
-): Promise<GeneratePresentationResult> {
-  const key = import.meta.env.VITE_OPENAI_API_KEY?.trim()
-  if (!key) {
-    throw new Error(
-      'VITE_OPENAI_API_KEY belum diisi. Tambahkan di file .env lalu restart npm run dev.'
-    )
-  }
-  const outline = opts.outline.trim()
-  if (!outline) throw new Error('Outline materi wajib diisi.')
-  if (!opts.title.trim()) throw new Error('Judul presentasi wajib diisi.')
-  const model = opts.model || import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini'
+async function callOpenAI(
+  apiKey: string,
+  model: string,
+  system: string,
+  user: string
+): Promise<any> {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${key}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model,
-      temperature: 0.7,
+      temperature: 0.65,
+      max_tokens: 8000,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildUserPrompt(opts) },
+        { role: 'system', content: system },
+        { role: 'user', content: user },
       ],
     }),
   })
@@ -317,17 +323,62 @@ export async function generatePresentationWithOpenAI(
   if (!content || typeof content !== 'string') {
     throw new Error('Respons OpenAI kosong.')
   }
-  let parsed: any
   try {
-    parsed = JSON.parse(content)
+    return JSON.parse(content)
   } catch {
     throw new Error('Respons OpenAI bukan JSON valid.')
   }
+}
+
+function parseSlides(parsed: any): PresentationSlide[] {
   const arr = Array.isArray(parsed?.slides) ? parsed.slides : Array.isArray(parsed) ? parsed : []
-  let slides = arr.map((r: any, i: number) => normalizeSlide(r, i)).filter(Boolean) as PresentationSlide[]
+  return arr.map((r: any, i: number) => normalizeSlide(r, i)).filter(Boolean) as PresentationSlide[]
+}
+
+export async function generatePresentationWithOpenAI(
+  opts: GeneratePresentationOptions
+): Promise<GeneratePresentationResult> {
+  const key = import.meta.env.VITE_OPENAI_API_KEY?.trim()
+  if (!key) {
+    throw new Error(
+      'VITE_OPENAI_API_KEY belum diisi. Tambahkan di file .env lalu restart npm run dev.'
+    )
+  }
+  const outline = opts.outline.trim()
+  if (!outline) throw new Error('Outline materi wajib diisi.')
+  if (!opts.title.trim()) throw new Error('Judul presentasi wajib diisi.')
+
+  const model = opts.model || import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini'
+  const target = Math.max(8, Math.min(opts.targetSlides || 14, 22))
+  const minAccept = Math.max(6, target - 3)
+
+  let slides = parseSlides(await callOpenAI(key, model, SYSTEM_PROMPT, buildUserPrompt(opts, target)))
+
+  // Auto-retry sekali jika terlalu sedikit slide
+  if (slides.length < minAccept) {
+    const retryUser =
+      buildUserPrompt(opts, target) +
+      `\n\nPERINGATAN: respons sebelumnya hanya ${slides.length} slide. Itu TIDAK CUKUP.\n` +
+      `Sekarang WAJIB hasilkan minimal ${minAccept} slide (ideal ${target}).\n` +
+      `Pecah setiap sub-topik outline menjadi slide terpisah. Tambah: ciri, contoh, struktur, latihan, tips, kesalahan umum.`
+    try {
+      const retry = parseSlides(await callOpenAI(key, model, SYSTEM_PROMPT, retryUser))
+      if (retry.length > slides.length) slides = retry
+    } catch {
+      // keep first result
+    }
+  }
+
   if (slides.length === 0) {
     throw new Error('AI tidak menghasilkan slide valid. Coba perjelas outline.')
   }
+  if (slides.length < minAccept) {
+    throw new Error(
+      `AI hanya menghasilkan ${slides.length} slide (target ${target}). ` +
+        `Coba outline lebih rinci (beberapa baris sub-materi dengan "- "), atau generate ulang.`
+    )
+  }
+
   let imageSlots = 0
   slides = slides.map((s) => {
     if (s.needsImage && imageSlots < 4) {
@@ -338,6 +389,7 @@ export async function generatePresentationWithOpenAI(
     if (s.needsImage) delete next.imagePrompt
     return next
   })
+
   const imageWarnings: string[] = []
   if (opts.generateImages) {
     for (let i = 0; i < slides.length; i++) {
@@ -368,6 +420,7 @@ export async function generatePresentationWithOpenAI(
       }
     }
   }
+
   return { slides, imageWarnings }
 }
 
