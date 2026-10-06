@@ -1,5 +1,6 @@
 /**
- * Ekspor materi belajar mandiri (HTML) ke PDF via jendela cetak browser.
+ * Ekspor materi belajar mandiri (HTML) ke PDF via dialog cetak browser.
+ * Pakai iframe tersembunyi (bukan window.open) agar tidak diblokir popup blocker.
  * CSS print memastikan gambar & kotak penting tidak terpotong di tengah halaman.
  */
 
@@ -100,26 +101,28 @@ const PRINT_CSS = `
   }
 `
 
+function escapeHtml(t: string): string {
+  return String(t || '')
+    .replace(/&/g, '&')
+    .replace(/</g, '<')
+    .replace(/>/g, '>')
+    .replace(/"/g, '"')
+}
+
 /**
- * Buka jendela cetak berisi materi HTML + CSS print.
- * Pengguna bisa "Simpan sebagai PDF" dari dialog cetak browser.
- * Gambar memakai page-break-inside: avoid agar tidak terpotong.
+ * Buka dialog cetak browser berisi materi HTML + CSS print.
+ * Pengguna pilih "Simpan sebagai PDF" / "Save as PDF".
+ * Tidak memakai window.open — aman dari popup blocker.
  */
 export function exportLessonToPdf(
   title: string,
   subjectName: string,
-  htmlContent: string
+  htmlContent: string,
 ): void {
-  const w = window.open('', '_blank', 'noopener,noreferrer,width=900,height=700')
-  if (!w) {
-    throw new Error('Popup diblokir. Izinkan jendela popup untuk mengunduh PDF.')
-  }
+  const safeTitle = escapeHtml(title)
+  const safeSubject = escapeHtml(subjectName)
 
-  const safeTitle = title.replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  const safeSubject = subjectName.replace(/</g, '&lt;').replace(/>/g, '&gt;')
-
-  w.document.open()
-  w.document.write(`<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="utf-8"/>
@@ -130,15 +133,82 @@ export function exportLessonToPdf(
   <div class="rk-meta">${safeSubject} · Materi belajar mandiri · Ruang Kuis</div>
   ${htmlContent}
   <div class="rk-footer">Diekspor dari Ruang Kuis · ${safeTitle}</div>
-  <script>
-    window.onload = function () {
-      setTimeout(function () {
-        window.focus();
-        window.print();
-      }, 400);
-    };
-  </script>
 </body>
-</html>`)
-  w.document.close()
+</html>`
+
+  // iframe tersembunyi — tidak memicu popup blocker
+  const iframe = document.createElement('iframe')
+  iframe.setAttribute('aria-hidden', 'true')
+  iframe.setAttribute('title', 'Cetak materi')
+  Object.assign(iframe.style, {
+    position: 'fixed',
+    right: '0',
+    bottom: '0',
+    width: '0',
+    height: '0',
+    border: '0',
+    opacity: '0',
+    pointerEvents: 'none',
+  })
+  document.body.appendChild(iframe)
+
+  const doc = iframe.contentDocument || iframe.contentWindow?.document
+  const win = iframe.contentWindow
+  if (!doc || !win) {
+    document.body.removeChild(iframe)
+    throw new Error('Gagal menyiapkan dokumen cetak. Coba lagi.')
+  }
+
+  doc.open()
+  doc.write(html)
+  doc.close()
+
+  const cleanup = () => {
+    setTimeout(() => {
+      try {
+        if (iframe.parentNode) document.body.removeChild(iframe)
+      } catch {
+        /* ignore */
+      }
+    }, 1500)
+  }
+
+  const doPrint = () => {
+    try {
+      win.focus()
+      win.print()
+    } catch (e) {
+      cleanup()
+      throw e
+    }
+    cleanup()
+  }
+
+  // Tunggu gambar (jika ada) dimuat agar tidak kosong di PDF
+  const images = Array.from(doc.images || [])
+  if (images.length === 0) {
+    setTimeout(doPrint, 250)
+    return
+  }
+
+  let pending = images.length
+  let printed = false
+  const tryPrint = () => {
+    if (printed) return
+    printed = true
+    setTimeout(doPrint, 150)
+  }
+  const onDone = () => {
+    pending -= 1
+    if (pending <= 0) tryPrint()
+  }
+  images.forEach((img) => {
+    if (img.complete) onDone()
+    else {
+      img.addEventListener('load', onDone)
+      img.addEventListener('error', onDone)
+    }
+  })
+  // Fallback timeout jika ada gambar yang menggantung
+  setTimeout(tryPrint, 3000)
 }
