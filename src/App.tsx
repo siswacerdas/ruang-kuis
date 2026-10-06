@@ -22,6 +22,9 @@ import KerjakanRiwayat from './pages/KerjakanRiwayat'
 import Peringkat from './pages/Peringkat'
 import SiswaPeringkat from './pages/SiswaPeringkat'
 import Materi from './pages/Materi'
+import PracticeSetup from './pages/PracticeSetup'
+import PracticeQuiz from './pages/PracticeQuiz'
+import PracticeResult from './pages/PracticeResult'
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -65,6 +68,9 @@ function App() {
         <Route path="/kerjakan" element={<SiswaLogin />} />
         <Route path="/siswa" element={<KerjakanEntry />} />
         <Route path="/siswa/materi" element={isStudent || isAdmin ? <Materi audience="student" /> : <Navigate to="/login" />} />
+        <Route path="/siswa/latihan-mandiri" element={<PracticeSetup />} />
+        <Route path="/siswa/latihan-mandiri/hasil" element={<PracticeResult />} />
+        <Route path="/siswa/latihan-mandiri/:sessionId" element={<PracticeQuiz />} />
         <Route path="/kerjakan/token" element={<Navigate to="/siswa" replace />} />
         <Route path="/kerjakan/hasil" element={<KerjakanResult />} />
         <Route path="/kerjakan/riwayat" element={<KerjakanRiwayat />} />
