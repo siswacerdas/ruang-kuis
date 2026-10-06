@@ -442,13 +442,33 @@ export default function TujuanPembelajaran() {
       {error && <div className="mb-4 rounded-xl bg-red-50 text-red-700 text-sm px-4 py-3">{error}</div>}
       {notice && <div className="mb-4 rounded-xl bg-emerald-50 text-emerald-700 text-sm px-4 py-3">{notice}</div>}
 
-      <div className="bg-white rounded-2xl border border-gray-100 p-3 mb-4 flex flex-wrap gap-2">
-        <FilterChip active={subjectFilter === 'semua'} onClick={() => setSubjectFilter('semua')}
-          label={tab === 'tp' ? `Semua (${items.length})` : `Semua (${materials.length})`} />
-        {SUBJECTS.map((s) => (
-          <FilterChip key={s.key} active={subjectFilter === s.key} onClick={() => setSubjectFilter(s.key)}
-            label={tab === 'tp' ? `${s.shortName} (${tpCountBySubject[s.key] || 0})` : `${s.shortName} (${materialCountBySubject[s.key] || 0})`} />
-        ))}
+      <div className="bg-white rounded-2xl border border-gray-100 p-3 mb-4">
+        <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-2">
+          {tab === 'tp' ? 'Filter mapel · angka = jumlah TP' : 'Filter mapel · angka = jumlah materi buku'}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <FilterChip
+            active={subjectFilter === 'semua'}
+            onClick={() => setSubjectFilter('semua')}
+            label={
+              tab === 'tp'
+                ? `Semua (${items.length} TP)`
+                : `Semua (${materials.length} materi)`
+            }
+          />
+          {SUBJECTS.map((s) => (
+            <FilterChip
+              key={s.key}
+              active={subjectFilter === s.key}
+              onClick={() => setSubjectFilter(s.key)}
+              label={
+                tab === 'tp'
+                  ? `${s.shortName} (${tpCountBySubject[s.key] || 0} TP)`
+                  : `${s.shortName} (${materialCountBySubject[s.key] || 0} materi)`
+              }
+            />
+          ))}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
