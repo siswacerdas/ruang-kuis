@@ -17,16 +17,16 @@ const items = [
     ),
   },
   {
-    path: '/siswa/materi',
-    label: 'Materi',
-    match: (p: string) => p.startsWith('/siswa/materi'),
+    path: '/siswa/latihan-mandiri',
+    label: 'Mandiri',
+    match: (p: string) => p.startsWith('/siswa/latihan-mandiri'),
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeWidth={1.75}
-          d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
         />
       </svg>
     ),
@@ -63,7 +63,7 @@ const items = [
   },
 ] as const
 
-/** Navigasi bawah tetap untuk area siswa — Materi & Riwayat tidak lagi "tersembunyi" di header. */
+/** Navigasi bawah tetap untuk area siswa */
 export default function StudentNav() {
   const { pathname } = useLocation()
 
@@ -98,14 +98,30 @@ export default function StudentNav() {
   )
 }
 
-/** Kartu pintasan di beranda agar Materi/Riwayat/Peringkat terlihat jelas. */
+/** Kartu pintasan di beranda */
 export function StudentQuickLinks() {
   const cards = [
+    {
+      to: '/siswa/latihan-mandiri',
+      title: 'Latihan mandiri',
+      desc: 'Pilih materi, 15–20 soal, latihan kapan saja',
+      tone: 'from-teal-500 to-emerald-600',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.75}
+            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+          />
+        </svg>
+      ),
+    },
     {
       to: '/siswa/materi',
       title: 'Materi pelajaran',
       desc: 'Baca presentasi PDF per mapel',
-      tone: 'from-teal-500 to-emerald-600',
+      tone: 'from-sky-500 to-blue-600',
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
@@ -120,7 +136,7 @@ export function StudentQuickLinks() {
     {
       to: '/kerjakan/riwayat',
       title: 'Riwayat kuis',
-      desc: 'Skor, TP, dan nilai per mapel',
+      desc: 'Resmi & mandiri · skor dan TP',
       tone: 'from-indigo-500 to-violet-600',
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -129,22 +145,6 @@ export function StudentQuickLinks() {
             strokeLinejoin="round"
             strokeWidth={1.75}
             d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-      ),
-    },
-    {
-      to: '/siswa/peringkat',
-      title: 'Peringkat',
-      desc: 'Posisimu di kelas & semua peserta',
-      tone: 'from-amber-500 to-orange-600',
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.75}
-            d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
           />
         </svg>
       ),
