@@ -13,7 +13,11 @@ import {
 import { db } from '../lib/firebase'
 import Layout from '../components/Layout'
 import { createStudentAuthAccount } from '../lib/createStudentAuth'
-import { DEFAULT_STUDENT_CLASS, type Student } from '../types/student'
+import {
+  DEFAULT_STUDENT_CLASS,
+  isValidEmail,
+  type Student,
+} from '../types/student'
 import * as XLSX from 'xlsx'
 
 export default function SiswaList() {
@@ -21,15 +25,19 @@ export default function SiswaList() {
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [syncingParent, setSyncingParent] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  const parentFileRef = useRef<HTMLInputElement>(null)
 
-  // Manual form
+  // Form tambah / edit
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [fullName, setFullName] = useState('')
   const [nickname, setNickname] = useState('')
   const [email, setEmail] = useState('')
+  const [parentEmail, setParentEmail] = useState('')
   const [nisn, setNisn] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -55,14 +63,46 @@ export default function SiswaList() {
     load()
   }, [])
 
+  const resetForm = () => {
+    setEditingId(null)
+    setFullName('')
+    setNickname('')
+    setEmail('')
+    setParentEmail('')
+    setNisn('')
+    setShowForm(false)
+  }
+
+  const openEdit = (s: Student) => {
+    setEditingId(s.id || null)
+    setFullName(s.fullName || '')
+    setNickname(s.nickname || '')
+    setEmail(s.email || '')
+    setParentEmail(s.parentEmail || '')
+    setNisn(s.nisn || '')
+    setShowForm(true)
+    setError('')
+    setMessage('')
+  }
+
   const normalizeRow = (row: any): Omit<Student, 'id' | 'createdAt'> | null => {
     const fullName = String(
-      row.fullName || row['Nama Lengkap'] || row.namaLengkap || row.Nama || row.nama || ''
+      row.fullName || row['Nama Lengkap'] || row.namaLengkap || row.Nama || row.nama || row['Nama Siswa'] || ''
     ).trim()
     const nickname = String(
       row.nickname || row['Nama Panggilan'] || row.namaPanggilan || row.Panggilan || ''
     ).trim()
     const email = String(row.email || row.Email || '')
+      .trim()
+      .toLowerCase()
+    const parentEmailRaw = String(
+      row.parentEmail ||
+        row['Email Orang Tua'] ||
+        row['email orang tua'] ||
+        row.emailOrangTua ||
+        row.ParentEmail ||
+        ''
+    )
       .trim()
       .toLowerCase()
     const nisn = String(row.nisn || row.NISN || row.password || '')
@@ -72,9 +112,9 @@ export default function SiswaList() {
     if (!email.includes('@')) return null
     return {
       fullName,
-      // Firestore menolak nilai `undefined`: sertakan field hanya jika terisi
       ...(nickname ? { nickname } : {}),
       email,
+      ...(isValidEmail(parentEmailRaw) ? { parentEmail: parentEmailRaw } : {}),
       nisn,
       className: DEFAULT_STUDENT_CLASS,
       active: true,
@@ -92,7 +132,6 @@ export default function SiswaList() {
       let rows: any[] = []
       if (name.endsWith('.csv') || name.endsWith('.txt')) {
         const text = await file.text()
-        // Support ; or , delimiter
         const workbook = XLSX.read(text, { type: 'string', FS: text.includes(';') ? ';' : ',' })
         const sheet = workbook.Sheets[workbook.SheetNames[0]]
         rows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
@@ -126,7 +165,6 @@ export default function SiswaList() {
           existing.add(s.email)
           added++
         } catch (rowErr: any) {
-          // Satu baris gagal tidak menghentikan baris lainnya
           console.error('Import baris gagal', i + 1, rowErr)
           failedRows.push(i + 1)
           if (!firstFailure) firstFailure = String(rowErr?.message || '').slice(0, 140)
@@ -151,36 +189,152 @@ export default function SiswaList() {
     }
   }
 
-  const handleAddManual = async (e: React.FormEvent) => {
+  /**
+   * Sinkronkan / isi parentEmail dari file CSV yang berisi Nama/NISN + Email Orang Tua.
+   * Cocokkan terutama lewat NISN, fallback nama lengkap (case-insensitive).
+   */
+  const handleSyncParentEmails = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setSyncingParent(true)
+    setError('')
+    setMessage('')
+    try {
+      const name = file.name.toLowerCase()
+      let rows: any[] = []
+      if (name.endsWith('.csv') || name.endsWith('.txt')) {
+        const text = await file.text()
+        const workbook = XLSX.read(text, { type: 'string', FS: text.includes(';') ? ';' : ',' })
+        const sheet = workbook.Sheets[workbook.SheetNames[0]]
+        rows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
+      } else {
+        const data = await file.arrayBuffer()
+        const workbook = XLSX.read(data)
+        const sheet = workbook.Sheets[workbook.SheetNames[0]]
+        rows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
+      }
+
+      const byNisn = new Map(students.map((s) => [s.nisn.replace(/\s/g, ''), s]))
+      const byName = new Map(
+        students.map((s) => [s.fullName.trim().toLowerCase(), s])
+      )
+
+      let updated = 0
+      let skipped = 0
+      let noMatch = 0
+
+      for (const row of rows) {
+        const nisnKey = String(row.nisn || row.NISN || '')
+          .trim()
+          .replace(/\s/g, '')
+        const nameKey = String(
+          row.fullName ||
+            row['Nama Lengkap'] ||
+            row['Nama Siswa'] ||
+            row.Nama ||
+            row.nama ||
+            ''
+        )
+          .trim()
+          .toLowerCase()
+        const pe = String(
+          row.parentEmail ||
+            row['Email Orang Tua'] ||
+            row['email orang tua'] ||
+            row.emailOrangTua ||
+            row.ParentEmail ||
+            row.Email ||
+            ''
+        )
+          .trim()
+          .toLowerCase()
+
+        if (!isValidEmail(pe)) {
+          skipped++
+          continue
+        }
+
+        const target = (nisnKey && byNisn.get(nisnKey)) || (nameKey && byName.get(nameKey)) || null
+        if (!target?.id) {
+          noMatch++
+          continue
+        }
+        if ((target.parentEmail || '').toLowerCase() === pe) {
+          skipped++
+          continue
+        }
+        await updateDoc(doc(db, 'students', target.id), { parentEmail: pe })
+        updated++
+        // update local map so duplicates in file don't re-write
+        target.parentEmail = pe
+      }
+
+      setMessage(
+        `Sinkron email orang tua: ${updated} diperbarui, ${skipped} dilewati (sudah sama/tidak valid), ${noMatch} tidak cocok NISN/nama.`
+      )
+      await load()
+    } catch (err: any) {
+      console.error(err)
+      setError(`Gagal sinkron email orang tua: ${String(err?.message || err).slice(0, 120)}`)
+    } finally {
+      setSyncingParent(false)
+      if (parentFileRef.current) parentFileRef.current.value = ''
+    }
+  }
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    if (!fullName.trim() || !email.trim() || !nisn.trim()) {
-      setError('Nama, email, dan NISN wajib diisi')
+    if (!fullName.trim() || !nisn.trim()) {
+      setError('Nama dan NISN wajib diisi')
+      return
+    }
+    if (!editingId && (!email.trim() || !email.includes('@'))) {
+      setError('Email login wajib diisi dan valid')
+      return
+    }
+    if (parentEmail.trim() && !isValidEmail(parentEmail)) {
+      setError('Format email orang tua tidak valid')
       return
     }
     setSaving(true)
     try {
-      const em = email.trim().toLowerCase()
-      const dup = students.find((s) => s.email === em)
-      if (dup) {
-        setError('Email sudah terdaftar')
-        return
+      if (editingId) {
+        const payload: Record<string, unknown> = {
+          fullName: fullName.trim(),
+          nisn: nisn.trim().replace(/\s/g, ''),
+        }
+        if (nickname.trim()) payload.nickname = nickname.trim()
+        else payload.nickname = null
+
+        if (parentEmail.trim()) payload.parentEmail = parentEmail.trim().toLowerCase()
+        else payload.parentEmail = null
+
+        // Email login tidak diubah lewat form edit (terikat Auth)
+        await updateDoc(doc(db, 'students', editingId), payload)
+        setMessage('Data siswa diperbarui.')
+      } else {
+        const em = email.trim().toLowerCase()
+        const dup = students.find((s) => s.email === em)
+        if (dup) {
+          setError('Email login sudah terdaftar')
+          setSaving(false)
+          return
+        }
+        const data: Record<string, unknown> = {
+          fullName: fullName.trim(),
+          email: em,
+          nisn: nisn.trim().replace(/\s/g, ''),
+          className: DEFAULT_STUDENT_CLASS,
+          active: true,
+          createdAt: serverTimestamp(),
+        }
+        if (nickname.trim()) data.nickname = nickname.trim()
+        if (isValidEmail(parentEmail)) data.parentEmail = parentEmail.trim().toLowerCase()
+        await addDoc(collection(db, 'students'), data)
+        setMessage('Siswa ditambahkan. Klik "Buat akun login" untuk membuat password Auth.')
       }
-      await addDoc(collection(db, 'students'), {
-        fullName: fullName.trim(),
-        nickname: nickname.trim() || null,
-        email: em,
-        nisn: nisn.trim(),
-        className: DEFAULT_STUDENT_CLASS,
-        active: true,
-        createdAt: serverTimestamp(),
-      })
-      setFullName('')
-      setNickname('')
-      setEmail('')
-      setNisn('')
-      setShowForm(false)
-      setMessage('Siswa ditambahkan. Klik "Buat akun login" untuk membuat password Auth.')
+      resetForm()
       await load()
     } catch (err) {
       console.error(err)
@@ -227,7 +381,6 @@ export default function SiswaList() {
         fail++
         const code = err?.code || ''
         if (code === 'auth/email-already-in-use') {
-          // Akun sudah ada di Auth tapi belum tercatat — tandai saja tanpa uid pasti
           errors.push(`${s.email}: sudah ada di Auth (tandai manual / cek Console)`)
         } else {
           errors.push(`${s.email}: ${err?.message || code || 'gagal'}`)
@@ -245,11 +398,12 @@ export default function SiswaList() {
   }
 
   const withAuth = students.filter((s) => s.authUid).length
+  const withParent = students.filter((s) => isValidEmail(s.parentEmail)).length
 
   return (
     <Layout
       title="Daftar Siswa"
-      subtitle={`Kelas ${DEFAULT_STUDENT_CLASS} · ${students.length} siswa · ${withAuth} punya akun login`}
+      subtitle={`Kelas ${DEFAULT_STUDENT_CLASS} · ${students.length} siswa · ${withAuth} akun login · ${withParent} email ortu`}
       actions={
         <div className="flex items-center gap-2 flex-wrap">
           <button
@@ -258,7 +412,7 @@ export default function SiswaList() {
             disabled={importing}
             className="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-3.5 py-2 rounded-xl text-sm font-medium transition"
           >
-            {importing ? 'Mengimpor...' : 'Import CSV/Excel'}
+            {importing ? 'Mengimpor...' : 'Import siswa'}
           </button>
           <input
             ref={fileRef}
@@ -266,6 +420,22 @@ export default function SiswaList() {
             accept=".csv,.txt,.xlsx,.xls"
             className="hidden"
             onChange={handleImport}
+          />
+          <button
+            type="button"
+            onClick={() => parentFileRef.current?.click()}
+            disabled={syncingParent}
+            className="inline-flex items-center gap-1.5 bg-white border border-amber-200 hover:bg-amber-50 text-amber-800 px-3.5 py-2 rounded-xl text-sm font-medium transition"
+            title="Isi/perbarui email orang tua dari CSV (cocokkan NISN atau nama)"
+          >
+            {syncingParent ? 'Menyinkron...' : 'Sinkron email ortu'}
+          </button>
+          <input
+            ref={parentFileRef}
+            type="file"
+            accept=".csv,.txt,.xlsx,.xls"
+            className="hidden"
+            onChange={handleSyncParentEmails}
           />
           <button
             type="button"
@@ -277,20 +447,31 @@ export default function SiswaList() {
           </button>
           <button
             type="button"
-            onClick={() => setShowForm(!showForm)}
+            onClick={() => {
+              if (showForm && !editingId) resetForm()
+              else {
+                resetForm()
+                setShowForm(true)
+              }
+            }}
             className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-sm font-medium transition"
           >
-            {showForm ? 'Tutup' : '+ Tambah'}
+            {showForm && !editingId ? 'Tutup' : '+ Tambah'}
           </button>
         </div>
       }
     >
       <div className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-sm text-indigo-800">
-        <p className="font-medium mb-1">Alur siswa</p>
+        <p className="font-medium mb-1">Alur siswa & notifikasi orang tua</p>
         <ol className="list-decimal list-inside text-indigo-700/90 space-y-0.5 text-xs">
           <li>Import / tambah data siswa (email fiktif + NISN)</li>
           <li>Klik <strong>Buat akun login</strong> (password = NISN)</li>
-          <li>Siswa buka <code className="bg-white/80 px-1 rounded">/kerjakan</code> → login email + NISN → masukkan token latihan</li>
+          <li>
+            Isi <strong>email orang tua</strong> (edit per siswa atau tombol <strong>Sinkron email ortu</strong> dari
+            CSV)
+          </li>
+          <li>Siswa buka <code className="bg-white/80 px-1 rounded">/kerjakan</code> → login → kerjakan kuis</li>
+          <li>Setelah kuis selesai, sistem mengirim ringkasan hasil ke email orang tua (jika terisi & Cloud Function aktif)</li>
         </ol>
       </div>
 
@@ -306,9 +487,12 @@ export default function SiswaList() {
 
       {showForm && (
         <form
-          onSubmit={handleAddManual}
+          onSubmit={handleSave}
           className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-5 grid grid-cols-1 sm:grid-cols-2 gap-3"
         >
+          <p className="sm:col-span-2 text-sm font-semibold text-gray-800">
+            {editingId ? 'Edit data siswa' : 'Tambah siswa baru'}
+          </p>
           <input
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
@@ -326,9 +510,11 @@ export default function SiswaList() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email fiktif * (mis. nama@ruang-kuis.id)"
-            className="px-3 py-2 border border-gray-200 rounded-xl text-sm"
-            required
+            placeholder="Email login * (mis. nama@ruang-kuis.id)"
+            className="px-3 py-2 border border-gray-200 rounded-xl text-sm disabled:bg-gray-50 disabled:text-gray-500"
+            required={!editingId}
+            disabled={!!editingId}
+            title={editingId ? 'Email login tidak diubah lewat form (terikat Firebase Auth)' : undefined}
           />
           <input
             value={nisn}
@@ -337,13 +523,31 @@ export default function SiswaList() {
             className="px-3 py-2 border border-gray-200 rounded-xl text-sm"
             required
           />
-          <button
-            type="submit"
-            disabled={saving}
-            className="sm:col-span-2 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-medium"
-          >
-            {saving ? 'Menyimpan...' : 'Simpan siswa'}
-          </button>
+          <input
+            type="email"
+            value={parentEmail}
+            onChange={(e) => setParentEmail(e.target.value)}
+            placeholder="Email orang tua (opsional)"
+            className="px-3 py-2 border border-amber-200 rounded-xl text-sm sm:col-span-2"
+          />
+          <div className="sm:col-span-2 flex gap-2">
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl text-sm font-medium"
+            >
+              {saving ? 'Menyimpan...' : editingId ? 'Simpan perubahan' : 'Simpan siswa'}
+            </button>
+            {editingId && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
+              >
+                Batal
+              </button>
+            )}
+          </div>
         </form>
       )}
 
@@ -361,7 +565,8 @@ export default function SiswaList() {
               <thead>
                 <tr className="border-b border-gray-100 text-left text-xs text-gray-500">
                   <th className="px-4 py-3 font-medium">Nama</th>
-                  <th className="px-3 py-3 font-medium">Email</th>
+                  <th className="px-3 py-3 font-medium">Email login</th>
+                  <th className="px-3 py-3 font-medium">Email ortu</th>
                   <th className="px-3 py-3 font-medium">NISN</th>
                   <th className="px-3 py-3 font-medium">Akun</th>
                   <th className="px-3 py-3 font-medium"></th>
@@ -377,6 +582,13 @@ export default function SiswaList() {
                       )}
                     </td>
                     <td className="px-3 py-3 text-gray-600 font-mono text-xs">{s.email}</td>
+                    <td className="px-3 py-3 font-mono text-xs">
+                      {isValidEmail(s.parentEmail) ? (
+                        <span className="text-amber-800">{s.parentEmail}</span>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
                     <td className="px-3 py-3 font-mono text-xs text-gray-600">{s.nisn}</td>
                     <td className="px-3 py-3">
                       {s.authUid ? (
@@ -389,7 +601,14 @@ export default function SiswaList() {
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-3 text-right">
+                    <td className="px-3 py-3 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(s)}
+                        className="text-xs text-indigo-600 hover:underline mr-3"
+                      >
+                        Edit
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleDelete(s)}
