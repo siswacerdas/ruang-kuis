@@ -8,7 +8,11 @@ import {
   type Timestamp,
 } from 'firebase/firestore'
 import type { SubjectKey } from '../types/question'
+import type { PresentationSlide } from './openaiPresentation'
 import { db } from './firebase'
+
+/** drive = PDF Google Drive (default, data lama); presentation = slide AI di Firestore */
+export type LessonMaterialKind = 'drive' | 'presentation'
 
 export interface LessonPdf {
   id: string
@@ -16,11 +20,23 @@ export interface LessonPdf {
   title: string
   fileName: string
   sizeBytes: number
+  /** Kosong untuk presentasi AI murni */
   driveFileId: string
   /** true jika data masih dari seed statis (belum di Firestore) */
   isStatic?: boolean
+  /** Default 'drive' bila tidak ada (kompatibel data lama) */
+  kind?: LessonMaterialKind
+  /** Isi slide (hanya kind === 'presentation') */
+  slides?: PresentationSlide[]
+  /** Outline sumber generate AI */
+  outline?: string
+  generatedBy?: string
   createdAt?: Timestamp | null
   updatedAt?: Timestamp | null
+}
+
+export function isPresentation(m: Pick<LessonPdf, 'kind' | 'slides'>): boolean {
+  return m.kind === 'presentation' || (Array.isArray(m.slides) && m.slides.length > 0)
 }
 
 /** Katalog presentasi dari folder Drive Pustaka Belajar (siapa pun yang punya tautan). */
@@ -162,6 +178,11 @@ export async function fetchLessonMaterials(): Promise<LessonPdf[]> {
     return snap.docs
       .map((d) => {
         const data = d.data()
+        const kind: LessonMaterialKind =
+          data.kind === 'presentation' || (Array.isArray(data.slides) && data.slides.length > 0)
+            ? 'presentation'
+            : 'drive'
+        const slides = Array.isArray(data.slides) ? (data.slides as PresentationSlide[]) : undefined
         return {
           id: d.id,
           subjectKey: data.subjectKey as SubjectKey,
@@ -169,17 +190,20 @@ export async function fetchLessonMaterials(): Promise<LessonPdf[]> {
           fileName: String(data.fileName || ''),
           sizeBytes: Number(data.sizeBytes) || 0,
           driveFileId: String(data.driveFileId || ''),
+          kind,
+          slides,
+          outline: data.outline ? String(data.outline) : undefined,
+          generatedBy: data.generatedBy ? String(data.generatedBy) : undefined,
           isStatic: false,
           createdAt: data.createdAt ?? null,
           updatedAt: data.updatedAt ?? null,
         } satisfies LessonPdf
       })
-      .filter((p) => p.title && p.driveFileId)
+      .filter((p) => p.title && (p.driveFileId || isPresentation(p)))
       .sort((a, b) => a.subjectKey.localeCompare(b.subjectKey) || a.title.localeCompare(b.title, 'id'))
   } catch (e: unknown) {
     const code = (e as { code?: string })?.code || ''
     const msg = String((e as { message?: string })?.message || e)
-    // Rules belum di-deploy / koleksi belum diizinkan → tampilkan seed
     if (code === 'permission-denied' || /insufficient permissions|permission-denied/i.test(msg)) {
       console.warn('[lessonMaterials] Firestore permission denied — memakai seed lokal. Deploy firestore.rules.')
       return staticSeed()
@@ -193,13 +217,31 @@ export async function saveLessonMaterial(
 ): Promise<string> {
   const isNew = !material.id
   const id = material.id || slugId(material.title, material.subjectKey)
+  const kind: LessonMaterialKind =
+    material.kind === 'presentation' || (material.slides && material.slides.length > 0)
+      ? 'presentation'
+      : 'drive'
+
+  if (kind === 'drive' && !material.driveFileId?.trim()) {
+    throw new Error('Tautan Google Drive atau File ID wajib untuk materi PDF.')
+  }
+  if (kind === 'presentation' && (!material.slides || material.slides.length === 0)) {
+    throw new Error('Presentasi AI harus memiliki minimal satu slide.')
+  }
+
   const payload: Record<string, unknown> = {
     subjectKey: material.subjectKey,
     title: material.title.trim(),
     fileName: (material.fileName || '').trim(),
     sizeBytes: Number(material.sizeBytes) || 0,
-    driveFileId: material.driveFileId.trim(),
+    driveFileId: (material.driveFileId || '').trim(),
+    kind,
     updatedAt: serverTimestamp(),
+  }
+  if (kind === 'presentation') {
+    payload.slides = material.slides
+    if (material.outline?.trim()) payload.outline = material.outline.trim()
+    if (material.generatedBy) payload.generatedBy = material.generatedBy
   }
   if (isNew) payload.createdAt = serverTimestamp()
   await setDoc(doc(db, 'lessonMaterials', id), payload, { merge: true })
@@ -222,6 +264,7 @@ export async function seedLessonMaterialsFromStatic(): Promise<number> {
         fileName: p.fileName,
         sizeBytes: p.sizeBytes,
         driveFileId: p.driveFileId,
+        kind: 'drive',
         updatedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
       },
