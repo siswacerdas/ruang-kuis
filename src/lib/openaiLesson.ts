@@ -1,6 +1,12 @@
 /**
  * Generate materi belajar mandiri (HTML lengkap) via OpenAI.
  * Bukan slide presentasi — konten self-contained untuk siswa SD kelas 5.
+ *
+ * Setting selaras Playground/OpenAI:
+ * - model default: gpt-4.1 (override via VITE_OPENAI_MODEL)
+ * - temperature: 0.4
+ * - top_p: 0.9
+ * - max_tokens: 14000
  */
 
 import { compressImageSrc } from './imageCompress'
@@ -45,28 +51,42 @@ export type GenerateLessonResult = {
   imageWarnings: string[]
 }
 
+/**
+ * Prompt universal lintas mapel SD Kurikulum Merdeka.
+ * Guru cukup outline sederhana; sistem memaksa kedalaman & fakta esensial.
+ */
 const SYSTEM_PROMPT = `Kamu adalah penulis materi belajar mandiri untuk siswa SD kelas 5 Indonesia (Kurikulum Merdeka).
-Tugas: buat materi LENGKAP, MENDALAM, dan BERISI — siswa harus bisa memahami topik tanpa guru di samping.
+
+## TUJUAN
+Buat materi LENGKAP yang bisa dipelajari siswa sendiri tanpa guru di samping.
+Bukan slide presentasi. Bukan ringkasan bullet kosong. Ini artikel/materi utuh.
+
+## GAYA (universal semua mapel)
+- Bahasa Indonesia baku, hangat, jelas; kalimat pendek–sedang.
+- Jelaskan istilah sulit dengan kata sederhana.
+- Contoh dari kehidupan anak Indonesia (sekolah, rumah, lingkungan) bila relevan.
+- HINDARI kalimat pengisi tanpa fakta ("sangat penting", "relevan hingga saat ini", "menunjukkan betapa pentingnya", dll.).
 
 ## PRIORITAS MUTLAK
-1. Jika ada "Instruksi / catatan guru" di pesan user, itu WAJIB dipatuhi lebih dulu daripada aturan umum di bawah. Jangan mengabaikan atau meringkas permintaan guru.
-2. Informasi esensial (tokoh, rumusan, peristiwa, sebab-akibat, perbandingan, tanggal/periode penting) HARUS masuk. Jangan hanya definisi dangkal.
-3. JANGAN mengulang isi yang sama di banyak bagian. Setiap section punya fokus unik.
-4. Bukan slide presentasi. Bukan ringkasan bullet kosong. Ini artikel belajar yang utuh.
+1. Jika ada "Instruksi / catatan guru" di pesan user, itu WAJIB dipatuhi lebih dulu. Jangan mengabaikan atau meringkas permintaan guru.
+2. Informasi esensial HARUS masuk: tokoh, rumusan/daftar poin, tanggal/periode, istilah kunci, langkah/proses, sebab-akibat, perbandingan.
+3. Jika ada usulan, sila, rumus, tahapan, klasifikasi, atau daftar → TULISKAN SECARA LENGKAP (jangan hanya menyebut namanya).
+4. JANGAN mengulang isi yang sama di banyak bagian. Setiap section punya fokus unik.
+5. Jangan mengarang fakta. Jika ragu pada detail, gunakan formulasi yang umum diajarkan di SD dan tetap konsisten.
 
 ## KEDALAMAN PER BAGIAN (WAJIB)
 Untuk SETIAP sub-materi / section:
 - Minimal 3 paragraf <p> yang berisi (bukan 1–2 kalimat pendek).
-- Alur: pengantar konsep → penjelasan rinci → contoh konkret / kisah / perbandingan → makna atau hubungan dengan kehidupan siswa (bila relevan).
-- Jika topik sejarah/PPKn (mis. tokoh, sidang, piagam, rumusan sila): sebutkan tokoh, gagasan utama, perbedaan antar tokoh, urutan peristiwa, dan mengapa penting bagi Pancasila — jangan digabung jadi satu paragraf generik.
-- Jika guru meminta "versi lengkap" suatu rumusan/usulan: tuliskan isinya secara eksplisit (bukan hanya menyebut namanya).
-- Jika guru meminta pembahasan detail satu peristiwa (mis. BPUPKI / Piagam Jakarta / perubahan sila pertama): buat section khusus yang lebih panjang (4–6 paragraf + list bila perlu).
+- Alur: pengantar konsep → penjelasan rinci → contoh konkret / kisah / perbandingan → (opsional) makna bagi siswa.
+- Topik sejarah/PPKn: sebutkan tokoh, gagasan utama, perbedaan antar tokoh, urutan peristiwa; jika ada usulan dasar negara, tulis daftar lengkapnya.
+- Topik sains/IPAS: jelaskan proses/tahapan dengan urutan jelas + contoh nyata.
+- Topik bahasa: beri definisi + contoh kalimat + latihan mini bila gaya latihan.
 
 ## LARANGAN
-- Jangan materi yang terasa "template" atau generik tanpa fakta.
-- Jangan mengulang definisi yang sama di intro, body, dan summary.
-- Jangan mengorbankan kedalaman demi jumlah section yang sedikit.
-- Jangan menjawab seolah slide (judul + 1 kalimat).
+- Materi template/generik tanpa fakta.
+- Mengulang definisi yang sama di intro, body, dan summary.
+- Mengorbankan kedalaman demi jumlah section sedikit.
+- Menjawab seperti slide (judul + 1 kalimat).
 
 ## OUTPUT — HANYA JSON valid
 {
@@ -100,7 +120,7 @@ Tag diizinkan: p, ul, ol, li, strong, em, b, i, br, span
 
 ## needsImage
 - Maksimal 3 section needsImage true.
-- Pilih bagian yang terbantu visual (perbandingan, proses, tokoh/konteks sejarah sederhana).
+- Pilih bagian yang terbantu visual (perbandingan, proses, konteks sederhana).
 - imagePrompt: bahasa Inggris, ilustrasi edukatif anak, TANPA teks/label di gambar.`
 
 function buildUserPrompt(opts: GenerateLessonOptions): string {
@@ -130,12 +150,13 @@ function buildUserPrompt(opts: GenerateLessonOptions): string {
       extra,
       '',
       'Patuhi instruksi guru di atas secara penuh: kembangkan section yang diminta secara DETAIL,',
-      'lengkapi fakta esensial, jangan meringkas berlebihan, dan jangan mengulang isi antar section.',
+      'lengkapi fakta esensial (daftar/poin lengkap bila ada), jangan meringkas berlebihan, dan jangan mengulang isi antar section.',
     )
   } else {
     parts.push(
       '',
       'Kembangkan setiap butir outline menjadi section yang jelas dan berisi.',
+      'Jika outline menyebut usulan/sila/tahapan/rumus, tuliskan isinya secara lengkap.',
       'Jangan merangkum berlebihan; pastikan informasi esensial tidak terlewat.',
     )
   }
@@ -161,8 +182,21 @@ export function sanitizeLessonHtml(html: string): string {
   s = s.replace(/<\/?([a-zA-Z0-9]+)(\s[^>]*)?>/g, (full, tag: string) => {
     const t = tag.toLowerCase()
     const allowed = new Set([
-      'p', 'ul', 'ol', 'li', 'strong', 'em', 'b', 'i', 'br', 'span',
-      'figure', 'figcaption', 'img', 'blockquote', 'div',
+      'p',
+      'ul',
+      'ol',
+      'li',
+      'strong',
+      'em',
+      'b',
+      'i',
+      'br',
+      'span',
+      'figure',
+      'figcaption',
+      'img',
+      'blockquote',
+      'div',
     ])
     if (!allowed.has(t)) return ''
     if (t === 'br') return '<br/>'
@@ -274,7 +308,8 @@ async function callOpenAI(apiKey: string, model: string, system: string, user: s
     },
     body: JSON.stringify({
       model,
-      temperature: 0.45,
+      temperature: 0.4,
+      top_p: 0.9,
       max_tokens: 14000,
       response_format: { type: 'json_object' },
       messages: [
@@ -365,7 +400,8 @@ export async function generateLessonWithOpenAI(
   if (!outline) throw new Error('Outline materi wajib diisi.')
   if (!opts.title.trim()) throw new Error('Judul materi wajib diisi.')
 
-  const model = opts.model || import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini'
+  // Default gpt-4.1; override via opts.model atau VITE_OPENAI_MODEL
+  const model = opts.model || import.meta.env.VITE_OPENAI_MODEL?.trim() || 'gpt-4.1'
   const parsed = await callOpenAI(key, model, SYSTEM_PROMPT, buildUserPrompt(opts))
 
   const title = String(parsed.title || opts.title).trim().slice(0, 160)
