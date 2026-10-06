@@ -158,7 +158,7 @@ export async function exportPresentationToPdf(
       continue
     }
 
-    // CONTENT SLIDES
+    // CONTENT SLIDES (layout !== 'title' after continue above)
     let y = MARGIN + 10
 
     doc.setFont('helvetica', 'bold')
@@ -354,7 +354,8 @@ export async function exportPresentationToPdf(
       }
     }
 
-    if (s.imageUrl && s.layout !== 'title') {
+    // Side image for content slides (title branch already continued)
+    if (s.imageUrl) {
       const img = await loadImageAsData(s.imageUrl)
       if (img) {
         try {
