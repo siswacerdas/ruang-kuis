@@ -10,6 +10,7 @@ import {
   type LatihanPaket,
   type SubjectKey,
 } from '../types/question'
+import type { PracticeAttempt } from '../types/practice'
 
 function toMillis(v: unknown): number | null {
   if (!v) return null
@@ -60,15 +61,32 @@ function gradientFor(id?: string) {
 }
 
 type SortKey = 'newest' | 'oldest' | 'score-high' | 'score-low'
+type TabKey = 'all' | 'official' | 'practice'
+
+/** Unified row for display */
+interface HistoryRow {
+  id: string
+  title: string
+  percent: number
+  score: number
+  total: number
+  durationMs?: number
+  finishedAt?: unknown
+  tpSummary?: Record<string, { correct: number; total: number }>
+  kind: 'official' | 'practice'
+  subjectKey?: string
+}
 
 export default function KerjakanRiwayat() {
   const navigate = useNavigate()
   const [student, setStudent] = useState<StudentSession | null>(null)
-  const [attempts, setAttempts] = useState<LatihanAttempt[]>([])
+  const [official, setOfficial] = useState<LatihanAttempt[]>([])
+  const [practice, setPractice] = useState<PracticeAttempt[]>([])
   const [pakets, setPakets] = useState<LatihanPaket[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortKey>('newest')
+  const [tab, setTab] = useState<TabKey>('all')
 
   useEffect(() => {
     let cancelled = false
@@ -80,14 +98,14 @@ export default function KerjakanRiwayat() {
         return
       }
       setStudent(s)
-      loadAttempts(s)
+      loadAll(s)
     })()
     return () => {
       cancelled = true
     }
   }, [navigate])
 
-  const loadAttempts = async (s: StudentSession) => {
+  const loadAll = async (s: StudentSession) => {
     setLoading(true)
     try {
       const byId: LatihanAttempt[] = []
@@ -100,7 +118,16 @@ export default function KerjakanRiwayat() {
           )
           snap.docs.forEach((d) => byId.push({ id: d.id, ...d.data() } as LatihanAttempt))
         } catch (err) {
-          console.warn('query studentId', err)
+          console.warn('query attempts studentId', err)
+        }
+        try {
+          const snap = await getDocs(
+            query(collection(db, 'practiceAttempts'), where('studentId', '==', s.studentId))
+          )
+          setPractice(snap.docs.map((d) => ({ id: d.id, ...d.data() } as PracticeAttempt)))
+        } catch (err) {
+          console.warn('query practiceAttempts', err)
+          setPractice([])
         }
       }
 
@@ -117,7 +144,7 @@ export default function KerjakanRiwayat() {
       ;[...byId, ...byName].forEach((a) => {
         if (a.id) map.set(a.id, a)
       })
-      setAttempts([...map.values()])
+      setOfficial([...map.values()])
 
       try {
         const pSnap = await getDocs(collection(db, 'latihan'))
@@ -132,80 +159,66 @@ export default function KerjakanRiwayat() {
     }
   }
 
+  const rows: HistoryRow[] = useMemo(() => {
+    const o: HistoryRow[] = official.map((a) => ({
+      id: a.id || `o-${a.latihanId}`,
+      title: a.latihanTitle || 'Latihan resmi',
+      percent: a.percent ?? 0,
+      score: a.score ?? 0,
+      total: a.total ?? 0,
+      durationMs: a.durationMs,
+      finishedAt: a.finishedAt,
+      tpSummary: a.tpSummary,
+      kind: 'official',
+      subjectKey: pakets.find((p) => p.id === a.latihanId)?.subjectKey,
+    }))
+    const p: HistoryRow[] = practice.map((a) => ({
+      id: a.id || `p-${Math.random()}`,
+      title: a.title || 'Latihan mandiri',
+      percent: a.percent ?? 0,
+      score: a.score ?? 0,
+      total: a.total ?? 0,
+      durationMs: a.durationMs,
+      finishedAt: a.finishedAt,
+      tpSummary: a.tpSummary,
+      kind: 'practice',
+      subjectKey: a.subjectKey,
+    }))
+    return [...o, ...p]
+  }, [official, practice, pakets])
+
   const stats = useMemo(() => {
-    const n = attempts.length
+    const list =
+      tab === 'official'
+        ? rows.filter((r) => r.kind === 'official')
+        : tab === 'practice'
+          ? rows.filter((r) => r.kind === 'practice')
+          : rows
+    const n = list.length
     if (!n) return { n: 0, avg: 0, best: 0, totalMs: 0 }
-    const avg = Math.round(attempts.reduce((s, a) => s + (a.percent || 0), 0) / n)
-    const best = Math.max(...attempts.map((a) => a.percent || 0))
-    const totalMs = attempts.reduce((s, a) => s + (a.durationMs || 0), 0)
+    const avg = Math.round(list.reduce((s, a) => s + a.percent, 0) / n)
+    const best = Math.max(...list.map((a) => a.percent))
+    const totalMs = list.reduce((s, a) => s + (a.durationMs || 0), 0)
     return { n, avg, best, totalMs }
-  }, [attempts])
-
-  const tpAgg = useMemo(() => {
-    const map = new Map<string, { correct: number; total: number }>()
-    attempts.forEach((a) => {
-      if (!a.tpSummary) return
-      Object.entries(a.tpSummary).forEach(([tp, v]) => {
-        const cur = map.get(tp) || { correct: 0, total: 0 }
-        cur.correct += v.correct
-        cur.total += v.total
-        map.set(tp, cur)
-      })
-    })
-    return [...map.entries()]
-      .map(([tp, v]) => ({
-        tp,
-        ...v,
-        percent: v.total ? Math.round((v.correct / v.total) * 100) : 0,
-      }))
-      .sort((a, b) => a.percent - b.percent || a.tp.localeCompare(b.tp, 'id'))
-      .slice(0, 8)
-  }, [attempts])
-
-  const subjectGrades = useMemo(() => {
-    const paketMap = new Map<string, LatihanPaket>()
-    pakets.forEach((p) => {
-      if (p.id) paketMap.set(p.id, p)
-    })
-    const bySub = new Map<string, { sum: number; n: number }>()
-    attempts.forEach((a) => {
-      const p = paketMap.get(a.latihanId)
-      const sk = p?.subjectKey || 'unknown'
-      const cur = bySub.get(sk) || { sum: 0, n: 0 }
-      cur.sum += a.percent ?? 0
-      cur.n += 1
-      bySub.set(sk, cur)
-    })
-    return [...bySub.entries()]
-      .map(([key, v]) => {
-        const sub = key !== 'unknown' ? getSubject(key as SubjectKey) : undefined
-        return {
-          key,
-          name: sub?.name || 'Tanpa mapel',
-          shortName: sub?.shortName || '—',
-          icon: sub?.icon || '📝',
-          avg: v.n ? Math.round(v.sum / v.n) : 0,
-          n: v.n,
-        }
-      })
-      .sort((a, b) => a.name.localeCompare(b.name, 'id'))
-  }, [attempts, pakets])
+  }, [rows, tab])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    let list = [...attempts]
-    if (q) {
-      list = list.filter((a) => (a.latihanTitle || '').toLowerCase().includes(q))
-    }
+    let list = rows.filter((r) => {
+      if (tab === 'official' && r.kind !== 'official') return false
+      if (tab === 'practice' && r.kind !== 'practice') return false
+      if (q && !r.title.toLowerCase().includes(q)) return false
+      return true
+    })
     list.sort((a, b) => {
-      if (sort === 'score-high') return (b.percent || 0) - (a.percent || 0)
-      if (sort === 'score-low') return (a.percent || 0) - (b.percent || 0)
+      if (sort === 'score-high') return b.percent - a.percent
+      if (sort === 'score-low') return a.percent - b.percent
       const ta = toMillis(a.finishedAt) || 0
       const tb = toMillis(b.finishedAt) || 0
       return sort === 'oldest' ? ta - tb : tb - ta
     })
     return list
-  }, [attempts, search, sort])
+  }, [rows, search, sort, tab])
 
   if (!student) {
     return (
@@ -225,6 +238,12 @@ export default function KerjakanRiwayat() {
     { key: 'score-low', label: 'Skor terendah' },
   ]
 
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: 'all', label: 'Semua' },
+    { key: 'official', label: 'Resmi guru' },
+    { key: 'practice', label: 'Mandiri' },
+  ]
+
   return (
     <div className="min-h-screen bg-[#F5F6FA]">
       <header className="bg-white border-b border-gray-100 sticky top-0 z-20">
@@ -241,16 +260,11 @@ export default function KerjakanRiwayat() {
               </p>
             </div>
           </div>
-
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-24 space-y-6">
         <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700 text-white p-6 sm:p-8 shadow-sm">
-          <div className="absolute inset-0 opacity-20 pointer-events-none">
-            <div className="absolute -top-10 -right-10 w-48 h-48 bg-white rounded-full blur-3xl" />
-            <div className="absolute bottom-0 left-10 w-40 h-40 bg-indigo-300 rounded-full blur-3xl" />
-          </div>
           <div className="relative z-10 max-w-xl">
             <p className="text-indigo-100 text-xs font-semibold uppercase tracking-wide mb-1">
               Progress belajar
@@ -258,22 +272,42 @@ export default function KerjakanRiwayat() {
             <h1 className="text-2xl sm:text-3xl font-bold leading-tight mb-2">
               Riwayatmu, {firstName}
             </h1>
-            <p className="text-indigo-100 text-sm sm:text-base leading-relaxed">
-              Lihat skor, nilai akhir per mapel, dan capaian TP dari kuis yang sudah kamu selesaikan.
+            <p className="text-indigo-100 text-sm leading-relaxed">
+              Kuis resmi dari guru dan latihan mandiri, dalam satu tempat.
             </p>
           </div>
         </section>
 
+        <div className="flex flex-wrap gap-1.5">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={`text-xs font-medium px-3 py-1.5 rounded-full border transition ${
+                tab === t.key
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-gray-600 border-gray-200'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
         <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Total kuis', value: loading ? '…' : String(stats.n), tone: 'text-indigo-600' },
+            { label: 'Total',
+              value: loading ? '…' : String(stats.n),
+              tone: 'text-indigo-600',
+            },
             {
-              label: 'Rata-rata skor',
+              label: 'Rata-rata',
               value: loading ? '…' : stats.n ? `${stats.avg}%` : '—',
               tone: 'text-violet-600',
             },
             {
-              label: 'Skor terbaik',
+              label: 'Terbaik',
               value: loading ? '…' : stats.n ? `${stats.best}%` : '—',
               tone: 'text-emerald-600',
             },
@@ -293,75 +327,6 @@ export default function KerjakanRiwayat() {
           ))}
         </section>
 
-        {subjectGrades.length > 0 && (
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-gray-900">Nilai akhir per mata pelajaran</h2>
-              <span className="text-[11px] text-gray-400">Rata-rata skor kuis</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {subjectGrades.map((g) => (
-                <div
-                  key={g.key}
-                  className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 flex items-center gap-3"
-                >
-                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-lg shrink-0">
-                    {g.icon}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{g.name}</p>
-                    <p className="text-[11px] text-gray-400">{g.n} kuis dikerjakan</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p
-                      className={`text-xl font-bold tabular-nums ${
-                        g.avg >= 70
-                          ? 'text-emerald-600'
-                          : g.avg >= 40
-                            ? 'text-amber-600'
-                            : 'text-rose-600'
-                      }`}
-                    >
-                      {g.avg}
-                    </p>
-                    <p className="text-[10px] text-gray-400">nilai akhir</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {tpAgg.length > 0 && (
-          <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <h2 className="text- font-semibold text-gray-900 mb-3">Capaian TP (akumulasi)</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
-              {tpAgg.map((row) => (
-                <div key={row.tp} className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-gray-700 w-20 truncate" title={row.tp}>
-                    {row.tp}
-                  </span>
-                  <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${
-                        row.percent >= 70
-                          ? 'bg-emerald-500'
-                          : row.percent >= 40
-                            ? 'bg-amber-400'
-                            : 'bg-red-400'
-                      }`}
-                      style={{ width: `${row.percent}%` }}
-                    />
-                  </div>
-                  <span className="text-[11px] text-gray-500 w-10 text-right tabular-nums">
-                    {row.percent}%
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
         <section className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
           <div className="flex flex-wrap gap-1.5">
             {sortOptions.map((o) => (
@@ -372,88 +337,80 @@ export default function KerjakanRiwayat() {
                 className={`text-xs font-medium px-3 py-1.5 rounded-full border transition ${
                   sort === o.key
                     ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-200'
+                    : 'bg-white text-gray-600 border-gray-200'
                 }`}
               >
                 {o.label}
               </button>
             ))}
           </div>
-          <div className="relative w-full sm:w-64">
-            <svg
-              className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"
-              />
-            </svg>
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari judul kuis…"
-              className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none"
-            />
-          </div>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Cari judul…"
+            className="w-full sm:w-64 px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white outline-none focus:ring-2 focus:ring-indigo-500/30"
+          />
         </section>
 
         <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-900">Pengerjaan</h2>
-            <span className="text-[11px] text-gray-400">
-              {loading ? 'Memuat…' : `${filtered.length} hasil`}
-            </span>
-          </div>
-
           {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="bg-white rounded-2xl border border-gray-100 h-40 animate-pulse" />
-              ))}
-            </div>
+            <p className="text-center text-sm text-gray-400 py-12">Memuat…</p>
           ) : filtered.length === 0 ? (
             <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
               <p className="text-gray-600 font-medium">Belum ada riwayat</p>
               <p className="text-sm text-gray-400 mt-1 mb-4">
-                {search
-                  ? 'Tidak ada yang cocok dengan pencarian.'
-                  : 'Selesaikan kuis di beranda untuk melihat skor di sini.'}
+                Kerjakan kuis resmi atau mulai latihan mandiri.
               </p>
-              <Link
-                to="/siswa"
-                className="inline-flex text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 px-4 py-2.5 rounded-xl transition"
-              >
-                Ke beranda
-              </Link>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Link
+                  to="/siswa"
+                  className="text-sm font-medium text-white bg-indigo-600 px-4 py-2.5 rounded-xl"
+                >
+                  Beranda
+                </Link>
+                <Link
+                  to="/siswa/latihan-mandiri"
+                  className="text-sm font-medium text-teal-800 bg-teal-50 border border-teal-100 px-4 py-2.5 rounded-xl"
+                >
+                  Latihan mandiri
+                </Link>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filtered.map((a) => {
                 const fin = toMillis(a.finishedAt)
-                const pct = a.percent ?? 0
-                const grad = gradientFor(a.id || a.latihanId)
+                const pct = a.percent
+                const grad =
+                  a.kind === 'practice'
+                    ? 'from-teal-500 via-emerald-500 to-cyan-600'
+                    : gradientFor(a.id)
                 const scoreTone =
                   pct >= 70
                     ? 'text-emerald-600 border-emerald-400'
                     : pct >= 40
                       ? 'text-amber-600 border-amber-400'
                       : 'text-rose-600 border-rose-400'
+                const sub = a.subjectKey ? getSubject(a.subjectKey as SubjectKey) : null
 
                 return (
                   <article
                     key={a.id}
-                    className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:border-indigo-200 hover:shadow-md transition flex flex-col"
+                    className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col"
                   >
-                    <div className={`h-16 bg-gradient-to-br ${grad} px-4 flex items-center justify-between`}>
-                      <span className="text-white/90 text-xs font-medium truncate pr-2">
-                        {a.latihanTitle || 'Latihan'}
-                      </span>
+                    <div
+                      className={`h-16 bg-gradient-to-br ${grad} px-4 flex items-center justify-between`}
+                    >
+                      <div className="min-w-0 pr-2">
+                        <span className="text-white/90 text-xs font-medium truncate block">
+                          {a.title}
+                        </span>
+                        <span className="text-[10px] text-white/70">
+                          {a.kind === 'practice' ? 'Mandiri' : 'Resmi'}
+                          {sub ? ` · ${sub.shortName}` : ''}
+                        </span>
+                      </div>
                       <div
                         className={`w-12 h-12 rounded-full border-2 bg-white/95 flex items-center justify-center text-sm font-bold tabular-nums shrink-0 ${scoreTone}`}
                       >
@@ -461,42 +418,15 @@ export default function KerjakanRiwayat() {
                       </div>
                     </div>
                     <div className="p-4 flex-1 flex flex-col gap-2">
-                      <h3 className="text-sm font-semibold text-gray-900 line-clamp-2">
-                        {a.latihanTitle || 'Latihan'}
-                      </h3>
+                      <h3 className="text-sm font-semibold text-gray-900 line-clamp-2">{a.title}</h3>
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-500">
                         <span>{fin ? formatShort(fin) : '—'}</span>
                         {a.durationMs != null && a.durationMs > 0 && (
                           <span>· {formatDuration(a.durationMs)}</span>
                         )}
                         <span>
-                          · {a.score ?? 0}/{a.total ?? 0} benar
+                          · {a.score}/{a.total} benar
                         </span>
-                      </div>
-                      {a.tpSummary && Object.keys(a.tpSummary).length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {Object.entries(a.tpSummary)
-                            .slice(0, 4)
-                            .map(([tp, v]) => {
-                              const p = v.total ? Math.round((v.correct / v.total) * 100) : 0
-                              return (
-                                <span
-                                  key={tp}
-                                  className="text-[10px] px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-600 border border-gray-100"
-                                >
-                                  {tp} {p}%
-                                </span>
-                              )
-                            })}
-                        </div>
-                      )}
-                      <div className="mt-auto pt-2">
-                        <Link
-                          to={`/kerjakan/hasil?attempt=${a.id}`}
-                          className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
-                        >
-                          Lihat detail →
-                        </Link>
                       </div>
                     </div>
                   </article>
