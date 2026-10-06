@@ -20,18 +20,16 @@ const emptyTp = (): LearningObjective => ({
 })
 
 function slug(title: string): string {
-  return (
-    title
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 48) || 'materi'
-  )
+  return title
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 48) || 'materi'
 }
 
-/** Ringkasan multi-baris — newline dipertahankan agar terbaca sistem (outline AI soal). */
+/** Ringkasan multi-baris — dipertahankan newline agar bisa dibaca sistem (outline untuk AI soal). */
 function SummaryBlock({ text, className = '' }: { text?: string; className?: string }) {
   const t = (text || '').trim()
   if (!t) return <p className={`text-sm text-gray-400 ${className}`}>—</p>
@@ -69,17 +67,12 @@ export default function TujuanPembelajaran() {
       setItems(
         tpSnap.docs
           .map((d) => ({ id: d.id, ...(d.data() as Omit<LearningObjective, 'id'>) }))
-          .sort(
-            (a, b) =>
-              a.subjectKey.localeCompare(b.subjectKey) || a.order - b.order || a.code.localeCompare(b.code),
-          ),
+          .sort((a, b) => a.subjectKey.localeCompare(b.subjectKey) || a.order - b.order || a.code.localeCompare(b.code)),
       )
       setMaterials(
         matSnap.docs
           .map((d) => ({ id: d.id, ...(d.data() as Omit<BookMaterial, 'id'>) }))
-          .sort(
-            (a, b) => a.subjectKey.localeCompare(b.subjectKey) || a.title.localeCompare(b.title, 'id'),
-          ),
+          .sort((a, b) => a.subjectKey.localeCompare(b.subjectKey) || a.title.localeCompare(b.title, 'id')),
       )
     } catch (e: any) {
       setError(e?.message || 'Gagal memuat data.')
@@ -88,9 +81,7 @@ export default function TujuanPembelajaran() {
     }
   }
 
-  useEffect(() => {
-    load()
-  }, [])
+  useEffect(() => { load() }, [])
 
   const filteredTp = useMemo(() => {
     const q = queryText.trim().toLowerCase()
@@ -116,9 +107,7 @@ export default function TujuanPembelajaran() {
     return materials.filter((m) => {
       if (subjectFilter !== 'semua' && m.subjectKey !== subjectFilter) return false
       if (!q) return true
-      return [m.title, m.summary, ...(m.suggestedTpCodes || [])].some((v) =>
-        (v || '').toLowerCase().includes(q),
-      )
+      return [m.title, m.summary, ...(m.suggestedTpCodes || [])].some((v) => (v || '').toLowerCase().includes(q))
     })
   }, [materials, subjectFilter, queryText])
 
@@ -152,23 +141,12 @@ export default function TujuanPembelajaran() {
         data.tp.slice(i, i + 400).forEach((raw) => {
           const code = String(raw.code || '').trim()
           if (!code || !raw.statement || !raw.subjectKey) return
-          batch.set(
-            doc(db, 'learningObjectives', code),
-            {
-              code,
-              subjectKey: raw.subjectKey,
-              element: raw.element || '',
-              order: Number(raw.order) || 0,
-              statement: String(raw.statement).trim(),
-              weight: Number(raw.weight) || 1,
-              active: raw.active !== false,
-              className: raw.className || data.className || '5A',
-              phase: raw.phase || data.phase || 'C',
-              source: raw.source || data.version || 'import',
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true },
-          )
+          batch.set(doc(db, 'learningObjectives', code), {
+            code, subjectKey: raw.subjectKey, element: raw.element || '', order: Number(raw.order) || 0,
+            statement: String(raw.statement).trim(), weight: Number(raw.weight) || 1, active: raw.active !== false,
+            className: raw.className || data.className || '5A', phase: raw.phase || data.phase || 'C',
+            source: raw.source || data.version || 'import', updatedAt: serverTimestamp(),
+          }, { merge: true })
           tpCount += 1
         })
         await batch.commit()
@@ -177,38 +155,22 @@ export default function TujuanPembelajaran() {
       for (let i = 0; i < mats.length; i += 400) {
         const batch = writeBatch(db)
         mats.slice(i, i + 400).forEach((m) => {
-          batch.set(
-            doc(db, 'bookMaterials', `${m.subjectKey}__${slug(m.title)}`),
-            {
-              subjectKey: m.subjectKey,
-              title: m.title,
-              summary: m.summary || '',
-              suggestedTpCodes: m.suggestedTpCodes || [],
-              linkNote: m.linkNote || '',
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true },
-          )
+          batch.set(doc(db, 'bookMaterials', `${m.subjectKey}__${slug(m.title)}`), {
+            subjectKey: m.subjectKey, title: m.title, summary: m.summary || '',
+            suggestedTpCodes: m.suggestedTpCodes || [], linkNote: m.linkNote || '', updatedAt: serverTimestamp(),
+          }, { merge: true })
         })
         await batch.commit()
       }
       const byTp = new Map<string, string[]>()
-      mats.forEach((m) => {
-        ;(m.suggestedTpCodes || []).forEach((code) => {
-          const list = byTp.get(code) || []
-          list.push(m.title)
-          byTp.set(code, list)
-        })
-      })
+      mats.forEach((m) => { (m.suggestedTpCodes || []).forEach((code) => {
+        const list = byTp.get(code) || []; list.push(m.title); byTp.set(code, list)
+      })})
       const tpCodes = [...byTp.keys()]
       for (let i = 0; i < tpCodes.length; i += 400) {
         const batch = writeBatch(db)
         tpCodes.slice(i, i + 400).forEach((code) => {
-          batch.set(
-            doc(db, 'learningObjectives', code),
-            { relatedMaterials: byTp.get(code) || [], updatedAt: serverTimestamp() },
-            { merge: true },
-          )
+          batch.set(doc(db, 'learningObjectives', code), { relatedMaterials: byTp.get(code) || [], updatedAt: serverTimestamp() }, { merge: true })
         })
         await batch.commit()
       }
@@ -225,70 +187,36 @@ export default function TujuanPembelajaran() {
   const saveTp = async () => {
     if (!editor) return
     const code = editor.code.trim()
-    if (!code || !editor.statement.trim()) {
-      setError('Kode dan rumusan wajib diisi.')
-      return
-    }
-    setSaving(true)
-    setError('')
+    if (!code || !editor.statement.trim()) { setError('Kode dan rumusan wajib diisi.'); return }
+    setSaving(true); setError('')
     try {
       const batch = writeBatch(db)
-      batch.set(
-        doc(db, 'learningObjectives', code),
-        {
-          code,
-          subjectKey: editor.subjectKey,
-          element: editor.element.trim(),
-          order: Number(editor.order) || 0,
-          statement: editor.statement.trim(),
-          weight: Number(editor.weight) || 1,
-          active: !!editor.active,
-          className: editor.className || '5A',
-          phase: editor.phase || 'C',
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      )
+      batch.set(doc(db, 'learningObjectives', code), {
+        code, subjectKey: editor.subjectKey, element: editor.element.trim(), order: Number(editor.order) || 0,
+        statement: editor.statement.trim(), weight: Number(editor.weight) || 1, active: !!editor.active,
+        className: editor.className || '5A', phase: editor.phase || 'C', updatedAt: serverTimestamp(),
+      }, { merge: true })
       await batch.commit()
-      setEditor(null)
-      setNotice(`TP ${code} disimpan.`)
-      await load()
-    } catch (e: any) {
-      setError(e?.message || 'Gagal menyimpan TP.')
-    } finally {
-      setSaving(false)
-    }
+      setEditor(null); setNotice(`TP ${code} disimpan.`); await load()
+    } catch (e: any) { setError(e?.message || 'Gagal menyimpan TP.') }
+    finally { setSaving(false) }
   }
 
   const saveMaterial = async () => {
     if (!materialEditor) return
-    if (!materialEditor.title.trim()) {
-      setError('Judul materi wajib diisi.')
-      return
-    }
-    setSaving(true)
-    setError('')
+    if (!materialEditor.title.trim()) { setError('Judul materi wajib diisi.'); return }
+    setSaving(true); setError('')
     try {
       const id = materialEditor.id || `${materialEditor.subjectKey}__${slug(materialEditor.title)}`
       const title = materialEditor.title.trim()
       const codes = [...new Set((materialEditor.suggestedTpCodes || []).map((c) => c.trim()).filter(Boolean))]
       const prev = materials.find((m) => m.id === id)
       const prevCodes = prev?.suggestedTpCodes || []
-
       const batch = writeBatch(db)
-      batch.set(
-        doc(db, 'bookMaterials', id),
-        {
-          subjectKey: materialEditor.subjectKey,
-          title,
-          summary: materialEditor.summary.trim(),
-          suggestedTpCodes: codes,
-          linkNote: materialEditor.linkNote || '',
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      )
-
+      batch.set(doc(db, 'bookMaterials', id), {
+        subjectKey: materialEditor.subjectKey, title, summary: materialEditor.summary.trim(),
+        suggestedTpCodes: codes, linkNote: materialEditor.linkNote || '', updatedAt: serverTimestamp(),
+      }, { merge: true })
       const affected = new Set([...prevCodes, ...codes])
       affected.forEach((code) => {
         const tp = tpByCode.get(code)
@@ -297,23 +225,12 @@ export default function TujuanPembelajaran() {
         let next = existing.filter((t) => t !== title && t !== prev?.title)
         if (shouldHave) next.push(title)
         next = [...new Set(next)]
-        batch.set(
-          doc(db, 'learningObjectives', code),
-          { relatedMaterials: next, updatedAt: serverTimestamp() },
-          { merge: true },
-        )
+        batch.set(doc(db, 'learningObjectives', code), { relatedMaterials: next, updatedAt: serverTimestamp() }, { merge: true })
       })
-
       await batch.commit()
-      setMaterialEditor(null)
-      setTpPickerQuery('')
-      setNotice('Materi disimpan dan tautan TP diperbarui.')
-      await load()
-    } catch (e: any) {
-      setError(e?.message || 'Gagal menyimpan materi.')
-    } finally {
-      setSaving(false)
-    }
+      setMaterialEditor(null); setTpPickerQuery(''); setNotice('Materi disimpan dan tautan TP diperbarui.'); await load()
+    } catch (e: any) { setError(e?.message || 'Gagal menyimpan materi.') }
+    finally { setSaving(false) }
   }
 
   const toggleTpCode = (code: string) => {
@@ -329,65 +246,29 @@ export default function TujuanPembelajaran() {
       subtitle="Master TP dan materi buku. Impor langsung tersimpan; ubah lewat Edit kapan saja."
       actions={
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() =>
-              tab === 'tp'
-                ? setEditor(emptyTp())
-                : setMaterialEditor({ subjectKey: 'ipas', title: '', summary: '', suggestedTpCodes: [] })
-            }
-            className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700"
-          >
-            Tambah
-          </button>
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={importing}
-            className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-60"
-          >
-            {importing ? 'Mengimpor...' : 'Impor JSON'}
-          </button>
+          <button type="button" onClick={() => tab === 'tp' ? setEditor(emptyTp()) : setMaterialEditor({ subjectKey: 'ipas', title: '', summary: '', suggestedTpCodes: [] })}
+            className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700">Tambah</button>
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={importing}
+            className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-60">{importing ? 'Mengimpor...' : 'Impor JSON'}</button>
         </div>
       }
     >
-      <input
-        ref={fileRef}
-        type="file"
-        accept="application/json,.json"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0]
-          if (file) importJson(file)
-        }}
-      />
-
+      <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) importJson(file) }} />
       {error && <div className="mb-4 rounded-xl bg-red-50 text-red-700 text-sm px-4 py-3">{error}</div>}
       {notice && <div className="mb-4 rounded-xl bg-emerald-50 text-emerald-700 text-sm px-4 py-3">{notice}</div>}
-
       <div className="bg-white rounded-2xl border border-gray-100 p-3 mb-4 flex flex-wrap gap-2">
         <FilterChip active={subjectFilter === 'semua'} onClick={() => setSubjectFilter('semua')} label={`Semua (${items.length})`} />
         {SUBJECTS.map((s) => (
-          <FilterChip
-            key={s.key}
-            active={subjectFilter === s.key}
-            onClick={() => setSubjectFilter(s.key)}
-            label={`${s.shortName} (${items.filter((t) => t.subjectKey === s.key).length})`}
-          />
+          <FilterChip key={s.key} active={subjectFilter === s.key} onClick={() => setSubjectFilter(s.key)}
+            label={`${s.shortName} (${items.filter((t) => t.subjectKey === s.key).length})`} />
         ))}
       </div>
-
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <TabButton active={tab === 'tp'} onClick={() => setTab('tp')} label="Tujuan Pembelajaran" />
         <TabButton active={tab === 'materi'} onClick={() => setTab('materi')} label="Materi buku" />
-        <input
-          value={queryText}
-          onChange={(e) => setQueryText(e.target.value)}
-          placeholder="Cari kode, rumusan, atau materi"
-          className="ml-auto w-full sm:w-72 rounded-xl border border-gray-200 px-3 py-2 text-sm"
-        />
+        <input value={queryText} onChange={(e) => setQueryText(e.target.value)} placeholder="Cari kode, rumusan, atau materi"
+          className="ml-auto w-full sm:w-72 rounded-xl border border-gray-200 px-3 py-2 text-sm" />
       </div>
-
       {loading ? (
         <p className="text-sm text-gray-500">Memuat...</p>
       ) : tab === 'tp' ? (
@@ -447,9 +328,7 @@ export default function TujuanPembelajaran() {
                     return (
                       <span key={code} className="text-xs px-2 py-1 rounded-lg bg-indigo-50 text-indigo-800 max-w-full" title={tp?.statement || code}>
                         <span className="font-semibold">{code}</span>
-                        {tp?.statement ? (
-                          <span className="text-indigo-600/80"> · {tp.statement.slice(0, 48)}{tp.statement.length > 48 ? '…' : ''}</span>
-                        ) : null}
+                        {tp?.statement ? <span className="text-indigo-600/80"> · {tp.statement.slice(0, 48)}{tp.statement.length > 48 ? '…' : ''}</span> : null}
                       </span>
                     )
                   })
@@ -463,33 +342,14 @@ export default function TujuanPembelajaran() {
       {editor && (
         <Modal title={editor.id ? `Edit ${editor.code}` : 'Tambah TP'} onClose={() => setEditor(null)}>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Kode">
-              <input value={editor.code} disabled={!!editor.id} onChange={(e) => setEditor({ ...editor, code: e.target.value.toUpperCase() })} className="field" />
-            </Field>
-            <Field label="Mapel">
-              <select value={editor.subjectKey} onChange={(e) => setEditor({ ...editor, subjectKey: e.target.value as SubjectKey })} className="field">
-                {SUBJECTS.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Elemen / tema">
-              <input value={editor.element} onChange={(e) => setEditor({ ...editor, element: e.target.value })} className="field" />
-            </Field>
-            <Field label="Urutan">
-              <input type="number" value={editor.order} onChange={(e) => setEditor({ ...editor, order: Number(e.target.value) })} className="field" />
-            </Field>
-            <Field label="Bobot nilai">
-              <input type="number" min={0} step={0.1} value={editor.weight} onChange={(e) => setEditor({ ...editor, weight: Number(e.target.value) })} className="field" />
-            </Field>
-            <Field label="Status">
-              <select value={editor.active ? 'ya' : 'tidak'} onChange={(e) => setEditor({ ...editor, active: e.target.value === 'ya' })} className="field">
-                <option value="ya">Aktif</option>
-                <option value="tidak">Nonaktif</option>
-              </select>
-            </Field>
+            <Field label="Kode"><input value={editor.code} disabled={!!editor.id} onChange={(e) => setEditor({ ...editor, code: e.target.value.toUpperCase() })} className="field" /></Field>
+            <Field label="Mapel"><select value={editor.subjectKey} onChange={(e) => setEditor({ ...editor, subjectKey: e.target.value as SubjectKey })} className="field">{SUBJECTS.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}</select></Field>
+            <Field label="Elemen / tema"><input value={editor.element} onChange={(e) => setEditor({ ...editor, element: e.target.value })} className="field" /></Field>
+            <Field label="Urutan"><input type="number" value={editor.order} onChange={(e) => setEditor({ ...editor, order: Number(e.target.value) })} className="field" /></Field>
+            <Field label="Bobot nilai"><input type="number" min={0} step={0.1} value={editor.weight} onChange={(e) => setEditor({ ...editor, weight: Number(e.target.value) })} className="field" /></Field>
+            <Field label="Status"><select value={editor.active ? 'ya' : 'tidak'} onChange={(e) => setEditor({ ...editor, active: e.target.value === 'ya' })} className="field"><option value="ya">Aktif</option><option value="tidak">Nonaktif</option></select></Field>
           </div>
-          <Field label="Rumusan">
-            <textarea value={editor.statement} onChange={(e) => setEditor({ ...editor, statement: e.target.value })} rows={4} className="field" />
-          </Field>
+          <Field label="Rumusan"><textarea value={editor.statement} onChange={(e) => setEditor({ ...editor, statement: e.target.value })} rows={4} className="field" /></Field>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={() => setEditor(null)} className="px-4 py-2 rounded-xl text-sm text-gray-600">Batal</button>
             <button type="button" onClick={saveTp} disabled={saving} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm disabled:opacity-60">{saving ? 'Menyimpan...' : 'Simpan'}</button>
@@ -498,13 +358,9 @@ export default function TujuanPembelajaran() {
       )}
 
       {materialEditor && (
-        <Modal title={materialEditor.id ? 'Edit materi' : 'Tambah materi buku'} onClose={() => { setMaterialEditor(null); setTpPickerQuery('') }}>
+        <Modal title={materialEditor.id ? 'Edit materi' : 'Tambah materi buku'} size="xl" onClose={() => { setMaterialEditor(null); setTpPickerQuery('') }}>
           <Field label="Mapel">
-            <select
-              value={materialEditor.subjectKey}
-              onChange={(e) => setMaterialEditor({ ...materialEditor, subjectKey: e.target.value as SubjectKey, suggestedTpCodes: [] })}
-              className="field"
-            >
+            <select value={materialEditor.subjectKey} onChange={(e) => setMaterialEditor({ ...materialEditor, subjectKey: e.target.value as SubjectKey, suggestedTpCodes: [] })} className="field">
               {SUBJECTS.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
             </select>
           </Field>
@@ -512,13 +368,9 @@ export default function TujuanPembelajaran() {
             <input value={materialEditor.title} onChange={(e) => setMaterialEditor({ ...materialEditor, title: e.target.value })} className="field" />
           </Field>
           <Field label="Ringkas isi (outline — baris baru tetap disimpan)">
-            <textarea
-              value={materialEditor.summary}
-              onChange={(e) => setMaterialEditor({ ...materialEditor, summary: e.target.value })}
-              rows={8}
-              placeholder={`Contoh:\nA. Sejarah lahirnya Pancasila\n1. Penjajahan Jepang\n2. Janji Kemerdekaan\n3. Sidang BPUPKI`}
-              className="field font-mono text-[13px] leading-relaxed"
-            />
+            <textarea value={materialEditor.summary} onChange={(e) => setMaterialEditor({ ...materialEditor, summary: e.target.value })}
+              rows={12} placeholder={`Contoh:\nA. Sejarah lahirnya Pancasila\n1. Penjajahan Jepang\n2. Janji Kemerdekaan\n3. Sidang BPUPKI`}
+              className="field font-mono text-[13px] leading-relaxed" />
             <p className="text-[11px] text-gray-400 mt-1">Struktur multi-baris dipertahankan dan dipakai sistem (mis. acuan generate soal AI).</p>
           </Field>
           <Field label="TP terkait">
@@ -535,7 +387,7 @@ export default function TujuanPembelajaran() {
               </div>
             )}
             <input value={tpPickerQuery} onChange={(e) => setTpPickerQuery(e.target.value)} placeholder="Cari kode atau rumusan TP…" className="field mb-2" />
-            <div className="max-h-48 overflow-y-auto rounded-xl border border-gray-200 divide-y divide-gray-50">
+            <div className="max-h-64 overflow-y-auto rounded-xl border border-gray-200 divide-y divide-gray-50">
               {tpOptionsForMaterial.length === 0 ? (
                 <p className="text-xs text-gray-400 px-3 py-3">Tidak ada TP aktif untuk mapel ini. Tambah/impor TP dulu, atau ubah pencarian.</p>
               ) : (
@@ -586,10 +438,21 @@ function Empty({ text }: { text: string }) {
   return <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center text-sm text-gray-500">{text}</div>
 }
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+function Modal({
+  title,
+  onClose,
+  children,
+  size = 'md',
+}: {
+  title: string
+  onClose: () => void
+  children: ReactNode
+  size?: 'md' | 'lg' | 'xl'
+}) {
+  const width = size === 'xl' ? 'sm:max-w-3xl' : size === 'lg' ? 'sm:max-w-2xl' : 'sm:max-w-lg'
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40">
-      <div className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[92vh] flex flex-col">
+      <div className={`bg-white w-full ${width} sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[94vh] flex flex-col`}>
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
           <h2 className="text-base font-semibold text-gray-900">{title}</h2>
           <button type="button" onClick={onClose} className="text-sm text-gray-400 hover:text-gray-700">Tutup</button>
