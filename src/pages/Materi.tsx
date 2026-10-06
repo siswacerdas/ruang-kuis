@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import StudentNav from '../components/StudentNav'
 import Layout from '../components/Layout'
 import { SUBJECTS, getSubject, type SubjectKey } from '../types/question'
