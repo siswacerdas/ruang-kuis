@@ -9,6 +9,15 @@ type Props = {
   showExport?: boolean
 }
 
+/**
+ * Materi interaktif = dokumen HTML lengkap (punya <html>/<script>), misalnya materi
+ * berhalaman dengan tombol navigasi. Harus dirender di <iframe> agar script berjalan
+ * dan CSS-nya tidak bocor ke aplikasi. Potongan HTML biasa tetap lewat jalur lama.
+ */
+export function isInteractiveHtml(html: string): boolean {
+  return /<!doctype html|<html[\s>]|<script[\s>]/i.test(html)
+}
+
 export default function LessonViewer({
   title,
   subjectName,
@@ -16,6 +25,8 @@ export default function LessonViewer({
   onClose,
   showExport = true,
 }: Props) {
+  const interactive = isInteractiveHtml(htmlContent)
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -45,7 +56,7 @@ export default function LessonViewer({
           <p className="text-[11px] text-slate-400 truncate">{subjectName} · Materi belajar mandiri</p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {showExport && (
+          {showExport && !interactive && (
             <button
               type="button"
               onClick={handleExport}
@@ -64,15 +75,26 @@ export default function LessonViewer({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-2 sm:px-4 pb-6">
-        <div className="mx-auto max-w-3xl bg-white rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden">
-          <div className="h-1.5 bg-gradient-to-r from-indigo-500 to-violet-500" />
-          <article
-            className="px-5 sm:px-10 py-6 sm:py-8 prose-lesson"
-            dangerouslySetInnerHTML={{ __html: htmlContent }}
+      {interactive ? (
+        <div className="flex-1 min-h-0 px-2 sm:px-4 pb-2 sm:pb-4 flex">
+          <iframe
+            title={title}
+            srcDoc={htmlContent}
+            sandbox="allow-scripts"
+            className="flex-1 min-h-0 w-full mx-auto max-w-3xl bg-white rounded-xl sm:rounded-2xl shadow-2xl border-0"
           />
         </div>
-      </div>
+      ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto px-2 sm:px-4 pb-6">
+          <div className="mx-auto max-w-3xl bg-white rounded-xl sm:rounded-2xl shadow-2xl overflow-hidden">
+            <div className="h-1.5 bg-gradient-to-r from-indigo-500 to-violet-500" />
+            <article
+              className="px-5 sm:px-10 py-6 sm:py-8 prose-lesson"
+              dangerouslySetInnerHTML={{ __html: htmlContent }}
+            />
+          </div>
+        </div>
+      )}
 
       <style>{`
         .prose-lesson h1 {
