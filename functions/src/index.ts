@@ -11,6 +11,9 @@ const db = getFirestore()
 const resendApiKey = defineSecret('RESEND_API_KEY')
 const FROM_EMAIL = process.env.FROM_EMAIL || 'Ruang Kuis <onboarding@resend.dev>'
 
+/** Batas karakter deskripsi TP di email (agar tidak terlalu panjang). */
+const TP_LABEL_MAX = 90
+
 interface AttemptData {
   latihanId?: string
   latihanTitle?: string
@@ -39,33 +42,88 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '"')
 }
 
-function buildTpRows(tpSummary?: Record<string, { correct: number; total: number }>): string {
+/** Potong deskripsi TP agar ringkas untuk orang tua. */
+function shortenStatement(text: string, max = TP_LABEL_MAX): string {
+  const t = text.replace(/\s+/g, ' ').trim()
+  if (t.length <= max) return t
+  const cut = t.slice(0, max)
+  const lastSpace = cut.lastIndexOf(' ')
+  return (lastSpace > 40 ? cut.slice(0, lastSpace) : cut).trim() + '…'
+}
+
+/**
+ * Ambil label TP dari learningObjectives/{code}.
+ * Format tampil: "kode — deskripsi singkat".
+ * Jika tidak ada di master → tampilkan kode saja.
+ */
+async function resolveTpLabels(
+  codes: string[]
+): Promise<Record<string, string>> {
+  const unique = [...new Set(codes.map((c) => c.trim()).filter(Boolean))]
+  const labels: Record<string, string> = {}
+  // Firestore getAll max ~100; TP per attempt biasanya sedikit
+  const refs = unique.map((code) => db.doc(`learningObjectives/${code}`))
+  if (refs.length === 0) return labels
+  try {
+    const snaps = await db.getAll(...refs)
+    snaps.forEach((snap, i) => {
+      const code = unique[i]
+      if (!snap.exists) {
+        labels[code] = code
+        return
+      }
+      const statement = String(snap.data()?.statement || '').trim()
+      if (!statement) {
+        labels[code] = code
+        return
+      }
+      labels[code] = `${code} — ${shortenStatement(statement)}`
+    })
+  } catch (err) {
+    logger.warn('Gagal memuat deskripsi TP', { error: String(err) })
+    unique.forEach((c) => {
+      labels[c] = c
+    })
+  }
+  return labels
+}
+
+function buildTpRows(
+  tpSummary: Record<string, { correct: number; total: number }> | undefined,
+  labels: Record<string, string>
+): string {
   if (!tpSummary || Object.keys(tpSummary).length === 0) return ''
   const rows = Object.entries(tpSummary)
     .map(([tp, v]) => {
       const pct = v.total ? Math.round((v.correct / v.total) * 100) : 0
+      const label = labels[tp] || tp
       return `<tr>
-        <td style="padding:6px 10px;border-bottom:1px solid #eee;">${escapeHtml(tp)}</td>
-        <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:center;">${v.correct}/${v.total}</td>
-        <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;">${pct}%</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #eee;font-size:12px;line-height:1.4;">${escapeHtml(label)}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;white-space:nowrap;">${v.correct}/${v.total}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:right;white-space:nowrap;">${pct}%</td>
       </tr>`
     })
     .join('')
   return `
     <h3 style="margin:20px 0 8px;font-size:14px;color:#374151;">Capaian per Tujuan Pembelajaran</h3>
+    <p style="margin:0 0 8px;font-size:12px;color:#6b7280;">Ringkasan kemampuan ananda pada tiap tujuan belajar.</p>
     <table style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead>
         <tr style="background:#f9fafb;text-align:left;">
-          <th style="padding:6px 10px;">TP</th>
-          <th style="padding:6px 10px;text-align:center;">Benar</th>
-          <th style="padding:6px 10px;text-align:right;">%</th>
+          <th style="padding:8px 10px;">Tujuan pembelajaran</th>
+          <th style="padding:8px 10px;text-align:center;">Benar</th>
+          <th style="padding:8px 10px;text-align:right;">%</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
     </table>`
 }
 
-function buildEmailHtml(data: AttemptData, isPractice: boolean): string {
+function buildEmailHtml(
+  data: AttemptData,
+  isPractice: boolean,
+  tpRowsHtml: string
+): string {
   const name = escapeHtml(data.studentName || 'Siswa')
   const title = escapeHtml(data.latihanTitle || data.title || 'Latihan')
   const score = data.score ?? 0
@@ -97,7 +155,7 @@ function buildEmailHtml(data: AttemptData, isPractice: boolean): string {
         <p style="margin:0;font-size:32px;font-weight:700;color:${scoreColor};">${percent}%</p>
         <p style="margin:4px 0 0;font-size:13px;color:${scoreColor};">${score} benar dari ${total} soal</p>
       </div>
-      ${buildTpRows(data.tpSummary)}
+      ${tpRowsHtml}
       <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;line-height:1.5;">
         Email ini dikirim otomatis oleh sistem Ruang Kuis setelah siswa menyelesaikan latihan.
         Jika Anda tidak mengharapkan email ini, hubungi guru kelas.
@@ -109,7 +167,7 @@ function buildEmailHtml(data: AttemptData, isPractice: boolean): string {
 }
 
 async function sendParentEmail(
-  snap: FirebaseFirestore.QueryDocumentSnapshot,
+  snap: FirebaseFirestore.DocumentSnapshot,
   data: AttemptData,
   attemptId: string,
   isPractice: boolean
@@ -142,11 +200,15 @@ async function sendParentEmail(
     return
   }
 
+  const tpCodes = Object.keys(data.tpSummary || {})
+  const labels = await resolveTpLabels(tpCodes)
+  const tpRowsHtml = buildTpRows(data.tpSummary, labels)
+
   const title = data.latihanTitle || data.title || 'Latihan'
   const prefix = isPractice ? 'Latihan mandiri' : 'Hasil kuis'
   const resend = new Resend(apiKey)
   const subject = `${prefix}: ${data.studentName || 'Siswa'} — ${title} (${data.percent ?? 0}%)`
-  const html = buildEmailHtml(data, isPractice)
+  const html = buildEmailHtml(data, isPractice, tpRowsHtml)
 
   try {
     const result = await resend.emails.send({
