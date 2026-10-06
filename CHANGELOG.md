@@ -8,6 +8,15 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Added — Notifikasi hasil kuis ke email orang tua
+- Field `parentEmail` pada data siswa (terpisah dari email login fiktif).
+- **Daftar Siswa**: kolom email ortu, tombol **Edit**, form edit (nama, panggilan, NISN, email ortu), tombol **Sinkron email ortu** (CSV cocokkan NISN/nama).
+- Cloud Function `onAttemptCreated` (region `asia-southeast2`): saat attempt baru, kirim ringkasan skor + capaian TP ke `parentEmail` lewat Resend.
+- Status pengiriman ditulis kembali ke dokumen attempt (`parentEmailStatus`, `parentEmailTo`, dll.).
+- Panduan setup: `docs/EMAIL_ORANG_TUA.md`.
+- Template import siswa menambah kolom `Email Orang Tua`.
+- File: `src/types/student.ts`, `src/pages/SiswaList.tsx`, `functions/**`, `firebase.json`, `docs/EMAIL_ORANG_TUA.md`, `docs/template_import_siswa.csv`.
+
 ### Changed — Chip filter mapel menampilkan satuan sesuai tab aktif
 - Tab **Tujuan Pembelajaran**: chip menampilkan jumlah **TP** (contoh: `AI (10 TP)`).
 - Tab **Materi buku**: chip menampilkan jumlah **materi** (contoh: `AI (3 materi)`).
