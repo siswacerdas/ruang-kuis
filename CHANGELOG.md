@@ -8,6 +8,12 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Changed — Chip filter mapel menampilkan satuan sesuai tab aktif
+- Tab **Tujuan Pembelajaran**: chip menampilkan jumlah **TP** (contoh: `AI (10 TP)`).
+- Tab **Materi buku**: chip menampilkan jumlah **materi** (contoh: `AI (3 materi)`).
+- Label kecil di atas chip menjelaskan arti angka agar tidak ambigu.
+- File: `src/pages/TujuanPembelajaran.tsx`.
+
 ### Fixed — TP mapel hilang/tercampur + jumlah chip tidak akurat (Tujuan Pembelajaran)
 - **Penyebab:** pengelompokan TP membandingkan `element` mentah (`''`) dengan label grup `'Umum'`, sehingga baris ber-element kosong membentuk **grup duplikat** dengan React key sama (`subjectKey-Umum`). React menggabungkan/menghilangkan baris → jumlah TP per mapel tidak cocok (mis. Al-Islam 10 → tampil 9) dan tampilan bisa terlihat “bercampur” antar mapel.
 - **Perbaikan:** normalisasi `element` ke `'Umum'` sebelum banding & simpan grup; key section memakai indeks unik; chip filter memakai hitungan per-mapel yang stabil (`tpCountBySubject` / `materialCountBySubject`); tab Materi menampilkan jumlah materi (bukan jumlah TP).
