@@ -171,7 +171,7 @@ export async function fetchLessonMaterials(): Promise<LessonPdf[]> {
 }
 
 export async function saveLessonMaterial(
-  material: Omit<LessonPdf, 'isStatic' | 'createdAt' | 'updatedAt'> & { id?: string }
+  material: Omit<LessonPdf, 'id' | 'isStatic' | 'createdAt' | 'updatedAt'> & { id?: string }
 ): Promise<string> {
   const isNew = !material.id
   const id = material.id || slugId(material.title, material.subjectKey)
