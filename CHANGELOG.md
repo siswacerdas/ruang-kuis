@@ -8,6 +8,17 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Fixed — TP mapel hilang/tercampur + jumlah chip tidak akurat (Tujuan Pembelajaran)
+- **Penyebab:** pengelompokan TP membandingkan `element` mentah (`''`) dengan label grup `'Umum'`, sehingga baris ber-element kosong membentuk **grup duplikat** dengan React key sama (`subjectKey-Umum`). React menggabungkan/menghilangkan baris → jumlah TP per mapel tidak cocok (mis. Al-Islam 10 → tampil 9) dan tampilan bisa terlihat “bercampur” antar mapel.
+- **Perbaikan:** normalisasi `element` ke `'Umum'` sebelum banding & simpan grup; key section memakai indeks unik; chip filter memakai hitungan per-mapel yang stabil (`tpCountBySubject` / `materialCountBySubject`); tab Materi menampilkan jumlah materi (bukan jumlah TP).
+- File: `src/pages/TujuanPembelajaran.tsx`.
+
+### Added — Hapus TP / materi buku (satu, terpilih, semua yang tampil)
+- Tombol **Hapus** per baris TP dan kartu materi; **Hapus TP/materi** di modal edit.
+- Centang + **Pilih semua yang tampil**, **Hapus terpilih**, **Hapus semua yang tampil** (menghormati filter mapel & pencarian; konfirmasi ganda jika ≥ 20 item).
+- Hapus TP melepas kode dari `suggestedTpCodes` materi terkait; hapus materi melepas judul dari `relatedMaterials` TP. Batch Firestore ≤ 400.
+- File: `src/pages/TujuanPembelajaran.tsx`.
+
 ### Fixed — Impor siswa berhenti jika "Nama Panggilan" kosong (Siswa → Import CSV/Excel)
 - **Penyebab:** baris tanpa nama panggilan dikirim ke Firestore dengan `nickname: undefined`, yang ditolak (`Unsupported field value: undefined`). Impor berhenti di baris itu, baris sesudahnya tidak masuk, daftar tidak dimuat ulang, dan pesan yang tampil menyesatkan ("Gagal membaca file").
 - **Perbaikan:** field `nickname` hanya disertakan bila terisi. Satu baris yang gagal tidak lagi menghentikan baris lain; ringkasan menyebut baris data yang gagal beserta penyebabnya, dan daftar selalu dimuat ulang. Impor ulang aman (siswa yang sudah ada dilewati berdasarkan email).
@@ -40,7 +51,7 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 - Tombol **✨ Buat gambar dengan AI** di bawah field *Gambar stimulus* (muncul saat soal belum punya gambar; setelah jadi berubah menjadi **↻ Buat ulang**). Hanya membuat gambar, tidak mengubah isi soal.
 - Prompt gambar ditulis AI dari pertanyaan, opsi, kunci (hanya agar konsisten, tidak digambar), dan stimulus teks; ada kolom arahan opsional dari guru.
 - Memakai ulang `generateOpenAiImage` (model & aturan "tanpa teks/jawaban" yang sama dengan generate soal).
-- Hasil otomatis dikonversi di browser ke JPEG kecil (maks 800 px, ±150 KB) lewat `src/lib/imageCompress.ts`.
+- Hasil otomatis dikonversi di browser ke JPEG kecil (maks 800 px, ≈150 KB) lewat `src/lib/imageCompress.ts`.
 - File: `src/lib/openaiQuestions.ts` (`generateStimulusImage`), `src/lib/imageCompress.ts` (baru), `src/pages/TopicQuestions.tsx`.
 
 ### Added — Progress per studentId + riwayat siswa

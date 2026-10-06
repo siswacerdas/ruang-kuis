@@ -27,6 +27,7 @@ Referensi pola: tka2026 (stimulus, tiga tipe soal, preview, gate token/waktu).
 | UI kuis siswa | `KerjakanQuiz.tsx` |
 | Paket latihan | `LatihanForm.tsx`, `latihan` |
 | Penilaian | `gradeAnswer`, `attempts` |
+| Tujuan Pembelajaran | `TujuanPembelajaran.tsx`, `learningObjectives`, `bookMaterials` |
 
 ---
 
@@ -91,4 +92,17 @@ Referensi pola: tka2026 (stimulus, tiga tipe soal, preview, gate token/waktu).
 
 ---
 
-*Update terakhir: 2026-10-04 — stimulus rich text, preview daftar, kompres gambar, fix import koma, hide list saat edit*
+## 7. Tujuan Pembelajaran & materi buku (`TujuanPembelajaran.tsx`)
+
+- [ ] Chip filter mapel: angka = jumlah TP (tab TP) / materi (tab Materi) **per mapel**, cocok dengan data
+- [ ] Filter satu mapel (mis. Al-Islam): hanya TP mapel itu; tidak bercampur dengan mapel lain
+- [ ] Element kosong digabung ke grup **Umum** tanpa menghilangkan baris (tidak ada key React bentrok)
+- [ ] CRUD: tambah / edit / simpan TP & materi buku
+- [ ] **Hapus** satu TP / satu materi (daftar + modal); konfirmasi; tautan TP↔materi ikut dibersihkan
+- [ ] Centang → **Hapus terpilih**; **Hapus semua yang tampil** (ikut filter); konfirmasi
+- [ ] Impor JSON & ekspor JSON/CSV tetap jalan
+- [ ] Setelah hapus massal, chip & daftar memuat ulang dengan jumlah benar
+
+---
+
+*Update terakhir: 2026-10-06 — fix grup TP (element/Umum), hapus massal TP & materi buku*
