@@ -14,6 +14,9 @@ import { db } from './firebase'
 /** drive = PDF Google Drive; presentation = slide AI lama; html-lesson = materi belajar mandiri HTML */
 export type LessonMaterialKind = 'drive' | 'presentation' | 'html-lesson'
 
+/** draft = hanya admin; published = tampil ke siswa. Data lama tanpa field = published. */
+export type LessonMaterialStatus = 'draft' | 'published'
+
 export interface LessonPdf {
   id: string
   subjectKey: SubjectKey
@@ -35,6 +38,9 @@ export interface LessonPdf {
   /** Outline sumber generate AI */
   outline?: string
   generatedBy?: string
+  /** draft | published. Undefined / data lama = published */
+  status?: LessonMaterialStatus
+  publishedAt?: Timestamp | null
   createdAt?: Timestamp | null
   updatedAt?: Timestamp | null
 }
@@ -51,6 +57,12 @@ export function isAiMaterial(m: Pick<LessonPdf, 'kind' | 'slides' | 'htmlContent
   return isPresentation(m) || isHtmlLesson(m)
 }
 
+/** Materi terlihat siswa: status published, atau field status belum ada (data lama). */
+export function isPublished(m: Pick<LessonPdf, 'status' | 'isStatic'>): boolean {
+  if (m.isStatic) return true
+  return m.status !== 'draft'
+}
+
 /** Katalog presentasi dari folder Drive Pustaka Belajar (siapa pun yang punya tautan). */
 export const PUSTAKA_FOLDER_ID = '15Gv1apEOBeyhbwFeVyjovr_Dm7mOPtvm'
 
@@ -64,6 +76,7 @@ export const LESSON_PDFS: LessonPdf[] = [
     sizeBytes: 4870060,
     driveFileId: '1fHRDxuZQn67A0TjD8I8WuNmEyA43oUsG',
     isStatic: true,
+    status: 'published',
   },
   {
     id: 'bin-mendeskripsikan',
@@ -73,6 +86,7 @@ export const LESSON_PDFS: LessonPdf[] = [
     sizeBytes: 4202695,
     driveFileId: '1TONyTPbbrjSDQMVWuRVZe8CgMzeZatjK',
     isStatic: true,
+    status: 'published',
   },
   {
     id: 'bin-sebab-akibat',
@@ -82,6 +96,7 @@ export const LESSON_PDFS: LessonPdf[] = [
     sizeBytes: 5887134,
     driveFileId: '1ILKJ0-TzuSwkSJtOBQeOBTnxmjnzByPU',
     isStatic: true,
+    status: 'published',
   },
   {
     id: 'ipas-aliran-energi',
@@ -91,6 +106,7 @@ export const LESSON_PDFS: LessonPdf[] = [
     sizeBytes: 2733225,
     driveFileId: '1pujAGE3sMa9Vi6D_sb8q5IGQyjrYADmU',
     isStatic: true,
+    status: 'published',
   },
   {
     id: 'ipas-ekosistem',
@@ -100,6 +116,7 @@ export const LESSON_PDFS: LessonPdf[] = [
     sizeBytes: 6537031,
     driveFileId: '1VU33aMhOxGHdqReHtnFKLxX1DLCxXuLG',
     isStatic: true,
+    status: 'published',
   },
   {
     id: 'ipas-perubahan-alam',
@@ -109,6 +126,7 @@ export const LESSON_PDFS: LessonPdf[] = [
     sizeBytes: 5261555,
     driveFileId: '19hcOi6wibY5qXTwsoltC6j9GqCRoD8UP',
     isStatic: true,
+    status: 'published',
   },
   {
     id: 'pp-nilai-norma',
@@ -118,6 +136,7 @@ export const LESSON_PDFS: LessonPdf[] = [
     sizeBytes: 3497473,
     driveFileId: '1TDNlemN_nA9gTeMiQ3lYI5gnGCg9sUlv',
     isStatic: true,
+    status: 'published',
   },
   {
     id: 'rupa-garis-tekstur',
@@ -127,6 +146,7 @@ export const LESSON_PDFS: LessonPdf[] = [
     sizeBytes: 3170511,
     driveFileId: '1XgGkQEkhTxYCUEoxC8OECB3Ct1LZeuhZ',
     isStatic: true,
+    status: 'published',
   },
 ]
 
@@ -175,7 +195,7 @@ export function slugId(title: string, subjectKey: string): string {
 }
 
 function staticSeed(): LessonPdf[] {
-  return LESSON_PDFS.map((p) => ({ ...p, isStatic: true }))
+  return LESSON_PDFS.map((p) => ({ ...p, isStatic: true, status: 'published' as const }))
 }
 
 /**
@@ -197,16 +217,27 @@ export function stripUndefined<T>(value: T): T {
   return value
 }
 
+function parseStatus(raw: unknown): LessonMaterialStatus {
+  return raw === 'draft' ? 'draft' : 'published'
+}
+
 /**
  * Ambil katalog dari Firestore.
  * Jika koleksi kosong / rules belum di-deploy (permission-denied),
  * jatuh ke seed statis agar materi tetap tampil.
+ *
+ * @param audience 'admin' = semua; 'student' = hanya published
  */
-export async function fetchLessonMaterials(): Promise<LessonPdf[]> {
+export async function fetchLessonMaterials(
+  audience: 'admin' | 'student' = 'admin'
+): Promise<LessonPdf[]> {
   try {
     const snap = await getDocs(collection(db, 'lessonMaterials'))
-    if (snap.empty) return staticSeed()
-    return snap.docs
+    if (snap.empty) {
+      const seed = staticSeed()
+      return audience === 'student' ? seed.filter(isPublished) : seed
+    }
+    const list = snap.docs
       .map((d) => {
         const data = d.data()
         let kind: LessonMaterialKind = 'drive'
@@ -230,6 +261,8 @@ export async function fetchLessonMaterials(): Promise<LessonPdf[]> {
           sectionsCount: data.sectionsCount != null ? Number(data.sectionsCount) : undefined,
           outline: data.outline ? String(data.outline) : undefined,
           generatedBy: data.generatedBy ? String(data.generatedBy) : undefined,
+          status: parseStatus(data.status),
+          publishedAt: data.publishedAt ?? null,
           isStatic: false,
           createdAt: data.createdAt ?? null,
           updatedAt: data.updatedAt ?? null,
@@ -237,19 +270,29 @@ export async function fetchLessonMaterials(): Promise<LessonPdf[]> {
       })
       .filter((p) => p.title && (p.driveFileId || isPresentation(p) || isHtmlLesson(p)))
       .sort((a, b) => a.subjectKey.localeCompare(b.subjectKey) || a.title.localeCompare(b.title, 'id'))
+
+    if (audience === 'student') {
+      return list.filter(isPublished)
+    }
+    return list
   } catch (e: unknown) {
     const code = (e as { code?: string })?.code || ''
     const msg = String((e as { message?: string })?.message || e)
     if (code === 'permission-denied' || /insufficient permissions|permission-denied/i.test(msg)) {
       console.warn('[lessonMaterials] Firestore permission denied — memakai seed lokal. Deploy firestore.rules.')
-      return staticSeed()
+      const seed = staticSeed()
+      return audience === 'student' ? seed.filter(isPublished) : seed
     }
     throw e
   }
 }
 
 export async function saveLessonMaterial(
-  material: Omit<LessonPdf, 'id' | 'isStatic' | 'createdAt' | 'updatedAt'> & { id?: string }
+  material: Omit<LessonPdf, 'id' | 'isStatic' | 'createdAt' | 'updatedAt' | 'publishedAt'> & {
+    id?: string
+    /** Default: draft untuk materi baru; edit tanpa status = pertahankan di Firestore */
+    status?: LessonMaterialStatus
+  }
 ): Promise<string> {
   const isNew = !material.id
   const id = material.id || slugId(material.title, material.subjectKey)
@@ -267,8 +310,16 @@ export async function saveLessonMaterial(
     throw new Error('Presentasi AI harus memiliki minimal satu slide.')
   }
   if (kind === 'html-lesson' && !material.htmlContent?.trim()) {
-    throw new Error('Materi belajar AI harus memiliki konten HTML.')
+    throw new Error('Materi HTML harus memiliki konten.')
   }
+
+  // Materi baru default draft. Edit tanpa status eksplisit: jangan timpa status yang ada.
+  const status: LessonMaterialStatus | undefined =
+    material.status !== undefined
+      ? material.status
+      : isNew
+        ? 'draft'
+        : undefined
 
   const payload: Record<string, unknown> = {
     subjectKey: material.subjectKey,
@@ -279,8 +330,13 @@ export async function saveLessonMaterial(
     kind,
     updatedAt: serverTimestamp(),
   }
+  if (status !== undefined) {
+    payload.status = status
+    if (status === 'published') {
+      payload.publishedAt = serverTimestamp()
+    }
+  }
   if (kind === 'presentation') {
-    // Firestore menolak undefined di nested slides — bersihkan dulu
     payload.slides = stripUndefined(material.slides)
     if (material.outline?.trim()) payload.outline = material.outline.trim()
     if (material.generatedBy) payload.generatedBy = material.generatedBy
@@ -296,6 +352,21 @@ export async function saveLessonMaterial(
   const clean = stripUndefined(payload)
   await setDoc(doc(db, 'lessonMaterials', id), clean, { merge: true })
   return id
+}
+
+/** Ubah status publish tanpa mengubah konten lain. */
+export async function setLessonMaterialStatus(
+  id: string,
+  status: LessonMaterialStatus
+): Promise<void> {
+  const payload: Record<string, unknown> = {
+    status,
+    updatedAt: serverTimestamp(),
+  }
+  if (status === 'published') {
+    payload.publishedAt = serverTimestamp()
+  }
+  await setDoc(doc(db, 'lessonMaterials', id), payload, { merge: true })
 }
 
 export async function deleteLessonMaterial(id: string): Promise<void> {
@@ -315,6 +386,8 @@ export async function seedLessonMaterialsFromStatic(): Promise<number> {
         sizeBytes: p.sizeBytes,
         driveFileId: p.driveFileId,
         kind: 'drive',
+        status: 'published',
+        publishedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
       },
