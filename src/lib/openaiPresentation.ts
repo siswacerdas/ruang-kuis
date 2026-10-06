@@ -1,6 +1,6 @@
 /**
  * Generate presentasi materi pelajaran via OpenAI.
- * Target kualitas: mendekati presentasi pengayaan IPAS (padat, terstruktur, multi-kartu, contoh konkret).
+ * Target kualitas: densitas visual (kartu/alur/contoh), bukan dinding teks atau slide kosong.
  *
  * Tidak mengubah alur generate soal (openaiQuestions.ts).
  */
@@ -32,21 +32,13 @@ export interface PresentationSlide {
   id: string
   layout: SlideLayout
   title: string
-  /** Definisi / pengantar (boleh 2–5 kalimat) */
   body?: string
-  /** Poin utama — boleh 4–8 poin, tiap poin cukup informatif */
   bullets?: string[]
-  /** Kartu multi-kolom (individu/populasi, jenis ekosistem, dll.) */
   cards?: SlideCard[]
-  /** Contoh konkret (makhluk hidup, situasi) */
   examples?: string[]
-  /** Alur langkah berurutan */
   flow?: string[]
-  /** Fakta menarik / "Tahukah kamu?" */
   callout?: string
-  /** Instruksi aktivitas kelas */
   activity?: string
-  /** Kalimat penutup slide (pesan kunci di footer) */
   footer?: string
   imageCaption?: string
   imageUrl?: string
@@ -74,15 +66,19 @@ export type GeneratePresentationResult = {
 }
 
 const SYSTEM_PROMPT = `Kamu adalah desainer presentasi pembelajaran IPAS/mapel SD kelas 5 Indonesia (Kurikulum Merdeka).
-Target kualitas: presentasi pengayaan yang PADAT, TERSTRUKTUR, dan MENARIK — BUKAN slide kosong 1–3 kalimat.
+Target: presentasi yang PADAT secara VISUAL (kartu, poin bernomor, alur, contoh) — bukan slide kosong dan bukan dinding teks.
 
-## STANDAR KUALITAS (wajib)
-Setiap slide konten HARUS terasa "penuh" seperti infografis buku ajar:
-- Ada definisi/pengantar singkat (body 2–4 kalimat, bahasa ramah anak SD).
-- Ada struktur jelas: nomor, kartu, daftar, atau alur.
-- Ada CONTOH konkret (nama makhluk hidup, tempat, situasi sehari-hari Indonesia bila relevan).
-- Ada 1 kalimat footer/pesan kunci di akhir slide bila cocok.
-- JANGAN slide yang hanya judul + 1 kalimat. Itu dianggap GAGAL.
+## STANDAR KUALITAS (wajib) — densitas VISUAL, bukan dinding teks
+Setiap slide konten HARUS terasa "penuh" seperti infografis, TANPA paragraf panjang:
+- body: 1–2 kalimat definisi saja (maks ~40 kata). Jangan esai.
+- WAJIB isi ruang dengan STRUKTUR: cards (2–4 kolom) ATAU bullets 4–6 poin ATAU flow + examples.
+- Setiap bullet 8–16 kata (informatif, bukan fragmen 2–3 kata).
+- cards: tiap kartu punya title + 1 kalimat body ATAU 2 bullets contoh.
+- examples: 3–5 contoh konkret singkat.
+- footer: 1 kalimat pesan kunci.
+- LARANGAN: slide hanya judul + 1 kalimat body (terasa kosong).
+- LARANGAN: body > 3 kalimat / dinding teks (berat dibaca anak SD).
+- Keseimbangan ideal: ~30% teks definisi + ~70% struktur visual (kartu/poin/alur/contoh).
 
 ## Format output
 Balas HANYA JSON valid (tanpa markdown):
@@ -92,105 +88,84 @@ Setiap slide:
 - id: string unik (s1, s2, ...)
 - layout: "title" | "section" | "content" | "bullets" | "cards" | "compare" | "image-focus" | "quote" | "summary" | "activity" | "assessment"
 - title: string menarik (maks ~10 kata)
-- body: string opsional — definisi/pengantar 2–4 kalimat (boleh sampai ~120 kata)
-- bullets: string[] — 4–8 poin INFORMAL; tiap poin boleh 8–20 kata (bukan fragmen 3 kata)
-- cards: [{title, body?, bullets?, badge?}] — 2–4 kartu sejajar (untuk membandingkan konsep, jenis, contoh)
-- examples: string[] — 2–6 contoh konkret
-- flow: string[] — 3–6 langkah berurutan (Individu→Populasi→Komunitas, dll.)
-- callout: string — 1 kalimat fakta menarik / "Tahukah kamu?"
-- activity: string — instruksi aktivitas (untuk layout activity)
-- footer: string — 1 kalimat penutup slide (pesan kunci)
-- imagePrompt: string|null — prompt Inggris ilustrasi HANYA jika needsImage true
-- needsImage: boolean — true maks 4 slide (title, section penting, image-focus)
+- body: string opsional — 1–2 kalimat definisi (maks ~40 kata)
+- bullets: string[] — 4–6 poin; tiap poin 8–16 kata
+- cards: [{title, body?, bullets?, badge?}] — 2–4 kartu sejajar
+- examples: string[] — 3–5 contoh konkret
+- flow: string[] — 3–6 langkah berurutan
+- callout: string — 1 kalimat fakta menarik
+- activity: string — instruksi aktivitas
+- footer: string — 1 kalimat penutup
+- imagePrompt: string|null — prompt Inggris HANYA jika needsImage true
+- needsImage: boolean — true maks 4 slide
 
 ## Struktur presentasi wajib
-1. Slide 1: layout "title" — judul + 1–2 kalimat ajakan + callout singkat.
-2. Slide 2: layout "section" atau "bullets" — tujuan pembelajaran (5–7 tujuan konkret).
-3. Isi materi: gunakan "cards" / "compare" / "content" / "bullets" bergantian.
-   - Konsep hierarki → cards atau flow
-   - Jenis/perbandingan → cards atau compare (2 kolom via cards)
-   - Ciri + contoh → cards (tiap kartu: nama, ciri, contoh)
-4. Minimal 1 slide "activity" (langkah Amati–Bertanya–Diskusi atau sejenis).
-5. Akhiri dengan "summary" (poin inti padat) lalu opsional "quote"/refleksi.
-6. Jumlah slide: ikuti target user (±2). Materi kaya → lebih banyak slide, JANGAN memadatkan semua jadi 6 slide kosong.
+1. Slide 1: "title" — judul + 1 kalimat ajakan + callout.
+2. Slide 2: "bullets" atau "section" — 5–7 tujuan pembelajaran (poin sedang, bukan kalimat panjang).
+3. Isi: prefer "cards" / "compare" / "bullets" bergantian.
+4. Minimal 1 slide "activity".
+5. Akhiri "summary" + opsional "quote".
+6. Target slide user (±2). Jangan slide tipis.
 
 ## Aturan konten
-- Akurat untuk SD kelas 5; contoh Indonesia (hutan tropis, sungai, sawah, laut) bila relevan.
-- Bahasa hangat, boleh pertanyaan retoris, hindari formal kaku.
-- Satu tema utama per slide, tetapi TEMA itu diuraikan lengkap (definisi + contoh + ciri).
-- Prefer layout "cards" untuk 2–4 konsep sejajar — ini yang membuat slide terasa penuh.
-- bullets JANGAN terlalu pendek ("Kelinci", "Pohon") — tulis "Seekor kelinci = individu", "Kumpulan ikan nila di kolam = populasi".
-- imagePrompt (English): colorful children's educational illustration, Indonesian elementary context, no text overlays.
+- Akurat SD kelas 5; contoh Indonesia bila relevan.
+- Bahasa hangat, bukan formal kaku.
+- Prefer cards untuk 2–4 konsep sejajar.
+- bullets: "Seekor kelinci = individu", bukan hanya "Kelinci".
+- imagePrompt (English): colorful children's educational illustration, no text overlays.
 
-## Contoh densitas yang BENAR (ikuti roh ini)
-Slide "Individu, Populasi, Komunitas":
-- body: definisi singkat ekosistem tersusun dari makhluk hidup yang berhubungan
-- cards: 3 kartu (Individu / Populasi / Komunitas) masing-masing body + 2 contoh
+## Contoh densitas BENAR
+Slide konsep hierarki:
+- body: satu kalimat definisi singkat
+- cards: 3 kartu (Individu / Populasi / Komunitas) + contoh di tiap kartu
 - flow: Individu → Populasi → Komunitas → Ekosistem
-- footer: "Dari individu hingga ekosistem, semuanya saling terhubung."
+- footer: satu kalimat kunci
 
-Slide kosong (HANYA title + 1 kalimat body) = DILARANG.`
+Slide kosong ATAU dinding teks = DILARANG.`
 
 function buildUserPrompt(opts: GeneratePresentationOptions): string {
   const style = opts.style || 'interaktif'
   const target = Math.max(8, Math.min(opts.targetSlides || 14, 22))
   const styleInstr =
     style === 'ringkas'
-      ? 'Gaya RINGKAS: tetap padat informasi, kurangi dekorasi verbal, fokus definisi+contoh+bullets.'
+      ? 'Gaya RINGKAS: padat struktur (kartu/poin), minim narasi.'
       : style === 'cerita'
-        ? 'Gaya CERITA: alur naratif, contoh kisah singkat, transisi lembut antar slide, tetap padat fakta.'
-        : 'Gaya INTERAKTIF: pertanyaan ke siswa, callout "Tahukah kamu?", minimal 1 slide activity, tetap padat materi.'
+        ? 'Gaya CERITA: alur lembut, tetap pakai kartu/contoh, bukan paragraf panjang.'
+        : 'Gaya INTERAKTIF: callout + activity, konten utama via kartu/poin bernomor.'
 
   return [
     `Mapel: ${opts.subjectName} (${opts.subjectKey})`,
     `Judul presentasi: ${opts.title}`,
-    `Target sekitar ${target} slide (boleh ±2). Prioritas: KEPADATAN + KEJELASAN, bukan slide tipis.`,
+    `Target sekitar ${target} slide (±2). Prioritas: densitas visual (kartu/poin/alur), bukan teks panjang.`,
     styleInstr,
     '',
-    'Outline materi (hormati struktur; baris dengan "- " adalah sub-materi):',
+    'Outline materi (baris "- " = sub-materi):',
     opts.outline.trim(),
     '',
     opts.extraContext?.trim() ? `Catatan guru: ${opts.extraContext.trim()}` : '',
-    'Buat presentasi siap pakai guru di kelas (~30–45 menit). Setiap slide konten harus terasa penuh (definisi + struktur + contoh).',
+    'Setiap slide konten: 1–2 kalimat definisi + struktur visual (cards/bullets/flow/examples). Siap pakai di kelas ~30–45 menit.',
   ]
     .filter((l) => l !== undefined && l !== '')
     .join('\n')
 }
 
 const VALID_LAYOUTS = new Set<SlideLayout>([
-  'title',
-  'section',
-  'content',
-  'bullets',
-  'cards',
-  'compare',
-  'image-focus',
-  'quote',
-  'summary',
-  'activity',
-  'assessment',
+  'title', 'section', 'content', 'bullets', 'cards', 'compare',
+  'image-focus', 'quote', 'summary', 'activity', 'assessment',
 ])
 
 function normalizeCard(raw: any): SlideCard | null {
   if (!raw || typeof raw !== 'object') return null
   const title = String(raw.title || '').trim()
   if (!title) return null
-  let bullets: string[] | undefined
+  const card: SlideCard = { title: title.slice(0, 60) }
   if (Array.isArray(raw.bullets)) {
-    const list = raw.bullets
-      .map((b: unknown) => String(b ?? '').trim())
-      .filter(Boolean)
-      .slice(0, 6) as string[]
-    bullets = list.length ? list : undefined
+    const list = raw.bullets.map((b: unknown) => String(b ?? '').trim()).filter(Boolean).slice(0, 6) as string[]
+    if (list.length) card.bullets = list
   }
-  const body = raw.body ? String(raw.body).trim().slice(0, 400) : undefined
-  const badge = raw.badge ? String(raw.badge).trim().slice(0, 40) : undefined
-  return {
-    title: title.slice(0, 60),
-    body: body || undefined,
-    bullets,
-    badge: badge || undefined,
-  }
+  if (raw.body) card.body = String(raw.body).trim().slice(0, 400)
+  if (raw.badge) card.badge = String(raw.badge).trim().slice(0, 40)
+  return card
 }
 
 function normalizeSlide(raw: any, index: number): PresentationSlide | null {
@@ -202,60 +177,51 @@ function normalizeSlide(raw: any, index: number): PresentationSlide | null {
 
   let bullets: string[] | undefined
   if (Array.isArray(raw.bullets)) {
-    const list = raw.bullets
-      .map((b: unknown) => String(b ?? '').trim())
-      .filter(Boolean)
-      .slice(0, 10) as string[]
-    bullets = list.length === 0 ? undefined : list
+    const list = raw.bullets.map((b: unknown) => String(b ?? '').trim()).filter(Boolean).slice(0, 10) as string[]
+    if (list.length) bullets = list
   }
 
   let cards: SlideCard[] | undefined
   if (Array.isArray(raw.cards)) {
     const list = raw.cards.map(normalizeCard).filter(Boolean) as SlideCard[]
-    cards = list.length ? list.slice(0, 4) : undefined
+    if (list.length) cards = list.slice(0, 4)
   }
 
   let examples: string[] | undefined
   if (Array.isArray(raw.examples)) {
-    const list = raw.examples
-      .map((e: unknown) => String(e ?? '').trim())
-      .filter(Boolean)
-      .slice(0, 8) as string[]
-    examples = list.length ? list : undefined
+    const list = raw.examples.map((e: unknown) => String(e ?? '').trim()).filter(Boolean).slice(0, 8) as string[]
+    if (list.length) examples = list
   }
 
   let flow: string[] | undefined
   if (Array.isArray(raw.flow)) {
-    const list = raw.flow
-      .map((f: unknown) => String(f ?? '').trim())
-      .filter(Boolean)
-      .slice(0, 8) as string[]
-    flow = list.length ? list : undefined
+    const list = raw.flow.map((f: unknown) => String(f ?? '').trim()).filter(Boolean).slice(0, 8) as string[]
+    if (list.length) flow = list
   }
 
-  const body = raw.body ? String(raw.body).trim().slice(0, 900) : undefined
-  const callout = raw.callout ? String(raw.callout).trim().slice(0, 280) : undefined
-  const activity = raw.activity ? String(raw.activity).trim().slice(0, 320) : undefined
-  const footer = raw.footer ? String(raw.footer).trim().slice(0, 220) : undefined
-  const imagePrompt = raw.imagePrompt ? String(raw.imagePrompt).trim().slice(0, 500) : undefined
-  const needsImage =
-    Boolean(raw.needsImage) || layout === 'image-focus' || layout === 'title'
+  const body = raw.body ? String(raw.body).trim().slice(0, 500) : ''
+  const callout = raw.callout ? String(raw.callout).trim().slice(0, 280) : ''
+  const activity = raw.activity ? String(raw.activity).trim().slice(0, 320) : ''
+  const footer = raw.footer ? String(raw.footer).trim().slice(0, 220) : ''
+  const imagePrompt = raw.imagePrompt ? String(raw.imagePrompt).trim().slice(0, 500) : ''
+  const needsImage = Boolean(raw.needsImage) || layout === 'image-focus' || layout === 'title'
 
-  return {
+  const slide: PresentationSlide = {
     id: String(raw.id || `s${index + 1}`).slice(0, 24),
     layout,
     title: title.slice(0, 100),
-    body: body || undefined,
-    bullets,
-    cards,
-    examples,
-    flow,
-    callout: callout || undefined,
-    activity: activity || undefined,
-    footer: footer || undefined,
-    imagePrompt: needsImage ? imagePrompt || undefined : undefined,
     needsImage,
   }
+  if (body) slide.body = body
+  if (bullets) slide.bullets = bullets
+  if (cards) slide.cards = cards
+  if (examples) slide.examples = examples
+  if (flow) slide.flow = flow
+  if (callout) slide.callout = callout
+  if (activity) slide.activity = activity
+  if (footer) slide.footer = footer
+  if (needsImage && imagePrompt) slide.imagePrompt = imagePrompt
+  return slide
 }
 
 function resolveImageModel(): string {
@@ -368,7 +334,9 @@ export async function generatePresentationWithOpenAI(
       imageSlots += 1
       return s
     }
-    return { ...s, needsImage: false, imagePrompt: s.needsImage ? undefined : s.imagePrompt }
+    const next = { ...s, needsImage: false }
+    if (s.needsImage) delete next.imagePrompt
+    return next
   })
   const imageWarnings: string[] = []
   if (opts.generateImages) {
