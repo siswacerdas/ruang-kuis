@@ -30,6 +30,41 @@ type StudentTpCell = {
   contributions: TpContribution[]
 }
 
+/**
+ * Urutan alami kode TP: BIN-7.1 < BIN-8.1 < BIN-10.1
+ * (bukan lexicographic: BIN-10 jangan mendahului BIN-7).
+ */
+function compareTpCodes(a: string, b: string): number {
+  const tokenize = (s: string): (string | number)[] => {
+    const parts: (string | number)[] = []
+    const re = /(\
+\d+)|([^\d]+)/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(s))) {
+      if (m[1] != null) parts.push(parseInt(m[1], 10))
+      else if (m[2] != null) parts.push(m[2].toLowerCase())
+    }
+    return parts
+  }
+  const pa = tokenize(a || '')
+  const pb = tokenize(b || '')
+  const n = Math.max(pa.length, pb.length)
+  for (let i = 0; i < n; i++) {
+    const x = pa[i]
+    const y = pb[i]
+    if (x === undefined) return -1
+    if (y === undefined) return 1
+    if (typeof x === 'number' && typeof y === 'number') {
+      if (x !== y) return x - y
+    } else {
+      const sx = String(x)
+      const sy = String(y)
+      if (sx !== sy) return sx.localeCompare(sy, 'id')
+    }
+  }
+  return 0
+}
+
 function scoreColor(pct: number | null): string {
   if (pct == null) return 'text-gray-300'
   if (pct >= 85) return 'text-emerald-600'
@@ -174,7 +209,7 @@ export default function RekapNilai() {
   const subjectTps = useMemo(() => {
     return tps
       .filter((t) => t.subjectKey === subjectKey)
-      .sort((a, b) => (a.code || '').localeCompare(b.code || '', 'id'))
+      .sort((a, b) => compareTpCodes(a.code || '', b.code || ''))
   }, [tps, subjectKey])
 
   const tpCodesInData = useMemo(() => {
@@ -203,7 +238,9 @@ export default function RekapNilai() {
             active: true,
           }) as LearningObjective
       )
-    return [...fromMaster, ...extras]
+    return [...fromMaster, ...extras].sort((a, b) =>
+      compareTpCodes(a.code || '', b.code || '')
+    )
   }, [subjectTps, tpCodesInData, subjectKey])
 
   useEffect(() => {
