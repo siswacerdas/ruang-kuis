@@ -3,7 +3,9 @@
 Checklist **wajib** sebelum dan sesudah perubahan kode.  
 Tujuan: mencegah fitur yang sudah jalan tiba-tiba rusak (regresi).
 
-Referensi pola: tka2026 (stimulus, tiga tipe soal, preview, gate token/waktu).
+Pola penyajian (stimulus, tiga tipe soal, preview, gate token/waktu) mengacu ke tka2026 sebagai **referensi tampilan saja**. Bukan format impor yang harus diimplementasikan.
+
+Changelog satu-satunya: `CHANGELOG.md` di root repo.
 
 ---
 
@@ -12,7 +14,8 @@ Referensi pola: tka2026 (stimulus, tiga tipe soal, preview, gate token/waktu).
 - [ ] `npm run build` tanpa error
 - [ ] Tidak ada error merah di Console browser
 - [ ] Desktop + mobile tetap rapi
-- [ ] CHANGELOG.md sudah diisi untuk perubahan ini
+- [ ] `CHANGELOG.md` (root) sudah diisi untuk perubahan ini
+- [ ] Jangan commit `.firebase/` atau `dist/`
 
 ---
 
@@ -28,6 +31,7 @@ Referensi pola: tka2026 (stimulus, tiga tipe soal, preview, gate token/waktu).
 | Paket latihan | `LatihanForm.tsx`, `latihan` |
 | Penilaian | `gradeAnswer`, `attempts` |
 | Tujuan Pembelajaran | `TujuanPembelajaran.tsx`, `learningObjectives`, `bookMaterials` |
+| Materi pelajaran | `Materi.tsx`, `MateriBody.tsx`, status draft/published |
 
 ---
 
@@ -50,7 +54,7 @@ Referensi pola: tka2026 (stimulus, tiga tipe soal, preview, gate token/waktu).
 
 ### Import
 
-- [ ] JSON / CSV / XLSX
+- [ ] JSON / CSV / XLSX lewat template bank soal sendiri (bukan impor berkas tka2026)
 - [ ] Kunci: indeks, huruf A–D, **atau teks opsi yang mengandung koma**
 - [ ] Tipe `pg` / `pgk` / `pgk-cat` / single / multiple / category
 - [ ] Duplikat (`importKey`) tidak digandakan
@@ -105,4 +109,4 @@ Referensi pola: tka2026 (stimulus, tiga tipe soal, preview, gate token/waktu).
 
 ---
 
-*Update terakhir: 2026-10-06 — fix grup TP (element/Umum), hapus massal TP & materi buku*
+*Update terakhir: 2026-10-07 — changelog tunggal, impor TKA ditutup, cache hosting diabaikan*

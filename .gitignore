@@ -27,3 +27,6 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Firebase CLI cache (hosting.*.cache grows on every deploy)
+.firebase/

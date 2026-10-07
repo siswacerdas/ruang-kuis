@@ -1,46 +1,30 @@
 # Ruang Kuis
 
-Website latihan soal (kuis) untuk siswa dan admin (guru).
+Website latihan soal untuk siswa dan admin (guru). Backend: Firebase Authentication + Firestore. Frontend: Vite, React, TypeScript, Tailwind.
 
-## Tujuan Proyek
+## Tujuan
 
-- **Admin (Guru)**: Login khusus untuk mengelola soal, melihat progress siswa, dan fitur administrasi lainnya.
-- **Siswa**: Mengerjakan latihan soal secara online.
+- **Admin (guru):** kelola bank soal, paket latihan, tujuan pembelajaran, materi, laporan, dan daftar siswa.
+- **Siswa:** mengerjakan paket, melihat hasil/riwayat, materi yang sudah terbit, dan latihan mandiri.
 
-Backend & database akan menggunakan **Firebase** (Authentication + Firestore).
-Frontend saat ini masih dalam tahap awal.
+## Status
 
-## Status Saat Ini
+Aplikasi sudah dipakai (hosting Firebase). Catatan fitur ada di [CHANGELOG.md](./CHANGELOG.md). Checklist sebelum ubah kode: [docs/ANTI_REGRESSION.md](docs/ANTI_REGRESSION.md).
 
-Proyek baru dimulai. Lihat file [PROGRESS.md](./PROGRESS.md) untuk catatan kemajuan.
+Pola penyajian kuis (stimulus, tiga tipe soal, preview) mengacu ke tka2026 sebagai **referensi tampilan saja**, bukan format impor.
 
-## Cara Menjalankan (Nanti)
+## Menjalankan
 
-Panduan lengkap akan ditambahkan setelah struktur proyek siap.
-
-## Struktur Folder (Rencana)
-
-```
-ruang-kuis/
-├── README.md
-├── PROGRESS.md
-├── docs/
-│   └── ANTI_REGRESSION.md
-├── src/                  # kode frontend (nanti)
-├── public/               # aset statis (nanti)
-└── ...
+```bash
+npm install
+npm run dev
 ```
 
-## Kontak
-
-Dibuat oleh Arif Azwar Anas (@siswacerdas).
-
+Salin `.env.example` ke `.env` dan isi kredensial Firebase / kunci yang dipakai fitur AI.
 
 ## Deploy (Firebase Hosting)
 
-Lihat panduan lengkap: [docs/DEPLOY.md](docs/DEPLOY.md)
-
-Ringkas:
+Panduan: [docs/DEPLOY.md](docs/DEPLOY.md)
 
 ```bash
 npm install
@@ -52,3 +36,7 @@ firebase deploy --only hosting
 
 URL siswa: `https://ruang-kuis.web.app/kerjakan`  
 URL admin: `https://ruang-kuis.web.app/login`
+
+## Kontak
+
+Dibuat oleh Arif Azwar Anas (@siswacerdas).

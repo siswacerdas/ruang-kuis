@@ -1,6 +1,6 @@
 # Changelog
 
-Semua perubahan penting pada proyek **Ruang Kuis** dicatat di file ini.
+Semua perubahan penting pada proyek **Ruang Kuis** dicatat di file ini (satu-satunya changelog).
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan proyek ini mengikuti [Semantic Versioning](https://semver.org/lang/id/).
 
@@ -8,11 +8,24 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Changed — Beres-beres repo
+- Cache Firebase CLI (`.firebase/`, termasuk `hosting.*.cache`) tidak lagi dilacak; folder di-gitignore.
+- `ai-image-compress.patch` dihapus. Kompres gambar stimulus sudah ada di `src/lib/imageCompress.ts`.
+- Changelog hanya di root. `src/CHANGELOG.md` dihapus (subset yang ketinggalan).
+- Impor format tka2026 ditutup. Berkas itu hanya referensi penyajian kuis, bukan backlog impor.
+
+### Added — Materi HTML, draft/publish, AI lesson
+- Status materi `draft` / `published`. Siswa hanya melihat yang terbit; admin melihat badge status.
+- Form input/edit materi HTML dengan pratinjau (`HtmlMaterialEditor`, `MateriBody`).
+- Halaman `/materi` dan `/siswa/materi` memakai fetch sesuai audiens.
+- Generate materi AI disimpan sebagai draft, bukan langsung terbit.
+
 ### Added — Notifikasi hasil kuis ke email orang tua
 - Field `parentEmail` pada data siswa (terpisah dari email login fiktif).
 - **Daftar Siswa**: kolom email ortu, tombol **Edit**, form edit (nama, panggilan, NISN, email ortu), tombol **Sinkron email ortu** (CSV cocokkan NISN/nama).
 - Cloud Function `onAttemptCreated` (region `asia-southeast2`): saat attempt baru, kirim ringkasan skor + capaian TP ke `parentEmail` lewat Resend.
 - Status pengiriman ditulis kembali ke dokumen attempt (`parentEmailStatus`, `parentEmailTo`, dll.).
+- Deskripsi singkat TP ikut tampil di email, bukan hanya kode.
 - Panduan setup: `docs/EMAIL_ORANG_TUA.md`.
 - Template import siswa menambah kolom `Email Orang Tua`.
 - File: `src/types/student.ts`, `src/pages/SiswaList.tsx`, `functions/**`, `firebase.json`, `docs/EMAIL_ORANG_TUA.md`, `docs/template_import_siswa.csv`.
@@ -84,6 +97,9 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ### Changed — Daftar materi bank soal
 - Layout master–detail; edit nama/tautan/TP.
+
+### Changed — Sambutan login
+- Teks hero login lebih hangat, fokus belajar bukan teknis.
 
 ---
 
