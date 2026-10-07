@@ -22,7 +22,6 @@ import {
   normalizePredicate,
   percentToPredicate,
   PREDICATE_OPTIONS,
-  RUBRIC_LEVEL_LABELS,
   SCORE_OPTIONS,
   simulateScoresFromPredicateLocal,
   type AssessmentActivity,
@@ -436,12 +435,6 @@ export default function InputNilai() {
     const components = draft.components.map((c, i) => (i === idx ? { ...c, ...patch } : c))
     setDraft({ ...draft, components })
   }
-
-  const tpByCode = useMemo(() => {
-    const m = new Map<string, LearningObjective>()
-    tps.forEach((t) => m.set(t.code, t))
-    return m
-  }, [tps])
 
   return (
     <Layout
