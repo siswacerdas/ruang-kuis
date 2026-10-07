@@ -8,6 +8,12 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Added — Generate paket: jumlah & kompleksitas per materi
+- Mode **Otomatis (Generate)** di form paket latihan: pilih satu/lebih materi (topik).
+- Per materi: **jumlah soal** terpisah + filter **kompleksitas** (L1/L2/L3 / tanpa label).
+- Tombol **Bagi merata** dari total acuan; statistik pool per level; tetap dukung generate seluruh pool tanpa pilih materi.
+- File: `src/pages/LatihanForm.tsx`, `src/lib/latihanGenerate.ts`.
+
 ### Added — Judul materi HTML dari materi buku
 - Form **Materi HTML**: sumber judul bisa **Ketik sendiri** atau **Dari materi buku**.
 - Memilih materi buku mengisi judul otomatis dan menampilkan **ringkasan isi** + kode TP terkait.
