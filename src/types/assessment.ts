@@ -61,7 +61,10 @@ export interface AssessmentScore {
   studentId: string
   studentName: string
   studentClass?: string
-  /** Skor level 1–4 per componentId. Kosong = belum diisi. */
+  /**
+   * Skor 1–4 per componentId, boleh kelipatan 0.25 (mis. 3.25 / 3.5 / 3.75).
+   * Kosong = belum diisi.
+   */
   scores: Record<string, number>
   notes?: string
   updatedAt?: any
@@ -75,7 +78,39 @@ export interface AiAssessmentDraft {
   aiNotes?: string
 }
 
-/** Hitung total 0–100 dari skor level (1–4) + bobot. */
+/** Batas skor observasi: 1 … 4, langkah 0.25. */
+export const SCORE_MIN = 1
+export const SCORE_MAX = 4
+export const SCORE_STEP = 0.25
+
+/** Semua nilai yang bisa dipilih di dropdown (1, 1.25, …, 4). */
+export const SCORE_OPTIONS: number[] = (() => {
+  const opts: number[] = []
+  for (let v = SCORE_MIN; v <= SCORE_MAX + 1e-9; v += SCORE_STEP) {
+    opts.push(Math.round(v * 100) / 100)
+  }
+  return opts
+})()
+
+/** Clamp & bulatkan ke kelipatan 0.25 dalam rentang 1–4. */
+export function clampScore(raw: number): number {
+  if (!Number.isFinite(raw)) return SCORE_MIN
+  const clamped = Math.min(SCORE_MAX, Math.max(SCORE_MIN, raw))
+  const stepped = Math.round(clamped / SCORE_STEP) * SCORE_STEP
+  return Math.round(stepped * 100) / 100
+}
+
+/** Tampilkan skor (3 → "3", 3.5 → "3.5", 3.25 → "3.25"). */
+export function formatScore(v: number): string {
+  if (!Number.isFinite(v)) return ''
+  const n = Math.round(v * 100) / 100
+  return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/0$/, '')
+}
+
+/**
+ * Hitung total 0–100 dari skor 1–4 (boleh pecahan 0.25) + bobot.
+ * 1 → 25%, 2 → 50%, 3 → 75%, 4 → 100%; nilai antara diinterpolasi linier.
+ */
 export function computeWeightedPercent(
   components: AssessmentComponent[],
   scores: Record<string, number>
@@ -86,10 +121,9 @@ export function computeWeightedPercent(
   for (const c of components) {
     const raw = scores[c.id]
     if (raw == null || !Number.isFinite(raw)) continue
-    const level = Math.min(4, Math.max(1, Math.round(raw)))
+    const level = clampScore(raw)
     const w = c.weight > 0 ? c.weight : 1
-    // level 1→25, 2→50, 3→75, 4→100
-    const pct = (level / 4) * 100
+    const pct = (level / SCORE_MAX) * 100
     scoreSum += pct * w
     wSum += w
     n += 1
