@@ -82,6 +82,15 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Penilaian aktivitas/proyek (admin) — Input Nilai
+    match /assessmentActivities/{activityId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /assessmentScores/{scoreId} {
+      allow read, write: if isAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
