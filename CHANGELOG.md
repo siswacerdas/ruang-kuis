@@ -8,6 +8,12 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Added — Judul materi HTML dari materi buku
+- Form **Materi HTML**: sumber judul bisa **Ketik sendiri** atau **Dari materi buku**.
+- Memilih materi buku mengisi judul otomatis dan menampilkan **ringkasan isi** + kode TP terkait.
+- Pencarian materi buku jika daftar panjang; ringkasan disimpan sebagai `outline` sumber.
+- File: `src/components/HtmlMaterialEditor.tsx`.
+
 ### Added — Urutan materi belajar (admin/guru)
 - Field `sortOrder` pada `lessonMaterials` agar admin bisa mengurutkan materi per mapel.
 - Tombol **↑ / ↓** di daftar materi admin: nomor 01 = dipelajari lebih dulu oleh siswa.
