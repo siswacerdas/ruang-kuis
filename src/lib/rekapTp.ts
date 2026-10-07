@@ -1,5 +1,5 @@
-import type { SubjectKey } from './question'
-import type { LearningObjective } from './tp'
+import type { SubjectKey } from '../types/question'
+import type { LearningObjective } from '../types/tp'
 
 /**
  * Urutan alami kode TP (fallback jika field order tidak ada):
