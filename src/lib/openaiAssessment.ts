@@ -137,14 +137,23 @@ function normalizeRubric(raw: any): RubricBand[] {
   })
 }
 
+/** Ambil kode TP valid dari respons AI (hindari unknown[] di tsc ketat). */
+function pickAllowedCodes(raw: unknown, allowedCodes: Set<string>): string[] {
+  if (!Array.isArray(raw)) return []
+  const out: string[] = []
+  for (let i = 0; i < raw.length; i++) {
+    const code = String(raw[i] ?? '').trim()
+    if (code.length > 0 && allowedCodes.has(code)) out.push(code)
+  }
+  return out
+}
+
 function normalizeComponent(raw: any, index: number, allowedCodes: Set<string>): AssessmentComponent | null {
   if (!raw || typeof raw !== 'object') return null
   const label = String(raw.label || raw.name || '').trim()
   const description = String(raw.description || raw.kompetensi || '').trim()
   if (!label || !description) return null
-  const tpCodes: string[] = (Array.isArray(raw.tpCodes) ? raw.tpCodes : [])
-    .map((c: unknown) => String(c ?? '').trim())
-    .filter((c): c is string => c.length > 0 && allowedCodes.has(c))
+  const tpCodes = pickAllowedCodes(raw.tpCodes, allowedCodes)
   const weight = Number(raw.weight)
   return {
     id: String(raw.id || `c${index + 1}`)
@@ -189,13 +198,7 @@ export async function generateAssessmentWithOpenAI(
       .trim()
       .slice(0, 120) || 'Penilaian aktivitas'
 
-  const linkedTpCodes: string[] = [
-    ...new Set(
-      (Array.isArray(parsed.linkedTpCodes) ? parsed.linkedTpCodes : [])
-        .map((c: unknown) => String(c ?? '').trim())
-        .filter((c): c is string => c.length > 0 && allowedCodes.has(c)),
-    ),
-  ]
+  const linkedTpCodes: string[] = [...new Set(pickAllowedCodes(parsed.linkedTpCodes, allowedCodes))]
 
   let components: AssessmentComponent[] = Array.isArray(parsed.components)
     ? (parsed.components
