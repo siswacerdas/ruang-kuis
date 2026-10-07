@@ -8,6 +8,13 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Added — Urutan materi belajar (admin/guru)
+- Field `sortOrder` pada `lessonMaterials` agar admin bisa mengurutkan materi per mapel.
+- Tombol **↑ / ↓** di daftar materi admin: nomor 01 = dipelajari lebih dulu oleh siswa.
+- Daftar siswa mengikuti urutan yang sama (bukan alfabet).
+- Materi baru otomatis di akhir daftar; migrasi seed mendapat urutan sesuai urutan seed.
+- File: `src/lib/lessonMaterials.ts`, `src/pages/MateriBody.tsx`.
+
 ### Changed — Beres-beres repo
 - Cache Firebase CLI (`.firebase/`, termasuk `hosting.*.cache`) tidak lagi dilacak; folder di-gitignore.
 - `ai-image-compress.patch` dihapus. Kompres gambar stimulus sudah ada di `src/lib/imageCompress.ts`.
