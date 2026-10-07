@@ -15,6 +15,7 @@ import Laporan from './pages/Laporan'
 import SiswaList from './pages/SiswaList'
 import TujuanPembelajaran from './pages/TujuanPembelajaran'
 import InputNilai from './pages/InputNilai'
+import RekapNilai from './pages/RekapNilai'
 import SiswaLogin from './pages/SiswaLogin'
 import KerjakanEntry from './pages/KerjakanEntry'
 import KerjakanQuiz from './pages/KerjakanQuiz'
@@ -118,6 +119,7 @@ function App() {
           element={isAdmin ? <TujuanPembelajaran /> : <Navigate to="/login" />}
         />
         <Route path="/input-nilai" element={isAdmin ? <InputNilai /> : <Navigate to="/login" />} />
+        <Route path="/rekap-nilai" element={isAdmin ? <RekapNilai /> : <Navigate to="/login" />} />
         <Route path="/materi" element={isAdmin ? <Materi audience="admin" /> : <Navigate to="/login" />} />
 
         <Route path="/questions" element={<Navigate to="/bank-soal" replace />} />
