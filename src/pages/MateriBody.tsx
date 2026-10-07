@@ -13,6 +13,7 @@ import {
   parseDriveFileId,
   pdfsForSubject,
   previewUrl,
+  reorderLessonMaterials,
   saveLessonMaterial,
   setLessonMaterialStatus,
   viewUrl,
@@ -138,6 +139,7 @@ export default function MateriBody({
   const [formError, setFormError] = useState('')
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [statusBusyId, setStatusBusyId] = useState<string | null>(null)
+  const [reorderBusy, setReorderBusy] = useState(false)
   const [showAiGen, setShowAiGen] = useState(false)
   const [showHtmlEditor, setShowHtmlEditor] = useState(false)
   const [htmlEditTarget, setHtmlEditTarget] = useState<LessonPdf | null>(null)
@@ -209,6 +211,29 @@ export default function MateriBody({
       alert(e?.message || 'Gagal mengubah status.')
     } finally {
       setStatusBusyId(null)
+    }
+  }
+
+  /** Geser materi naik/turun dalam mapel agar urutan belajar siswa jelas. */
+  const handleMove = async (index: number, direction: -1 | 1) => {
+    const target = index + direction
+    if (target < 0 || target >= pdfs.length) return
+    if (pdfs.some((p) => p.isStatic)) {
+      alert('Data seed statis. Migrasi ke Firestore dulu agar bisa mengurutkan materi.')
+      return
+    }
+    const next = [...pdfs]
+    const tmp = next[index]
+    next[index] = next[target]
+    next[target] = tmp
+    setReorderBusy(true)
+    try {
+      await reorderLessonMaterials(next.map((p) => p.id))
+      onRefresh()
+    } catch (e: any) {
+      alert(e?.message || 'Gagal mengubah urutan materi.')
+    } finally {
+      setReorderBusy(false)
     }
   }
 
@@ -296,36 +321,67 @@ export default function MateriBody({
             <p className="text-sm text-slate-400 mt-1 max-w-sm mx-auto">{isAdmin ? 'Klik "+ PDF Drive", "+ Materi HTML", atau "Buat materi belajar AI".' : 'Materi untuk mapel ini belum tersedia.'}</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100">
-            {pdfs.map((pdf, i) => (
-              <div key={pdf.id} className="group flex items-center gap-3 px-4 sm:px-5 py-3.5 hover:bg-slate-50/80 transition">
-                <button type="button" onClick={() => setOpen(pdf)} className="flex-1 min-w-0 text-left flex items-center gap-4">
-                  <span className="w-8 h-8 rounded-md bg-slate-100 text-slate-500 text-xs font-semibold tabular-nums flex items-center justify-center shrink-0 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition">{String(i + 1).padStart(2, '0')}</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-slate-900 group-hover:text-indigo-700 transition truncate">{pdf.title}</p>
-                    <p className="text-xs text-slate-400 mt-0.5 tabular-nums flex flex-wrap items-center gap-1.5">
-                      <span>{isHtmlLesson(pdf) ? (pdf.generatedBy === 'manual-html' ? 'Materi HTML' : `${pdf.sectionsCount || '—'} bagian · Materi AI`) : isPresentation(pdf) ? `${pdf.slides?.length || 0} slide · Presentasi AI` : `${formatBytes(pdf.sizeBytes)} · PDF`}</span>
-                      {isAdmin && (
-                        <span className={`inline-flex text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${isPublished(pdf) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{isPublished(pdf) ? 'Published' : 'Draft'}</span>
-                      )}
-                    </p>
-                  </div>
-                  <span className="hidden sm:inline-flex text-xs font-medium text-indigo-600 opacity-0 group-hover:opacity-100 transition shrink-0">Pratinjau</span>
-                  <svg className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                </button>
-                {isAdmin && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button type="button" onClick={() => handleToggleStatus(pdf)} disabled={statusBusyId === pdf.id || !!pdf.isStatic} className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border disabled:opacity-50 ${isPublished(pdf) ? 'text-amber-700 border-amber-200 hover:bg-amber-50' : 'text-emerald-700 border-emerald-200 hover:bg-emerald-50'}`} title={isPublished(pdf) ? 'Sembunyikan dari siswa' : 'Tampilkan ke siswa'}>{statusBusyId === pdf.id ? '...' : isPublished(pdf) ? 'Unpublish' : 'Publish'}</button>
-                    {isHtmlLesson(pdf) ? (
-                      <button type="button" onClick={() => openHtmlEdit(pdf)} className="text-xs font-medium text-slate-600 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-white">Edit</button>
-                    ) : !isPresentation(pdf) ? (
-                      <button type="button" onClick={() => openEdit(pdf)} className="text-xs font-medium text-slate-600 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-white">Edit</button>
-                    ) : null}
-                    <button type="button" onClick={() => handleDelete(pdf)} disabled={deletingId === pdf.id} className="text-xs font-medium text-red-600 px-2.5 py-1.5 rounded-lg border border-red-100 hover:bg-red-50 disabled:opacity-50">{deletingId === pdf.id ? '...' : 'Hapus'}</button>
-                  </div>
-                )}
-              </div>
-            ))}
+          <div className="space-y-2">
+            {isAdmin && pdfs.length > 1 && (
+              <p className="text-xs text-slate-500 px-1">
+                Urutan nomor = urutan belajar yang dilihat siswa. Gunakan tombol ↑ ↓ untuk mengatur (materi 01 dipelajari lebih dulu).
+              </p>
+            )}
+            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100">
+              {pdfs.map((pdf, i) => (
+                <div key={pdf.id} className="group flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-3.5 hover:bg-slate-50/80 transition">
+                  {isAdmin && (
+                    <div className="flex flex-col gap-0.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleMove(i, -1)}
+                        disabled={reorderBusy || i === 0 || !!pdf.isStatic}
+                        className="w-7 h-7 rounded-md border border-slate-200 text-slate-500 hover:bg-white hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+                        title="Naikkan urutan (dipelajari lebih dulu)"
+                        aria-label="Naikkan urutan"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleMove(i, 1)}
+                        disabled={reorderBusy || i === pdfs.length - 1 || !!pdf.isStatic}
+                        className="w-7 h-7 rounded-md border border-slate-200 text-slate-500 hover:bg-white hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+                        title="Turunkan urutan"
+                        aria-label="Turunkan urutan"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      </button>
+                    </div>
+                  )}
+                  <button type="button" onClick={() => setOpen(pdf)} className="flex-1 min-w-0 text-left flex items-center gap-3 sm:gap-4">
+                    <span className="w-8 h-8 rounded-md bg-slate-100 text-slate-500 text-xs font-semibold tabular-nums flex items-center justify-center shrink-0 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition">{String(i + 1).padStart(2, '0')}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-slate-900 group-hover:text-indigo-700 transition truncate">{pdf.title}</p>
+                      <p className="text-xs text-slate-400 mt-0.5 tabular-nums flex flex-wrap items-center gap-1.5">
+                        <span>{isHtmlLesson(pdf) ? (pdf.generatedBy === 'manual-html' ? 'Materi HTML' : `${pdf.sectionsCount || '—'} bagian · Materi AI`) : isPresentation(pdf) ? `${pdf.slides?.length || 0} slide · Presentasi AI` : `${formatBytes(pdf.sizeBytes)} · PDF`}</span>
+                        {isAdmin && (
+                          <span className={`inline-flex text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${isPublished(pdf) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{isPublished(pdf) ? 'Published' : 'Draft'}</span>
+                        )}
+                      </p>
+                    </div>
+                    <span className="hidden sm:inline-flex text-xs font-medium text-indigo-600 opacity-0 group-hover:opacity-100 transition shrink-0">Pratinjau</span>
+                    <svg className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                  </button>
+                  {isAdmin && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button type="button" onClick={() => handleToggleStatus(pdf)} disabled={statusBusyId === pdf.id || !!pdf.isStatic} className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border disabled:opacity-50 ${isPublished(pdf) ? 'text-amber-700 border-amber-200 hover:bg-amber-50' : 'text-emerald-700 border-emerald-200 hover:bg-emerald-50'}`} title={isPublished(pdf) ? 'Sembunyikan dari siswa' : 'Tampilkan ke siswa'}>{statusBusyId === pdf.id ? '...' : isPublished(pdf) ? 'Unpublish' : 'Publish'}</button>
+                      {isHtmlLesson(pdf) ? (
+                        <button type="button" onClick={() => openHtmlEdit(pdf)} className="text-xs font-medium text-slate-600 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-white">Edit</button>
+                      ) : !isPresentation(pdf) ? (
+                        <button type="button" onClick={() => openEdit(pdf)} className="text-xs font-medium text-slate-600 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-white">Edit</button>
+                      ) : null}
+                      <button type="button" onClick={() => handleDelete(pdf)} disabled={deletingId === pdf.id} className="text-xs font-medium text-red-600 px-2.5 py-1.5 rounded-lg border border-red-100 hover:bg-red-50 disabled:opacity-50">{deletingId === pdf.id ? '...' : 'Hapus'}</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
         {open && isHtmlLesson(open) && open.htmlContent ? (
