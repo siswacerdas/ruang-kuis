@@ -29,9 +29,10 @@ Changelog satu-satunya: `CHANGELOG.md` di root repo.
 | UI daftar / preview | `TopicQuestions.tsx` (detail + modal preview kuis) |
 | UI kuis siswa | `KerjakanQuiz.tsx` |
 | Paket latihan | `LatihanForm.tsx`, `latihan` |
-| Penilaian | `gradeAnswer`, `attempts` |
+| Penilaian kuis | `gradeAnswer`, `attempts` |
 | Tujuan Pembelajaran | `TujuanPembelajaran.tsx`, `learningObjectives`, `bookMaterials` |
 | Materi pelajaran | `Materi.tsx`, `MateriBody.tsx`, status draft/published, urutan `sortOrder` |
+| Input / rekap nilai aktivitas | `InputNilai.tsx`, `RekapNilai.tsx`, `assessment.ts`, `openaiAssessment.ts`, `assessmentActivities`, `assessmentScores` |
 
 ---
 
@@ -84,15 +85,20 @@ Changelog satu-satunya: `CHANGELOG.md` di root repo.
 - [ ] Rules: siswa tidak baca kunci mentah / ubah attempt orang lain
 - [ ] Query `documentId in` batch ≤ 30
 - [ ] Data-URL gambar stimulus tidak melebihi batas praktis dokumen (kompres client ~450 KB)
+- [ ] Rules `assessmentActivities` / `assessmentScores`: hanya admin tulis; deploy rules setelah fitur Input Nilai
 
 ---
 
-## 6. Definition of Done
+## 6. Input Nilai & Rekap Nilai
 
-- [ ] Skenario normal + edge case relevan lulus
-- [ ] Tidak merusak fitur existing
-- [ ] CHANGELOG diupdate
-- [ ] Hard-refresh / deploy diverifikasi jika menyentuh hosting
+- [ ] `/input-nilai` dan `/rekap-nilai` hanya admin (`App.tsx` + nav `Layout.tsx`)
+- [ ] AI generate **hanya** memakai TP dari mapel yang dipilih guru
+- [ ] Skor komponen: skala **1–4 langkah 0,25** (`SCORE_OPTIONS` / `clampScore`); jangan kembali ke `Math.round` bilangan bulat saja
+- [ ] Rekap: nilai akhir TP = rata-rata persen dari komponen yang `tpCodes` memuat kode TP — jangan mencampur mapel lain
+- [ ] Master TP kosong / kode hanya di aktivitas: rekap tetap menampilkan kode (placeholder deskripsi)
+- [ ] Bentuk `AssessmentScore.scores` (Record componentId → number) jangan diubah tanpa migrasi
+- [ ] `pickAllowedCodes` wajib mengembalikan `string[]` eksplisit (tsc strict)
+- [ ] Jangan menghapus route `/input-nilai` saat menambah `/rekap-nilai`
 
 ---
 
@@ -109,4 +115,13 @@ Changelog satu-satunya: `CHANGELOG.md` di root repo.
 
 ---
 
-*Update terakhir: 2026-10-07 — changelog tunggal, impor TKA ditutup, cache hosting diabaikan*
+## 8. Definition of Done
+
+- [ ] Skenario normal + edge case relevan lulus
+- [ ] Tidak merusak fitur existing
+- [ ] CHANGELOG diupdate
+- [ ] Hard-refresh / deploy diverifikasi jika menyentuh hosting
+
+---
+
+*Update terakhir: 2026-10-07 — Rekap Nilai per TP/mapel, skala skor 0,25, Input Nilai, anti-regresi assessment*
