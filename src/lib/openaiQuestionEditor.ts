@@ -213,6 +213,8 @@ export type RewriteOptionsInput = {
   stimulusHtml?: string
   explanation?: string
   hint?: string
+  /** Soal punya gambar stimulus (verifikasi AI dilewati karena model tidak melihat gambar) */
+  hasImage?: boolean
 }
 
 export type OptionVerification = {
@@ -240,6 +242,8 @@ export type ImproveStimulusInput = {
   stimulusHtml: string
   explanation?: string
   hint?: string
+  /** Soal punya gambar stimulus (verifikasi AI dilewati karena model tidak melihat gambar) */
+  hasImage?: boolean
 }
 
 export type ImproveStimulusResult = {
