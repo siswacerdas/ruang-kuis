@@ -1,6 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { collection, getDocs, query, where } from 'firebase/firestore'
+import { db } from '../lib/firebase'
 import { SUBJECTS, getSubject, type SubjectKey } from '../types/question'
 import { saveLessonMaterial, type LessonMaterialStatus, type LessonPdf } from '../lib/lessonMaterials'
+import type { BookMaterial } from '../types/tp'
 import LessonViewer from './LessonViewer'
 
 type Props = {
@@ -11,6 +14,9 @@ type Props = {
   defaultSubjectKey?: SubjectKey
   onSaved: () => void
 }
+
+/** manual = ketik judul sendiri; book = pilih dari database materi buku */
+type TitleSource = 'manual' | 'book'
 
 export default function HtmlMaterialEditor({
   open,
@@ -24,6 +30,7 @@ export default function HtmlMaterialEditor({
     initial?.subjectKey || defaultSubjectKey || 'bahasa-indonesia'
   )
   const [title, setTitle] = useState(initial?.title || '')
+  const [titleSource, setTitleSource] = useState<TitleSource>('manual')
   const [htmlContent, setHtmlContent] = useState(initial?.htmlContent || '')
   const [status, setStatus] = useState<LessonMaterialStatus>(
     initial?.status === 'draft' ? 'draft' : isEdit ? (initial?.status || 'published') : 'draft'
@@ -31,6 +38,11 @@ export default function HtmlMaterialEditor({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [previewOpen, setPreviewOpen] = useState(false)
+
+  const [books, setBooks] = useState<BookMaterial[]>([])
+  const [booksLoading, setBooksLoading] = useState(false)
+  const [selectedBookId, setSelectedBookId] = useState('')
+  const [bookQuery, setBookQuery] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -44,15 +56,71 @@ export default function HtmlMaterialEditor({
           : 'published'
         : 'draft'
     )
+    setTitleSource('manual')
+    setSelectedBookId('')
+    setBookQuery('')
     setError('')
     setPreviewOpen(false)
   }, [open, initial, defaultSubjectKey])
+
+  // Muat materi buku per mapel (koleksi bookMaterials)
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    ;(async () => {
+      setBooksLoading(true)
+      try {
+        const snap = await getDocs(
+          query(collection(db, 'bookMaterials'), where('subjectKey', '==', subjectKey))
+        )
+        if (cancelled) return
+        const list = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<BookMaterial, 'id'>) }))
+        list.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'id'))
+        setBooks(list)
+        // Jangan reset pilihan saat edit judul manual
+        setSelectedBookId((prev) => {
+          if (prev && list.some((b) => b.id === prev)) return prev
+          return ''
+        })
+      } catch {
+        if (!cancelled) setBooks([])
+      } finally {
+        if (!cancelled) setBooksLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, subjectKey])
+
+  const filteredBooks = useMemo(() => {
+    const q = bookQuery.trim().toLowerCase()
+    if (!q) return books
+    return books.filter((b) => {
+      const hay = [b.title, b.summary, ...(b.suggestedTpCodes || [])].join(' ').toLowerCase()
+      return hay.includes(q)
+    })
+  }, [books, bookQuery])
+
+  const selectedBook = useMemo(
+    () => books.find((b) => b.id === selectedBookId) || null,
+    [books, selectedBookId]
+  )
 
   if (!open) return null
 
   const subject = getSubject(subjectKey)
   const canPreview = htmlContent.trim().length > 0
   const bytes = new Blob([htmlContent]).size
+
+  const applyBook = (bookId: string) => {
+    setSelectedBookId(bookId)
+    if (!bookId) return
+    const m = books.find((b) => b.id === bookId)
+    if (!m) return
+    setTitle(m.title)
+    setTitleSource('book')
+  }
 
   const handleSave = async (nextStatus: LessonMaterialStatus) => {
     const t = title.trim()
@@ -72,6 +140,13 @@ export default function HtmlMaterialEditor({
     setSaving(true)
     setError('')
     try {
+      // Simpan ringkasan materi buku sebagai outline agar jejak sumber tetap ada
+      const outlineFromBook =
+        selectedBook?.summary?.trim() ||
+        (titleSource === 'book' && selectedBook
+          ? `Sumber materi buku: ${selectedBook.title}`
+          : undefined)
+
       await saveLessonMaterial({
         id: initial?.id,
         subjectKey,
@@ -82,7 +157,7 @@ export default function HtmlMaterialEditor({
         kind: 'html-lesson',
         htmlContent: html,
         generatedBy: initial?.generatedBy || 'manual-html',
-        outline: initial?.outline,
+        outline: outlineFromBook || initial?.outline,
         sectionsCount: initial?.sectionsCount,
         status: nextStatus,
       })
@@ -105,7 +180,7 @@ export default function HtmlMaterialEditor({
                 {isEdit ? 'Edit materi HTML' : 'Materi HTML'}
               </h2>
               <p className="text-xs text-gray-500">
-                Tempel kode HTML → pratinjau → simpan sebagai draft atau publish
+                Judul bisa diketik sendiri atau dipilih dari materi buku · tempel HTML → pratinjau → simpan
               </p>
             </div>
             <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-700 text-sm px-2">
@@ -114,31 +189,133 @@ export default function HtmlMaterialEditor({
           </div>
 
           <div className="p-5 overflow-y-auto space-y-4 flex-1">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="block">
-                <span className="text-xs font-medium text-gray-600">Mata pelajaran</span>
-                <select
-                  value={subjectKey}
-                  onChange={(e) => setSubjectKey(e.target.value as SubjectKey)}
-                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white"
-                >
-                  {SUBJECTS.map((s) => (
-                    <option key={s.key} value={s.key}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-xs font-medium text-gray-600">Judul materi</span>
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Contoh: Ekosistem dan Rantai Makanan"
-                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
-                />
-              </label>
+            <label className="block">
+              <span className="text-xs font-medium text-gray-600">Mata pelajaran</span>
+              <select
+                value={subjectKey}
+                onChange={(e) => {
+                  setSubjectKey(e.target.value as SubjectKey)
+                  // Ganti mapel → reset pilihan buku (daftar berbeda)
+                  setSelectedBookId('')
+                  setBookQuery('')
+                }}
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white"
+              >
+                {SUBJECTS.map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div>
+              <span className="text-xs font-medium text-gray-600 block mb-1.5">Sumber judul</span>
+              <div className="grid grid-cols-2 gap-2">
+                {(
+                  [
+                    ['manual', 'Ketik sendiri'],
+                    ['book', 'Dari materi buku'],
+                  ] as const
+                ).map(([val, label]) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setTitleSource(val)}
+                    className={`text-sm px-3 py-2 rounded-xl border font-medium transition ${
+                      titleSource === val
+                        ? 'border-teal-400 bg-teal-50 text-teal-900 ring-1 ring-teal-200'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {titleSource === 'book' && (
+              <div className="space-y-2 rounded-xl border border-teal-100 bg-teal-50/40 p-3">
+                <span className="text-xs font-medium text-gray-700 block">Pilih materi buku</span>
+                {booksLoading ? (
+                  <p className="text-xs text-gray-500">Memuat materi buku…</p>
+                ) : books.length === 0 ? (
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                    Belum ada materi buku untuk mapel ini. Impor di menu{' '}
+                    <strong>Tujuan Pembelajaran → Materi buku</strong>, atau ketik judul sendiri.
+                  </p>
+                ) : (
+                  <>
+                    {books.length > 6 && (
+                      <input
+                        value={bookQuery}
+                        onChange={(e) => setBookQuery(e.target.value)}
+                        placeholder="Cari judul atau ringkasan…"
+                        className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm bg-white"
+                      />
+                    )}
+                    <select
+                      value={selectedBookId}
+                      onChange={(e) => applyBook(e.target.value)}
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white"
+                    >
+                      <option value="">— Pilih materi buku —</option>
+                      {filteredBooks.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.title}
+                        </option>
+                      ))}
+                    </select>
+                    {filteredBooks.length === 0 && bookQuery.trim() && (
+                      <p className="text-[11px] text-gray-500">Tidak ada materi yang cocok dengan pencarian.</p>
+                    )}
+                    {selectedBook && (
+                      <div className="rounded-lg border border-teal-100 bg-white px-3 py-2.5 space-y-1.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-700">
+                          Ringkasan isi buku
+                        </p>
+                        {selectedBook.summary?.trim() ? (
+                          <pre className="text-xs text-gray-600 whitespace-pre-wrap font-sans leading-relaxed m-0 max-h-36 overflow-y-auto">
+                            {selectedBook.summary.trim()}
+                          </pre>
+                        ) : (
+                          <p className="text-xs text-gray-400">Tidak ada ringkasan untuk materi ini.</p>
+                        )}
+                        {selectedBook.suggestedTpCodes && selectedBook.suggestedTpCodes.length > 0 && (
+                          <p className="text-[11px] text-gray-500">
+                            TP terkait:{' '}
+                            <span className="font-medium text-gray-700">
+                              {selectedBook.suggestedTpCodes.join(', ')}
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            <label className="block">
+              <span className="text-xs font-medium text-gray-600">Judul materi</span>
+              <input
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.target.value)
+                }}
+                placeholder={
+                  titleSource === 'book'
+                    ? 'Pilih materi buku di atas, atau sesuaikan judul di sini'
+                    : 'Contoh: Ekosistem dan Rantai Makanan'
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm"
+              />
+              {titleSource === 'book' && (
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Judul terisi otomatis dari materi buku; Anda masih bisa mengubahnya sebelum menyimpan.
+                </p>
+              )}
+            </label>
 
             <label className="block">
               <div className="flex items-center justify-between gap-2 mb-1">
@@ -158,6 +335,9 @@ export default function HtmlMaterialEditor({
               <p className="text-[11px] text-gray-400 mt-1">
                 Gunakan tag HTML biasa (h1, h2, p, ul, img, …). Kelas khusus AI (rk-callout, rk-summary)
                 juga didukung di pratinjau.
+                {selectedBook?.summary?.trim()
+                  ? ' Manfaatkan ringkasan materi buku di atas sebagai panduan isi HTML.'
+                  : ''}
               </p>
             </label>
 
