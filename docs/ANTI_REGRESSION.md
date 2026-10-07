@@ -31,7 +31,7 @@ Changelog satu-satunya: `CHANGELOG.md` di root repo.
 | Paket latihan | `LatihanForm.tsx`, `latihan` |
 | Penilaian | `gradeAnswer`, `attempts` |
 | Tujuan Pembelajaran | `TujuanPembelajaran.tsx`, `learningObjectives`, `bookMaterials` |
-| Materi pelajaran | `Materi.tsx`, `MateriBody.tsx`, status draft/published |
+| Materi pelajaran | `Materi.tsx`, `MateriBody.tsx`, status draft/published, urutan `sortOrder` |
 
 ---
 
