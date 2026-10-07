@@ -8,8 +8,6 @@
  */
 
 import type { QuestionType, SubjectKey } from '../types/question'
-import { compressImageSrc } from './imageCompress'
-import { sanitizeAiStimulusHtml } from './stimulusHtml'
 
 /** Mode stimulus yang diminta guru */
 export type StimulusMode = 'none' | 'text' | 'image'
@@ -117,7 +115,6 @@ export function resolveStimulusPlan(
 
 /* ============================================================================
  * ARAHAN UTAMA KE AI (system prompt)
- * Sesuaikan di sini jika ingin mengubah gaya penulisan soal nasional/sekolah.
  * =========================================================================== */
 export const AI_QUESTION_GUIDANCE = {
   role: `Kamu adalah penulis soal asesmen formatif untuk siswa SD kelas 5 di Indonesia
@@ -152,14 +149,10 @@ Setiap elemen questions:
 6. Stimulus teks: 2–6 kalimat atau data singkat (tabel ASCII sederhana boleh).
 7. Stimulus gambar — WAJIB netral terhadap kunci jawaban:
    - imagePrompt (English): ilustrasi sederhana, ramah anak, SEBAIKNYA tanpa teks/angka/label yang langsung menunjuk jawaban.
-   - JANGAN menggambar kunci jawaban secara eksplisit (contoh: jangan lingkari opsi benar, jangan tulis "jawaban: 3", jangan hanya menampilkan angka/hasil akhir yang sama dengan kunci).
-   - Gambar harus memberi DATA atau KONTEKS untuk dianalisis (diagram, benda dihitung, situasi, peta sederhana, grafik kasar) sehingga siswa menafsirkan sendiri.
-   - Field stimulus (Indonesia): keterangan netral 1–3 kalimat (apa yang terlihat), TANPA menyimpulkan jawaban soal.
-   - Pertanyaan mengarahkan siswa mengolah informasi dari gambar; opsi pengecoh masuk akal dari interpretasi yang salah.
-8. Sesuaikan kompleksitas:
-   - L1-Pemahaman: mengingat/mengidentifikasi fakta dari stimulus atau konsep dasar
-   - L2-Aplikasi: memakai konsep pada situasi baru
-   - L3-Penalaran: menganalisis, membandingkan, menyimpulkan dari data/stimulus
+   - JANGAN menggambar kunci jawaban secara eksplisit.
+   - Gambar harus memberi DATA atau KONTEKS untuk dianalisis.
+   - Field stimulus (Indonesia): keterangan netral 1–3 kalimat, TANPA menyimpulkan jawaban soal.
+8. Sesuaikan kompleksitas L1/L2/L3.
 9. Usia SD kelas 5: hindari istilah kuliah; angka dan konteks sehari-hari.`,
 } as const
 
@@ -257,12 +250,9 @@ function normalizeDraft(raw: any, fallbackKomp?: string): AiDraftQuestion | null
     while (options.length < 4) options.push(`Opsi ${String.fromCharCode(65 + options.length)}`)
     if (options.length > 4) options = options.slice(0, 4)
     correctAnswers = [...new Set(correctAnswers.filter((n) => n >= 0 && n < options.length))]
-    if (correctAnswers.length > 2) {
-      correctAnswers = correctAnswers.slice(0, 2)
-    }
-    if (correctAnswers.length === 0) {
-      correctAnswers = [0, 1]
-    } else if (correctAnswers.length === 1) {
+    if (correctAnswers.length > 2) correctAnswers = correctAnswers.slice(0, 2)
+    if (correctAnswers.length === 0) correctAnswers = [0, 1]
+    else if (correctAnswers.length === 1) {
       const extra = [0, 1, 2, 3].find((i) => !correctAnswers.includes(i))
       if (extra != null) correctAnswers = [...correctAnswers, extra]
     }
@@ -314,15 +304,11 @@ export function isOpenAiConfigured(): boolean {
 
 export type GenerateAiResult = {
   drafts: AiDraftQuestion[]
-  /** Peringatan jika soal berhasil tapi gambar gagal */
   imageWarnings: string[]
 }
 
 function resolveImageModel(): string {
-  return (
-    import.meta.env.VITE_OPENAI_IMAGE_MODEL?.trim() ||
-    'gpt-image-1-mini'
-  )
+  return import.meta.env.VITE_OPENAI_IMAGE_MODEL?.trim() || 'gpt-image-1-mini'
 }
 
 async function generateOpenAiImage(
@@ -356,7 +342,6 @@ async function generateOpenAiImage(
         size: a.size,
         quality: a.quality,
       }
-
       const res = await fetch('https://api.openai.com/v1/images/generations', {
         method: 'POST',
         headers: {
@@ -367,20 +352,13 @@ async function generateOpenAiImage(
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const msg =
-          data?.error?.message ||
-          data?.error?.code ||
-          `HTTP ${res.status}`
+        const msg = data?.error?.message || data?.error?.code || `HTTP ${res.status}`
         errors.push(`${a.model}: ${msg}`)
         continue
       }
       const item = data?.data?.[0]
-      if (item?.b64_json) {
-        return { url: `data:image/png;base64,${item.b64_json}` }
-      }
-      if (item?.url) {
-        return { url: item.url as string }
-      }
+      if (item?.b64_json) return { url: `data:image/png;base64,${item.b64_json}` }
+      if (item?.url) return { url: item.url as string }
       errors.push(`${a.model}: respons tanpa gambar (b64/url)`)
     } catch (e: any) {
       errors.push(`${a.model}: ${e?.message || 'network error'}`)
@@ -455,7 +433,6 @@ export async function generateQuestionsWithOpenAI(
   }
 
   const imageWarnings: string[] = []
-
   drafts = enforceStimulusPlan(drafts, plan)
 
   const needImages = plan.image > 0
@@ -488,7 +465,6 @@ export async function generateQuestionsWithOpenAI(
   return { drafts, imageWarnings }
 }
 
-/** Rapikan draft agar sesuai kuota none/text/image. */
 function enforceStimulusPlan(drafts: AiDraftQuestion[], plan: StimulusPlan): AiDraftQuestion[] {
   const kinds: StimulusMode[] = []
   for (let i = 0; i < plan.none; i++) kinds.push('none')
