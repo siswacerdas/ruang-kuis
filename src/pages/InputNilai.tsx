@@ -53,7 +53,7 @@ export default function InputNilai() {
 
   // Detail / scores
   const [active, setActive] = useState<AssessmentActivity | null>(null)
-  const [scores, setScores] = useState<AssessmentScore[]>([])
+  const [, setScores] = useState<AssessmentScore[]>([])
   const [scoresLoading, setScoresLoading] = useState(false)
   const [scoreDirty, setScoreDirty] = useState(false)
   const [localScores, setLocalScores] = useState<Record<string, Record<string, number>>>({})
