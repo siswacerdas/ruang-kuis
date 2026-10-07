@@ -3,7 +3,13 @@
  * Hanya TP dari mapel yang dikirim guru — tidak menambah mapel di luar permintaan.
  */
 
-import type { AiAssessmentDraft, AssessmentComponent, RubricBand, RubricLevel } from '../types/assessment'
+import {
+  clampScore,
+  type AiAssessmentDraft,
+  type AssessmentComponent,
+  type RubricBand,
+  type RubricLevel,
+} from '../types/assessment'
 import type { SubjectKey } from '../types/question'
 import type { LearningObjective } from '../types/tp'
 import { getSubject } from '../types/question'
@@ -11,7 +17,6 @@ import { getSubject } from '../types/question'
 export type GenerateAssessmentOptions = {
   description: string
   subjectKeys: SubjectKey[]
-  /** TP aktif dari Firestore, sudah difilter mapel terpilih. */
   availableTps: Pick<LearningObjective, 'code' | 'subjectKey' | 'element' | 'statement'>[]
   titleHint?: string
   model?: string
@@ -137,7 +142,6 @@ function normalizeRubric(raw: any): RubricBand[] {
   })
 }
 
-/** Ambil kode TP valid dari respons AI (hindari unknown[] di tsc ketat). */
 function pickAllowedCodes(raw: unknown, allowedCodes: Set<string>): string[] {
   if (!Array.isArray(raw)) return []
   const out: string[] = []
@@ -167,10 +171,97 @@ function normalizeComponent(raw: any, index: number, allowedCodes: Set<string>):
   }
 }
 
-/**
- * Generate draf penilaian dari deskripsi aktivitas + daftar TP mapel terpilih.
- * Kode TP di luar daftar dibuang; jika AI tidak memilih satupun, dibiarkan kosong agar guru bisa edit.
- */
+export type SimulateScoresOptions = {
+  predicate: string
+  activityTitle: string
+  activityDescription?: string
+  components: AssessmentComponent[]
+  studentName: string
+  subjectPerformanceNotes?: string
+  model?: string
+}
+
+const SIMULATE_SYSTEM = `Kamu membantu guru SD mengisi skor observasi aktivitas (skala 1–4, boleh 0.25).
+
+Tugas: terjemahkan predikat huruf siswa menjadi skor per komponen penilaian.
+Predikat umum: E (sangat rendah), D, C-, C, C+, B-, B, B+, A-, A, A+ (sangat tinggi).
+Skala: 1 Belum tampak, 2 Berkembang, 3 Mahir, 4 Sangat mahir (boleh 1.25, 1.5, …, 3.75).
+
+Aturan:
+- Skor harus konsisten dengan predikat target (rata tertimbang mendekati target).
+- Komponen tidak harus identik; variasikan wajar sesuai bobot & rubrik.
+- Pertimbangkan catatan performa mapel lain jika ada (jangan ekstrem bertentangan tanpa alasan).
+- Hanya kembalikan JSON: { "scores": { "<componentId>": <number> }, "note": "opsional singkat" }
+- Setiap componentId yang diminta harus ada di scores.
+- Nilai hanya antara 1 dan 4, kelipatan 0.25.`
+
+export async function simulateScoresWithOpenAI(
+  opts: SimulateScoresOptions
+): Promise<{ scores: Record<string, number>; note?: string }> {
+  const key = import.meta.env.VITE_OPENAI_API_KEY?.trim()
+  if (!key) {
+    throw new Error(
+      'VITE_OPENAI_API_KEY belum diisi. Tambahkan di file .env lalu restart npm run dev.'
+    )
+  }
+  const predicate = opts.predicate.trim()
+  if (!predicate) throw new Error('Predikat wajib diisi (mis. B+ atau A-).')
+  if (!opts.components.length) throw new Error('Tidak ada komponen penilaian.')
+
+  const model = opts.model || import.meta.env.VITE_OPENAI_MODEL?.trim() || 'gpt-4.1'
+
+  const compLines = opts.components.map((c) => {
+    const rub = (c.rubric || [])
+      .map((r) => `L${r.level}:${r.descriptor || r.label}`)
+      .join(' | ')
+    return `- id=${c.id} | ${c.label} (bobot ${c.weight}) | ${c.description} || rubrik: ${rub}`
+  })
+
+  const user = [
+    `Siswa: ${opts.studentName}`,
+    `Predikat target: ${predicate}`,
+    `Aktivitas: ${opts.activityTitle}`,
+    opts.activityDescription?.trim()
+      ? `Deskripsi: ${opts.activityDescription.trim().slice(0, 400)}`
+      : '',
+    opts.subjectPerformanceNotes?.trim()
+      ? `Performa terkait di mapel yang sama (konteks):\n${opts.subjectPerformanceNotes.trim().slice(0, 600)}`
+      : 'Performa terkait: (belum ada data)',
+    '',
+    'Komponen yang harus diisi skornya:',
+    ...compLines,
+    '',
+    'Kembalikan JSON scores untuk SEMUA id komponen di atas.',
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  const parsed = await callOpenAI(key, model, SIMULATE_SYSTEM, user)
+  const rawScores = parsed?.scores
+  if (!rawScores || typeof rawScores !== 'object') {
+    throw new Error('AI tidak mengembalikan scores yang valid.')
+  }
+
+  const scores: Record<string, number> = {}
+  for (const c of opts.components) {
+    const v = Number((rawScores as any)[c.id])
+    if (Number.isFinite(v)) scores[c.id] = clampScore(v)
+  }
+  if (Object.keys(scores).length === 0) {
+    throw new Error('AI tidak mengisi skor komponen apa pun.')
+  }
+  const vals = Object.values(scores)
+  const mid = vals.sort((a, b) => a - b)[Math.floor(vals.length / 2)] ?? 3
+  for (const c of opts.components) {
+    if (scores[c.id] == null) scores[c.id] = clampScore(mid)
+  }
+
+  return {
+    scores,
+    note: parsed.note ? String(parsed.note).trim().slice(0, 300) : undefined,
+  }
+}
+
 export async function generateAssessmentWithOpenAI(
   opts: GenerateAssessmentOptions
 ): Promise<AiAssessmentDraft> {
@@ -206,13 +297,11 @@ export async function generateAssessmentWithOpenAI(
         .filter(Boolean) as AssessmentComponent[])
     : []
 
-  // Pastikan id unik
   const seen = new Set<string>()
   components = components.map((c, i): AssessmentComponent => {
     let id = c.id
     if (seen.has(id)) id = `${c.id}_${i + 1}`
     seen.add(id)
-    // Jika komponen tanpa TP, coba isi dari linkedTpCodes
     const tpCodes: string[] = c.tpCodes.length ? c.tpCodes : linkedTpCodes.slice(0, 2)
     return { ...c, id, tpCodes }
   })
@@ -221,7 +310,6 @@ export async function generateAssessmentWithOpenAI(
     throw new Error('AI tidak menghasilkan komponen penilaian yang valid. Coba perjelas deskripsi.')
   }
 
-  // Sinkron linkedTpCodes dari komponen jika kosong
   const fromComponents = new Set<string>()
   components.forEach((c) => c.tpCodes.forEach((t) => fromComponents.add(t)))
   const finalLinked: string[] =
