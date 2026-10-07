@@ -23,7 +23,6 @@ import {
   type LatihanPaket,
   type LatihanStatus,
   type Question,
-  type QuestionType,
   type SubjectKey,
   type Topic,
   KOMPLEKSITAS_OPTIONS,
