@@ -223,7 +223,8 @@ export type OptionVerification = {
 
 export type RewriteOptionsResult = {
   options: string[]
-  changed: boolean
+  /** Indeks opsi yang teksnya berubah */
+  changed: number[]
   note: string
   verification: OptionVerification
 }
