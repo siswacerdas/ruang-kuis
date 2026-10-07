@@ -142,9 +142,9 @@ function normalizeComponent(raw: any, index: number, allowedCodes: Set<string>):
   const label = String(raw.label || raw.name || '').trim()
   const description = String(raw.description || raw.kompetensi || '').trim()
   if (!label || !description) return null
-  const tpCodes = (Array.isArray(raw.tpCodes) ? raw.tpCodes : [])
-    .map((c: unknown) => String(c || '').trim())
-    .filter((c: string) => c && allowedCodes.has(c))
+  const tpCodes: string[] = (Array.isArray(raw.tpCodes) ? raw.tpCodes : [])
+    .map((c: unknown) => String(c ?? '').trim())
+    .filter((c): c is string => c.length > 0 && allowedCodes.has(c))
   const weight = Number(raw.weight)
   return {
     id: String(raw.id || `c${index + 1}`)
@@ -189,15 +189,15 @@ export async function generateAssessmentWithOpenAI(
       .trim()
       .slice(0, 120) || 'Penilaian aktivitas'
 
-  const linkedTpCodes = [
+  const linkedTpCodes: string[] = [
     ...new Set(
       (Array.isArray(parsed.linkedTpCodes) ? parsed.linkedTpCodes : [])
-        .map((c: unknown) => String(c || '').trim())
-        .filter((c: string) => allowedCodes.has(c))
+        .map((c: unknown) => String(c ?? '').trim())
+        .filter((c): c is string => c.length > 0 && allowedCodes.has(c)),
     ),
   ]
 
-  let components = Array.isArray(parsed.components)
+  let components: AssessmentComponent[] = Array.isArray(parsed.components)
     ? (parsed.components
         .map((c: any, i: number) => normalizeComponent(c, i, allowedCodes))
         .filter(Boolean) as AssessmentComponent[])
@@ -205,12 +205,12 @@ export async function generateAssessmentWithOpenAI(
 
   // Pastikan id unik
   const seen = new Set<string>()
-  components = components.map((c, i) => {
+  components = components.map((c, i): AssessmentComponent => {
     let id = c.id
     if (seen.has(id)) id = `${c.id}_${i + 1}`
     seen.add(id)
     // Jika komponen tanpa TP, coba isi dari linkedTpCodes
-    const tpCodes = c.tpCodes.length ? c.tpCodes : linkedTpCodes.slice(0, 2)
+    const tpCodes: string[] = c.tpCodes.length ? c.tpCodes : linkedTpCodes.slice(0, 2)
     return { ...c, id, tpCodes }
   })
 
@@ -221,7 +221,7 @@ export async function generateAssessmentWithOpenAI(
   // Sinkron linkedTpCodes dari komponen jika kosong
   const fromComponents = new Set<string>()
   components.forEach((c) => c.tpCodes.forEach((t) => fromComponents.add(t)))
-  const finalLinked =
+  const finalLinked: string[] =
     linkedTpCodes.length > 0 ? linkedTpCodes : [...fromComponents]
 
   return {
