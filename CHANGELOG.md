@@ -8,7 +8,14 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Added — Input Nilai (penilaian aktivitas/proyek + AI + TP)
+- Halaman admin **Input Nilai** (`/input-nilai`): deskripsi aktivitas → pilih mapel → AI menautkan **hanya** TP mapel terpilih, merumuskan komponen penilaian terukur + rubrik 4 level.
+- Tabel nilai siswa siap isi (skala 1–4), total persen tertimbang, export CSV, simpan ke Firestore.
+- Koleksi baru: `assessmentActivities`, `assessmentScores`.
+- File: `src/types/assessment.ts`, `src/lib/openaiAssessment.ts`, `src/pages/InputNilai.tsx`; route/nav di `App.tsx` + `Layout.tsx`; rules Firestore; tautan Dashboard.
+
 ### Added — Stimulus multi-mode di generate soal AI (bank soal)
+ di generate soal AI (bank soal)
 - Guru bisa **memilih lebih dari satu** jenis stimulus dalam satu batch: tanpa stimulus, stimulus teks, dan/atau stimulus gambar.
 - Kuota per jenis bisa diatur manual (angka) atau **Bagi merata** dari total jumlah soal.
 - Prompt AI menerima kuota eksplisit (`stimulusKind` per soal); backend `resolveStimulusPlan` + `enforceStimulusPlan` memastikan hasil sesuai kuota (AI kadang menukar jenis).
