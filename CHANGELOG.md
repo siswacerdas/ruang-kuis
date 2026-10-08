@@ -8,6 +8,15 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Added — Nonaktifkan ortu, lupa password, notifikasi & laporan
+- **Notifikasi admin:** lonceng hanya menampilkan yang belum dibaca; setelah diklik, notifikasi dihapus otomatis. Tombol Bersihkan + badge real-time unread.
+- **Laporan:** panel Export diperkecil menjadi dropdown compact agar ringkasan nilai tetap menonjol; tip filter mapel jika "Semua mapel".
+- **Akun ortu (`/akun-ortu`):** daftar parents, nonaktifkan/aktifkan (`active`), proses reset password (password sementara + salin pesan WA).
+- **Lupa password ortu (`/ortu/lupa-password`):** form publik → `parentPasswordResets` + notifikasi admin; alur admin-mediated (bukan self-service email Firebase).
+- **Cloud Function `resetParentPassword`:** Admin SDK update password + `mustChangePassword`.
+- Nav admin: item **Akun Ortu**. Login tab ortu: link Lupa password.
+
+
 ### Fixed — UI Pengajuan Ortu & password siswa = NISN
 - `AdminPengajuanOrtu`: header lewat `Layout` (title/subtitle/actions), status bahasa Indonesia, empty state lebih jelas, kartu pengajuan dirapikan.
 - Import siswa: baris dengan email yang sudah ada **memperbarui** data (termasuk **NISN**), bukan dilewati.

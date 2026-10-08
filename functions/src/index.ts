@@ -395,3 +395,71 @@ export const syncStudentPasswordsToNisn = onCall(
     }
   }
 )
+
+
+/**
+ * Reset password akun orang tua (Admin SDK).
+ * Dipanggil dari halaman /akun-ortu setelah admin menyetujui permintaan reset.
+ */
+export const resetParentPassword = onCall(
+  {
+    region: 'asia-southeast2',
+    invoker: 'public',
+    cors: [
+      'https://ruang-kuis.web.app',
+      'https://ruang-kuis.firebaseapp.com',
+      'http://localhost:5173',
+      'http://localhost:4173',
+      'http://127.0.0.1:5173',
+    ],
+  },
+  async (request) => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Harus login sebagai guru/admin')
+    }
+
+    const email = String(request.data?.email || '')
+      .trim()
+      .toLowerCase()
+    const newPassword = String(request.data?.newPassword || '')
+
+    if (!email.includes('@') || newPassword.length < 6) {
+      throw new HttpsError('invalid-argument', 'Email atau password tidak valid')
+    }
+
+    // Pastikan email terdaftar sebagai parent aktif
+    const parentSnap = await db
+      .collection('parents')
+      .where('email', '==', email)
+      .limit(1)
+      .get()
+    if (parentSnap.empty) {
+      throw new HttpsError('not-found', 'Akun orang tua tidak ditemukan')
+    }
+    const parentData = parentSnap.docs[0].data()
+    if (parentData.active === false) {
+      throw new HttpsError('failed-precondition', 'Akun orang tua nonaktif')
+    }
+
+    const authAdmin = getAuth()
+    let uid = parentData.authUid ? String(parentData.authUid) : ''
+    if (!uid) {
+      try {
+        const user = await authAdmin.getUserByEmail(email)
+        uid = user.uid
+        await parentSnap.docs[0].ref.update({ authUid: uid })
+      } catch {
+        throw new HttpsError('not-found', 'User Auth tidak ditemukan untuk email ini')
+      }
+    }
+
+    await authAdmin.updateUser(uid, { password: newPassword })
+    await parentSnap.docs[0].ref.update({
+      mustChangePassword: true,
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+
+    logger.info('resetParentPassword ok', { email, uid })
+    return { ok: true }
+  }
+)

@@ -632,11 +632,18 @@ export default function Login() {
                 >
                   {loading ? 'Memeriksa…' : copy.cta}
                 </button>
-                <p className="text-center text-xs text-gray-500">
-                  Belum punya akun?{' '}
-                  <Link to="/ortu/daftar" className="text-amber-700 font-medium hover:underline">
-                    Ajukan akun orang tua
-                  </Link>
+                <p className="text-center text-xs text-gray-500 space-y-1">
+                  <span className="block">
+                    Belum punya akun?{' '}
+                    <Link to="/ortu/daftar" className="text-amber-700 font-medium hover:underline">
+                      Ajukan akun orang tua
+                    </Link>
+                  </span>
+                  <span className="block">
+                    <Link to="/ortu/lupa-password" className="text-amber-700 font-medium hover:underline">
+                      Lupa password?
+                    </Link>
+                  </span>
                 </p>
               </form>
             )}

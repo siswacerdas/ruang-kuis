@@ -54,7 +54,7 @@ export async function countPendingParentRequests(): Promise<number> {
   }
 }
 
-/** Notifikasi belum dibaca (maks 30) */
+/** Notifikasi belum dibaca (maks 30) — hanya unread */
 export async function fetchUnreadNotifications(): Promise<AdminNotification[]> {
   try {
     let snap
@@ -68,6 +68,7 @@ export async function fetchUnreadNotifications(): Promise<AdminNotification[]> {
         )
       )
     } catch {
+      // Fallback jika index belum ada: ambil semua lalu filter client-side
       snap = await getDocs(collection(db, 'adminNotifications'))
     }
     const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as AdminNotification))
@@ -80,7 +81,10 @@ export async function fetchUnreadNotifications(): Promise<AdminNotification[]> {
   }
 }
 
-/** Setelah dilihat: tandai read lalu hapus dokumen. */
+/**
+ * Setelah dilihat: tandai read lalu hapus dokumen agar lonceng hanya berisi yang baru.
+ * Jika delete gagal (rules), tetap keep read=true.
+ */
 export async function dismissNotification(id: string): Promise<void> {
   try {
     await updateDoc(doc(db, 'adminNotifications', id), { read: true })
@@ -102,10 +106,14 @@ export async function markAllNotificationsRead(ids: string[]): Promise<void> {
   await Promise.all(ids.map((id) => markNotificationRead(id)))
 }
 
+/** Hapus semua notifikasi yang sudah / belum dibaca (bersihkan lonceng). */
 export async function dismissAllNotifications(ids: string[]): Promise<void> {
   await Promise.all(ids.map((id) => dismissNotification(id)))
 }
 
+/**
+ * Subscribe jumlah pending parent requests (untuk badge nav).
+ */
 export function subscribePendingParentCount(onCount: (n: number) => void): Unsubscribe {
   return onSnapshot(
     collection(db, 'parentRequests'),
@@ -117,6 +125,9 @@ export function subscribePendingParentCount(onCount: (n: number) => void): Unsub
   )
 }
 
+/**
+ * Subscribe jumlah notifikasi unread (untuk badge lonceng real-time).
+ */
 export function subscribeUnreadNotifCount(onCount: (n: number) => void): Unsubscribe {
   return onSnapshot(
     collection(db, 'adminNotifications'),
