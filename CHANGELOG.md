@@ -8,6 +8,11 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Fixed — Login tidak lagi terseret ke akun dummy
+- `ensureStudentSession` tidak lagi mengembalikan sesi `localStorage` tanpa Firebase Auth yang email-nya cocok. Sisa login akun uji `dummy` tidak mengalihkan halaman login.
+- `/login` dan `/kerjakan` menunggu `onAuthStateChanged`. Logout membersihkan `rk_student`.
+- Login guru/ortu membersihkan sesi siswa. Tab Tes disembunyikan di produksi (tetap ada di dev atau `?tab=tes`).
+
 ### Added — Akun orang tua (Fase A, sedang dikerjakan)
 - Desain: `docs/PARENT_ACCOUNT.md` (skema, alur pengajuan → approve, multi-anak, notifikasi, dummy uji).
 - Types: `src/types/parent.ts` (`ParentRequest`, `Parent`, notifikasi, session).
