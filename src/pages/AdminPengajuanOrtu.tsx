@@ -13,6 +13,7 @@ import {
 import { db } from '../lib/firebase'
 import Layout from '../components/Layout'
 import { createStudentAuthAccount } from '../lib/createStudentAuth'
+import { isStaffEmail } from '../lib/loginAccounts'
 import type { ParentRequest } from '../types/parent'
 
 /**
@@ -67,8 +68,17 @@ export default function AdminPengajuanOrtu() {
     setError('')
     setMessage('')
     try {
+      const em = r.email.toLowerCase()
+      if (await isStaffEmail(em)) {
+        setError(
+          `Email ${em} adalah akun guru/admin. Tidak bisa disetujui sebagai ortu. Minta email lain.`
+        )
+        setBusyId(null)
+        return
+      }
+
       const existing = await getDocs(
-        query(collection(db, 'parents'), where('email', '==', r.email.toLowerCase()))
+        query(collection(db, 'parents'), where('email', '==', em))
       )
       if (!existing.empty) {
         setError('Email sudah terdaftar di parents. Tolak atau perbaiki manual.')
@@ -123,11 +133,13 @@ export default function AdminPengajuanOrtu() {
   }
 
   const reject = async (r: ParentRequest) => {
-    if (!confirm(`Tolak pengajuan ${r.fullName}?`)) return
+    const note = prompt('Alasan penolakan (opsional):') ?? ''
     setBusyId(r.id!)
+    setError('')
     try {
       await updateDoc(doc(db, 'parentRequests', r.id!), {
         status: 'rejected',
+        note: note || null,
         tempPassword: null,
         reviewedAt: serverTimestamp(),
       })
@@ -135,7 +147,7 @@ export default function AdminPengajuanOrtu() {
       await load()
     } catch (err) {
       console.error(err)
-      setError('Gagal menolak')
+      setError('Gagal menolak pengajuan')
     } finally {
       setBusyId(null)
     }
@@ -143,51 +155,44 @@ export default function AdminPengajuanOrtu() {
 
   return (
     <Layout>
-      <div className="max-w-3xl mx-auto p-4 md:p-6 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Pengajuan orang tua</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Setujui akun ortu. Email ortu disalin ke parentEmail pada data siswa.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setFilter('pending')}
-              className={`text-xs font-semibold px-3 py-1.5 rounded-lg ${
-                filter === 'pending'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-gray-600'
-              }`}
-            >
-              Menunggu
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilter('all')}
-              className={`text-xs font-semibold px-3 py-1.5 rounded-lg ${
-                filter === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'
-              }`}
-            >
-              Semua
-            </button>
-          </div>
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Pengajuan akun orang tua</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Setujui untuk membuat login Firebase Auth + profil parents.
+          </p>
         </div>
 
-        {message && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            {message}
-          </div>
-        )}
         {error && (
-          <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm px-3 py-2">
             {error}
           </div>
         )}
+        {message && (
+          <div className="rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm px-3 py-2">
+            {message}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          {(['pending', 'all'] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFilter(f)}
+              className={`text-xs font-medium px-3 py-1.5 rounded-full border ${
+                filter === f
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-gray-600 border-gray-200'
+              }`}
+            >
+              {f === 'pending' ? 'Menunggu' : 'Semua'}
+            </button>
+          ))}
+        </div>
 
         {loading ? (
-          <p className="text-sm text-gray-400 py-8 text-center">Memuat…</p>
+          <p className="text-sm text-gray-400">Memuat…</p>
         ) : filtered.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-500">
             Tidak ada pengajuan{filter === 'pending' ? ' menunggu' : ''}.
