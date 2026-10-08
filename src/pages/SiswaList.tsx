@@ -11,6 +11,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
+import { getFunctions, httpsCallable } from 'firebase/functions'
 import Layout from '../components/Layout'
 import { createStudentAuthAccount } from '../lib/createStudentAuth'
 import {
@@ -25,6 +26,7 @@ export default function SiswaList() {
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [syncingPw, setSyncingPw] = useState(false)
   const [syncingParent, setSyncingParent] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -142,8 +144,11 @@ export default function SiswaList() {
         rows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
       }
 
-      const existing = new Set(students.map((s) => s.email.toLowerCase()))
+      const byEmail = new Map(
+        students.filter((s) => s.id).map((s) => [s.email.toLowerCase(), s])
+      )
       let added = 0
+      let updated = 0
       let skipped = 0
       const failedRows: number[] = []
       let firstFailure = ''
@@ -153,29 +158,44 @@ export default function SiswaList() {
           skipped++
           continue
         }
-        if (existing.has(s.email)) {
-          skipped++
-          continue
-        }
+        const prev = byEmail.get(s.email)
         try {
-          await addDoc(collection(db, 'students'), {
-            ...s,
-            createdAt: serverTimestamp(),
-          })
-          existing.add(s.email)
-          added++
+          if (prev?.id) {
+            // Update data (termasuk NISN) — password Auth tidak ikut berubah di sini
+            const patch: Record<string, unknown> = {
+              fullName: s.fullName,
+              nisn: s.nisn,
+              className: s.className || DEFAULT_STUDENT_CLASS,
+              active: true,
+            }
+            if (s.nickname) patch.nickname = s.nickname
+            if (s.parentEmail) patch.parentEmail = s.parentEmail
+            await updateDoc(doc(db, 'students', prev.id), patch)
+            updated++
+          } else {
+            await addDoc(collection(db, 'students'), {
+              ...s,
+              createdAt: serverTimestamp(),
+            })
+            byEmail.set(s.email, { ...s, id: 'new' } as Student)
+            added++
+          }
         } catch (rowErr: any) {
           console.error('Import baris gagal', i + 1, rowErr)
           failedRows.push(i + 1)
           if (!firstFailure) firstFailure = String(rowErr?.message || '').slice(0, 140)
         }
       }
-      setMessage(`Import selesai: ${added} ditambahkan, ${skipped} dilewati (duplikat/tidak valid).`)
+      setMessage(
+        `Import selesai: ${added} ditambahkan, ${updated} diperbarui (termasuk NISN), ${skipped} dilewati.` +
+          (updated
+            ? '\nJika password login masih salah: klik "Samakan password Auth = NISN" (perlu deploy Cloud Function) atau hapus user Auth di Console lalu "Buat akun login".'
+            : '')
+      )
       if (failedRows.length > 0) {
         const shown = failedRows.slice(0, 10).join(', ') + (failedRows.length > 10 ? ', …' : '')
         setError(
-          `${failedRows.length} baris gagal disimpan (baris data ke-${shown}). ${firstFailure} ` +
-            'Perbaiki lalu impor ulang; siswa yang sudah ada otomatis dilewati.'
+          `${failedRows.length} baris gagal disimpan (baris data ke-${shown}). ${firstFailure}`
         )
       }
       await load()
@@ -397,6 +417,54 @@ export default function SiswaList() {
     setSyncing(false)
   }
 
+
+  /** Samakan password Auth = NISN (Cloud Function Admin SDK) */
+  const syncPasswordsToNisn = async () => {
+    const withAuth = students.filter((s) => s.active && (s.authUid || s.email))
+    if (withAuth.length === 0) {
+      setMessage('Tidak ada siswa aktif untuk disamakan passwordnya.')
+      return
+    }
+    if (
+      !confirm(
+        `Samakan password login ${withAuth.length} siswa dengan NISN di data?\n` +
+          'Password lama (mis. NIS) diganti. Siswa login dengan NISN setelah ini.'
+      )
+    )
+      return
+
+    setSyncingPw(true)
+    setError('')
+    setMessage('')
+    try {
+      const fn = httpsCallable(getFunctions(undefined, 'asia-southeast2'), 'syncStudentPasswordsToNisn')
+      const res = await fn({})
+      const data = (res.data || {}) as {
+        updated?: number
+        skipped?: number
+        failed?: number
+        errors?: string[]
+      }
+      setMessage(
+        `Password Auth = NISN: ${data.updated ?? 0} diperbarui, ${data.skipped ?? 0} dilewati, ${data.failed ?? 0} gagal.` +
+          (data.errors?.length ? `\n${data.errors.join('\n')}` : '')
+      )
+    } catch (err: any) {
+      console.error(err)
+      const code = err?.code || ''
+      if (String(code).includes('not-found') || String(err?.message || '').includes('not-found')) {
+        setError(
+          'Cloud Function syncStudentPasswordsToNisn belum di-deploy. Jalankan: firebase deploy --only functions:syncStudentPasswordsToNisn'
+        )
+      } else {
+        setError(`Gagal menyamakan password: ${String(err?.message || err).slice(0, 160)}`)
+      }
+    } finally {
+      setSyncingPw(false)
+    }
+  }
+
+
   const withAuth = students.filter((s) => s.authUid).length
   const withParent = students.filter((s) => isValidEmail(s.parentEmail)).length
 
@@ -440,10 +508,19 @@ export default function SiswaList() {
           <button
             type="button"
             onClick={syncAuthAccounts}
-            disabled={syncing}
+            disabled={syncing || syncingPw}
             className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white px-3.5 py-2 rounded-xl text-sm font-medium transition"
           >
             {syncing ? 'Membuat akun...' : 'Buat akun login'}
+          </button>
+          <button
+            type="button"
+            onClick={syncPasswordsToNisn}
+            disabled={syncing || syncingPw}
+            title="Set password Firebase Auth = field NISN di Firestore"
+            className="inline-flex items-center gap-1.5 bg-white border border-amber-200 hover:bg-amber-50 text-amber-900 px-3.5 py-2 rounded-xl text-sm font-medium transition disabled:opacity-50"
+          >
+            {syncingPw ? 'Menyamakan password...' : 'Samakan password = NISN'}
           </button>
           <button
             type="button"
@@ -464,8 +541,8 @@ export default function SiswaList() {
       <div className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-sm text-indigo-800">
         <p className="font-medium mb-1">Alur siswa & notifikasi orang tua</p>
         <ol className="list-decimal list-inside text-indigo-700/90 space-y-0.5 text-xs">
-          <li>Import / tambah data siswa (email fiktif + NISN)</li>
-          <li>Klik <strong>Buat akun login</strong> (password = NISN)</li>
+          <li>Import / tambah data siswa (email fiktif + <strong>NISN</strong> = password). Import ulang memperbarui NISN yang sudah ada.</li>
+          <li>Klik <strong>Buat akun login</strong> (password Auth = NISN). Akun yang sudah ada: samakan password lewat tombol khusus atau Console.</li>
           <li>
             Isi <strong>email orang tua</strong> (edit per siswa atau tombol <strong>Sinkron email ortu</strong> dari
             CSV)
