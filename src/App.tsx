@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { auth, db } from './lib/firebase'
+import { isStaffEmail } from './lib/loginAccounts'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import BankSoal from './pages/BankSoal'
@@ -50,14 +51,21 @@ function App() {
       if (currentUser?.email) {
         const email = currentUser.email.toLowerCase()
         try {
-          const studentSnap = await getDocs(
-            query(collection(db, 'students'), where('email', '==', email))
-          )
-          const parentSnap = await getDocs(
-            query(collection(db, 'parents'), where('email', '==', email))
-          )
-          setIsStudent(!studentSnap.empty)
-          setIsParent(!parentSnap.empty)
+          // Staff (guru/admin) menang atas parents/students jika email bentrok.
+          const staff = await isStaffEmail(email)
+          if (staff) {
+            setIsStudent(false)
+            setIsParent(false)
+          } else {
+            const studentSnap = await getDocs(
+              query(collection(db, 'students'), where('email', '==', email))
+            )
+            const parentSnap = await getDocs(
+              query(collection(db, 'parents'), where('email', '==', email))
+            )
+            setIsStudent(!studentSnap.empty)
+            setIsParent(!parentSnap.empty)
+          }
         } catch {
           setIsStudent(false)
           setIsParent(false)
