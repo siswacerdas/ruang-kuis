@@ -7,16 +7,16 @@ import type { ParentSession } from '../types/parent'
 import {
   SUBJECTS,
   getSubject,
+  type SubjectKey,
   type LatihanAttempt,
   type LatihanPaket,
-  type SubjectKey,
 } from '../types/question'
 import OrtuLayout from '../components/OrtuLayout'
 
 type ChildInfo = { id: string; fullName: string; className?: string }
 
 type SubjectRow = {
-  subjectKey: SubjectKey | 'unknown'
+  subjectKey: string
   label: string
   shortName: string
   icon: string
@@ -42,39 +42,14 @@ function toMillis(v: unknown): number | null {
 }
 
 function formatShort(ms: number) {
-  return new Date(ms).toLocaleDateString('id-ID', {
+  return new Date(ms).toLocaleString('id-ID', {
     day: 'numeric',
     month: 'short',
-    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   })
 }
 
-function formatDuration(ms?: number | null): string {
-  if (!ms || ms <= 0) return '—'
-  const sec = Math.round(ms / 1000)
-  if (sec < 60) return `${sec} dtk`
-  const m = Math.floor(sec / 60)
-  const s = sec % 60
-  if (m < 60) return s ? `${m} mnt ${s} dtk` : `${m} mnt`
-  const h = Math.floor(m / 60)
-  return `${h} jam ${m % 60} mnt`
-}
-
-function scoreTone(pct: number) {
-  if (pct >= 70) return 'text-emerald-600'
-  if (pct >= 40) return 'text-amber-600'
-  return 'text-red-600'
-}
-
-function barColor(pct: number) {
-  if (pct >= 70) return 'bg-emerald-500'
-  if (pct >= 40) return 'bg-amber-400'
-  return 'bg-red-400'
-}
-
-/**
- * Ringkasan nilai per mapel dari kuis/latihan saja (bukan Input Nilai admin).
- */
 export default function OrtuNilai() {
   const navigate = useNavigate()
   const [session, setSession] = useState<ParentSession | null>(null)
@@ -83,7 +58,6 @@ export default function OrtuNilai() {
   const [attempts, setAttempts] = useState<LatihanAttempt[]>([])
   const [paketMap, setPaketMap] = useState<Map<string, LatihanPaket>>(new Map())
   const [loading, setLoading] = useState(true)
-  const [expanded, setExpanded] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -95,7 +69,6 @@ export default function OrtuNilai() {
         return
       }
       setSession(s)
-
       const kids: ChildInfo[] = []
       for (const id of s.studentIds || []) {
         try {
@@ -112,19 +85,17 @@ export default function OrtuNilai() {
           kids.push({ id, fullName: `Siswa (${id.slice(0, 6)}…)` })
         }
       }
-
-      let pMap = new Map<string, LatihanPaket>()
       try {
         const pSnap = await getDocs(collection(db, 'latihan'))
-        pSnap.docs.forEach((d) => pMap.set(d.id, { id: d.id, ...d.data() } as LatihanPaket))
+        const map = new Map<string, LatihanPaket>()
+        pSnap.docs.forEach((d) => map.set(d.id, { id: d.id, ...d.data() } as LatihanPaket))
+        if (!cancelled) setPaketMap(map)
       } catch (err) {
-        console.warn('latihan', err)
+        console.warn(err)
       }
-
       if (!cancelled) {
         setChildren(kids)
         setSelectedChildId(kids[0]?.id || '')
-        setPaketMap(pMap)
         setLoading(false)
       }
     })()
@@ -141,24 +112,65 @@ export default function OrtuNilai() {
     ;(async () => {
       setLoading(true)
       try {
-        let list: LatihanAttempt[] = []
+        const list: LatihanAttempt[] = []
+        const nameKey = selectedChild.fullName.trim().toLowerCase()
+        const match = (a: { studentId?: string | null; studentName?: string }) => {
+          if (a.studentId && a.studentId === selectedChild.id) return true
+          return (a.studentName || '').trim().toLowerCase() === nameKey
+        }
         try {
           const byId = await getDocs(
             query(collection(db, 'attempts'), where('studentId', '==', selectedChild.id))
           )
-          list = byId.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanAttempt))
+          byId.docs.forEach((d) => list.push({ id: d.id, ...d.data() } as LatihanAttempt))
         } catch {
-          /* index */
-        }
-        if (list.length === 0) {
-          const all = await getDocs(collection(db, 'attempts'))
-          const nameKey = selectedChild.fullName.trim().toLowerCase()
-          list = all.docs
-            .map((d) => ({ id: d.id, ...d.data() } as LatihanAttempt))
-            .filter((a) => {
-              if (a.studentId && a.studentId === selectedChild.id) return true
-              return (a.studentName || '').trim().toLowerCase() === nameKey
+          try {
+            const all = await getDocs(collection(db, 'attempts'))
+            all.docs.forEach((d) => {
+              const a = { id: d.id, ...d.data() } as LatihanAttempt
+              if (match(a)) list.push(a)
             })
+          } catch (err) {
+            console.warn(err)
+          }
+        }
+        try {
+          const byId = await getDocs(
+            query(collection(db, 'practiceAttempts'), where('studentId', '==', selectedChild.id))
+          )
+          byId.docs.forEach((d) => {
+            const raw = d.data()
+            list.push({
+              id: d.id,
+              ...raw,
+              latihanId: `practice:${d.id}`,
+              latihanTitle: String(raw.title || raw.latihanTitle || 'Latihan mandiri'),
+              subjectKey: raw.subjectKey,
+            } as LatihanAttempt & { subjectKey?: string })
+          })
+        } catch {
+          try {
+            const all = await getDocs(collection(db, 'practiceAttempts'))
+            all.docs.forEach((d) => {
+              const raw = d.data()
+              if (
+                !match({
+                  studentId: raw.studentId as string | undefined,
+                  studentName: raw.studentName as string | undefined,
+                })
+              )
+                return
+              list.push({
+                id: d.id,
+                ...raw,
+                latihanId: `practice:${d.id}`,
+                latihanTitle: String(raw.title || raw.latihanTitle || 'Latihan mandiri'),
+                subjectKey: raw.subjectKey,
+              } as LatihanAttempt & { subjectKey?: string })
+            })
+          } catch (err) {
+            console.warn(err)
+          }
         }
         list.sort((a, b) => (toMillis(b.finishedAt) || 0) - (toMillis(a.finishedAt) || 0))
         if (!cancelled) setAttempts(list)
@@ -194,9 +206,9 @@ export default function OrtuNilai() {
             attempts: [],
           }
         } else {
-          const sub = getSubject(key)
+          const sub = getSubject(key as SubjectKey)
           row = {
-            subjectKey: key as SubjectKey,
+            subjectKey: key,
             label: sub?.name || key,
             shortName: sub?.shortName || key,
             icon: sub?.icon || '📘',
@@ -214,8 +226,9 @@ export default function OrtuNilai() {
     }
 
     attempts.forEach((a) => {
-      const p = paketMap.get(a.latihanId)
-      const sk = (p?.subjectKey as string) || 'unknown'
+      const p = a.latihanId ? paketMap.get(a.latihanId) : undefined
+      const fromPractice = (a as { subjectKey?: string }).subjectKey
+      const sk = (p?.subjectKey as string) || fromPractice || 'unknown'
       const row = ensure(sk)
       row.count += 1
       row.avgPercent += a.percent || 0
@@ -248,8 +261,8 @@ export default function OrtuNilai() {
     const n = attempts.length
     if (!n) return { avg: null as number | null, count: 0 }
     return {
-      count: n,
       avg: Math.round(attempts.reduce((s, a) => s + (a.percent || 0), 0) / n),
+      count: n,
     }
   }, [attempts])
 
@@ -262,15 +275,12 @@ export default function OrtuNilai() {
   }
 
   return (
-    <OrtuLayout title="Nilai" subtitle={selectedChild?.fullName} parentName={session.fullName}>
+    <OrtuLayout title="Nilai mapel" subtitle={selectedChild?.fullName} parentName={session.fullName}>
       <div className="space-y-4">
         {children.length > 1 && (
           <select
             value={selectedChildId}
-            onChange={(e) => {
-              setSelectedChildId(e.target.value)
-              setExpanded(null)
-            }}
+            onChange={(e) => setSelectedChildId(e.target.value)}
             className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm"
           >
             {children.map((c) => (
@@ -282,118 +292,57 @@ export default function OrtuNilai() {
           </select>
         )}
 
-        <div className="rounded-xl border border-sky-100 bg-sky-50/80 px-3.5 py-2.5 text-xs text-sky-900 leading-relaxed">
-          Nilai di bawah dihitung dari <strong>kuis & latihan</strong> yang dikerjakan anak. Tidak
-          termasuk nilai proyek / aktivitas yang diinput guru di sekolah.
-        </div>
-
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-4">
-          <div className="flex-1">
-            <p className="text-[11px] text-gray-400 uppercase tracking-wide">Rata-rata semua mapel</p>
-            <p
-              className={`text-2xl font-bold tabular-nums ${
-                overall.avg != null ? scoreTone(overall.avg) : 'text-gray-400'
-              }`}
-            >
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 flex gap-4">
+          <div>
+            <p className="text-[11px] text-gray-400 uppercase">Total</p>
+            <p className="text-xl font-bold">{loading ? '…' : overall.count}</p>
+          </div>
+          <div>
+            <p className="text-[11px] text-gray-400 uppercase">Rata-rata</p>
+            <p className="text-xl font-bold">
               {loading ? '…' : overall.avg != null ? `${overall.avg}%` : '—'}
             </p>
           </div>
-          <div className="text-right">
-            <p className="text-[11px] text-gray-400">Total pengerjaan</p>
-            <p className="text-lg font-semibold text-gray-900 tabular-nums">
-              {loading ? '…' : overall.count}
-            </p>
-          </div>
         </div>
+
+        <p className="text-xs text-gray-500">Termasuk kuis guru dan latihan mandiri / ortu.</p>
 
         {loading ? (
           <p className="text-center text-sm text-gray-400 py-10">Memuat…</p>
         ) : rows.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-500">
-            Belum ada nilai kuis untuk anak ini.
+            Belum ada nilai.
           </div>
         ) : (
-          <ul className="space-y-2.5">
-            {rows.map((r) => {
-              const key = String(r.subjectKey)
-              const open = expanded === key
-              return (
-                <li
-                  key={key}
-                  className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setExpanded(open ? null : key)}
-                    className="w-full text-left px-4 py-3.5 flex items-center gap-3 hover:bg-gray-50/80 transition"
-                  >
-                    <span className="text-xl shrink-0" aria-hidden>
-                      {r.icon}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{r.label}</p>
-                        <span className="text-[10px] font-medium text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">
-                          {r.shortName}
+          <ul className="space-y-3">
+            {rows.map((r) => (
+              <li key={r.subjectKey} className="bg-white rounded-2xl border border-gray-100 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">{r.icon}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-sm text-gray-900">{r.label}</p>
+                    <p className="text-[11px] text-gray-400">
+                      {r.count} pengerjaan · terbaik {r.bestPercent}%
+                      {r.lastAt ? ` · terakhir ${formatShort(r.lastAt)}` : ''}
+                    </p>
+                  </div>
+                  <span className="text-lg font-bold tabular-nums text-indigo-600">{r.avgPercent}%</span>
+                </div>
+                <ul className="space-y-1.5 border-t border-gray-50 pt-2">
+                  {r.attempts.slice(0, 5).map((a) => {
+                    const fin = toMillis(a.finishedAt)
+                    return (
+                      <li key={a.id} className="flex justify-between text-xs text-gray-600 gap-2">
+                        <span className="truncate">{a.latihanTitle || 'Latihan'}</span>
+                        <span className="shrink-0 tabular-nums">
+                          {a.percent ?? 0}%{fin ? ` · ${formatShort(fin)}` : ''}
                         </span>
-                      </div>
-                      <div className="mt-1.5 h-1.5 rounded-full bg-gray-100 overflow-hidden max-w-[12rem]">
-                        <div
-                          className={`h-full rounded-full ${barColor(r.avgPercent)}`}
-                          style={{ width: `${Math.min(100, r.avgPercent)}%` }}
-                        />
-                      </div>
-                      <p className="text-[11px] text-gray-400 mt-1">
-                        {r.count} kali · terbaik {r.bestPercent}%
-                        {r.lastAt ? ` · terakhir ${formatShort(r.lastAt)}` : ''}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className={`text-lg font-bold tabular-nums ${scoreTone(r.avgPercent)}`}>
-                        {r.avgPercent}%
-                      </p>
-                      <p className="text-[10px] text-gray-400">{open ? 'Tutup' : 'Detail'}</p>
-                    </div>
-                  </button>
-
-                  {open && (
-                    <div className="border-t border-gray-50 bg-gray-50/40 px-4 py-3">
-                      <p className="text-[11px] text-gray-500 mb-2">
-                        Total waktu: {formatDuration(r.totalDurationMs)}
-                      </p>
-                      <ul className="space-y-2">
-                        {r.attempts.map((a) => {
-                          const fin = toMillis(a.finishedAt)
-                          const pct = a.percent ?? 0
-                          return (
-                            <li
-                              key={a.id}
-                              className="bg-white rounded-xl border border-gray-100 px-3 py-2.5 flex items-center gap-2"
-                            >
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs font-medium text-gray-900 truncate">
-                                  {a.latihanTitle || 'Latihan'}
-                                </p>
-                                <p className="text-[10px] text-gray-400 mt-0.5">
-                                  {fin ? formatShort(fin) : '—'}
-                                  {' · '}
-                                  {formatDuration(a.durationMs)}
-                                  {' · '}
-                                  {a.score}/{a.total}
-                                </p>
-                              </div>
-                              <span className={`text-sm font-semibold tabular-nums ${scoreTone(pct)}`}>
-                                {pct}%
-                              </span>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    </div>
-                  )}
-                </li>
-              )
-            })}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </li>
+            ))}
           </ul>
         )}
       </div>
