@@ -69,7 +69,6 @@ const QUICK = [
     title: 'Riwayat',
     desc: 'Kuis & durasi',
     gradient: 'from-sky-500 to-cyan-500',
-    soft: 'bg-sky-50 border-sky-100',
     icon: (
       <path
         strokeLinecap="round"
@@ -84,7 +83,6 @@ const QUICK = [
     title: 'Nilai mapel',
     desc: 'Rata-rata kuis',
     gradient: 'from-emerald-500 to-teal-500',
-    soft: 'bg-emerald-50 border-emerald-100',
     icon: (
       <path
         strokeLinecap="round"
@@ -99,7 +97,6 @@ const QUICK = [
     title: 'Peringkat',
     desc: 'Posisi anak',
     gradient: 'from-amber-500 to-orange-500',
-    soft: 'bg-amber-50 border-amber-100',
     icon: (
       <path
         strokeLinecap="round"
@@ -114,7 +111,6 @@ const QUICK = [
     title: 'Buat kuis',
     desc: 'Latihan anak',
     gradient: 'from-violet-500 to-fuchsia-500',
-    soft: 'bg-violet-50 border-violet-100',
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 4v16m8-8H4" />
     ),
@@ -141,7 +137,6 @@ export default function OrtuHome() {
         return
       }
       setSession(s)
-      // Lightbox: tampil di login 1–3, hilang mulai login ke-4
       setShowGuide((s.loginCount ?? 0) <= PARENT_GUIDE_MAX_LOGINS)
 
       const kids: ChildInfo[] = []
@@ -232,7 +227,6 @@ export default function OrtuHome() {
   }, [attempts])
 
   const dismissGuide = () => {
-    // Hanya tutup di sesi ini; login berikutnya tetap tampil sampai login ke-3 selesai
     setShowGuide(false)
   }
 
@@ -263,8 +257,13 @@ export default function OrtuHome() {
   const avgTone = stats.avgPercent != null ? scoreTone(stats.avgPercent) : null
 
   return (
-    <OrtuLayout parentName={session.fullName} hideHeader>
-      <div className="space-y-5 -mt-1">
+    <OrtuLayout
+      parentName={session.fullName}
+      title="Beranda"
+      subtitle={selectedChild?.fullName || session.fullName}
+      hideHeader
+    >
+      <div className="space-y-5 md:space-y-6">
         {showGuide && session && (
           <OrtuGuideLightbox
             parentName={session.fullName}
@@ -273,10 +272,10 @@ export default function OrtuHome() {
           />
         )}
 
-        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 text-white shadow-lg shadow-indigo-200/40">
+        <section className="relative overflow-hidden rounded-2xl md:rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 text-white shadow-lg shadow-indigo-200/40">
           <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-white/10 blur-2xl" />
           <div className="absolute -left-6 bottom-0 w-32 h-32 rounded-full bg-fuchsia-400/20 blur-2xl" />
-          <div className="relative px-5 pt-5 pb-6 sm:px-6">
+          <div className="relative px-5 pt-5 pb-6 sm:px-6 md:px-8 md:py-7">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-indigo-100 text-xs font-medium tracking-wide">
@@ -285,14 +284,14 @@ export default function OrtuHome() {
                 <h1 className="text-2xl sm:text-3xl font-bold mt-1 leading-tight">
                   Halo, {firstName}
                 </h1>
-                <p className="text-indigo-100/90 text-sm mt-1.5 leading-relaxed max-w-sm">
+                <p className="text-indigo-100/90 text-sm mt-1.5 leading-relaxed max-w-xl">
                   Pantau belajar anak, nilai kuis, dan buat latihan khusus — semua di satu tempat.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={handleLogout}
-                className="text-xs font-medium text-white/80 hover:text-white bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition shrink-0"
+                className="md:hidden text-xs font-medium text-white/80 hover:text-white bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition shrink-0"
               >
                 Keluar
               </button>
@@ -334,85 +333,75 @@ export default function OrtuHome() {
           </div>
         </section>
 
-        <section className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 pt-5 pb-4 flex items-center gap-3.5">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center text-xl font-bold shadow-md shadow-indigo-200/50 shrink-0">
+        <section className="grid grid-cols-1 lg:grid-cols-4 gap-3 md:gap-4">
+          <div className="lg:col-span-1 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 md:p-5 flex items-center gap-3.5">
+            <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center text-lg md:text-xl font-bold shadow-sm shrink-0">
               {childInitial}
             </div>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0">
               <p className="text-[11px] font-semibold text-indigo-500 uppercase tracking-wider">
-                Sedang dipantau
+                Dipantau
               </p>
-              <h2 className="text-lg font-bold text-gray-900 truncate leading-snug">
+              <h2 className="text-base md:text-lg font-bold text-gray-900 truncate">
                 {selectedChild?.fullName || '—'}
               </h2>
-              <p className="text-xs text-gray-400 mt-0.5">
-                {selectedChild?.className ? `Kelas ${selectedChild.className}` : 'Kelas belum diisi'}
+              <p className="text-xs text-gray-400 mt-0.5 truncate">
+                {selectedChild?.className ? `Kelas ${selectedChild.className}` : 'Kelas —'}
                 {selectedChild?.nickname ? ` · ${selectedChild.nickname}` : ''}
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-3 border-t border-gray-50">
-            <div className="px-3 py-4 text-center border-r border-gray-50">
-              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Kuis</p>
-              <p className="text-2xl font-bold text-gray-900 tabular-nums mt-1">
-                {loadingAttempts ? '…' : stats.count}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 md:px-5 text-center md:text-left">
+            <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Total kuis</p>
+            <p className="text-2xl md:text-3xl font-bold text-gray-900 tabular-nums mt-1">
+              {loadingAttempts ? '…' : stats.count}
+            </p>
+            {stats.lastAt && (
+              <p className="text-[11px] text-gray-400 mt-1 truncate">
+                Terakhir {formatShort(stats.lastAt)}
               </p>
-              <p className="text-[10px] text-gray-400 mt-0.5">total</p>
-            </div>
-            <div className="px-3 py-4 text-center border-r border-gray-50">
-              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Rata-rata</p>
-              <p
-                className={`text-2xl font-bold tabular-nums mt-1 ${
-                  avgTone ? avgTone.text : 'text-gray-300'
-                }`}
-              >
-                {loadingAttempts
-                  ? '…'
-                  : stats.avgPercent != null
-                    ? `${stats.avgPercent}%`
-                    : '—'}
-              </p>
-              {stats.avgPercent != null && (
-                <div className="mt-1.5 mx-auto h-1.5 w-12 rounded-full bg-gray-100 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${avgTone?.bar || 'bg-gray-300'}`}
-                    style={{ width: `${Math.min(100, stats.avgPercent)}%` }}
-                  />
-                </div>
-              )}
-            </div>
-            <div className="px-3 py-4 text-center">
-              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Minggu ini</p>
-              <p className="text-2xl font-bold text-sky-600 tabular-nums mt-1">
-                {loadingAttempts ? '…' : stats.thisWeek}
-              </p>
-              <p className="text-[10px] text-gray-400 mt-0.5">pengerjaan</p>
-            </div>
+            )}
           </div>
 
-          {stats.lastAt && (
-            <div className="px-5 py-3 bg-gray-50/80 border-t border-gray-50 text-[11px] text-gray-500 flex items-center justify-between gap-2">
-              <span>Terakhir mengerjakan</span>
-              <span className="font-medium text-gray-700">
-                {formatShort(stats.lastAt)}
-                {stats.lastPercent != null ? ` · ${stats.lastPercent}%` : ''}
-              </span>
-            </div>
-          )}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 md:px-5 text-center md:text-left">
+            <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Rata-rata skor</p>
+            <p
+              className={`text-2xl md:text-3xl font-bold tabular-nums mt-1 ${
+                avgTone ? avgTone.text : 'text-gray-300'
+              }`}
+            >
+              {loadingAttempts ? '…' : stats.avgPercent != null ? `${stats.avgPercent}%` : '—'}
+            </p>
+            {stats.avgPercent != null && (
+              <div className="mt-2 h-1.5 w-full max-w-[8rem] mx-auto md:mx-0 rounded-full bg-gray-100 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${avgTone?.bar || 'bg-gray-300'}`}
+                  style={{ width: `${Math.min(100, stats.avgPercent)}%` }}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 md:px-5 text-center md:text-left">
+            <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Minggu ini</p>
+            <p className="text-2xl md:text-3xl font-bold text-sky-600 tabular-nums mt-1">
+              {loadingAttempts ? '…' : stats.thisWeek}
+            </p>
+            <p className="text-[11px] text-gray-400 mt-1">pengerjaan kuis</p>
+          </div>
         </section>
 
         <section>
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5 px-0.5">
             Menu cepat
           </h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
             {QUICK.map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
-                className={`group relative rounded-2xl border ${item.soft} p-4 hover:shadow-md transition overflow-hidden`}
+                className="group relative rounded-2xl border border-gray-100 bg-white p-4 md:p-5 hover:shadow-md hover:border-gray-200 transition overflow-hidden"
               >
                 <div
                   className={`w-10 h-10 rounded-xl bg-gradient-to-br ${item.gradient} text-white flex items-center justify-center shadow-sm mb-3`}
@@ -438,7 +427,7 @@ export default function OrtuHome() {
           </div>
         </section>
 
-        <section className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+        <section className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
             <div>
               <h2 className="text-sm font-bold text-gray-900">Aktivitas terbaru</h2>
