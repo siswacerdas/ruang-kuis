@@ -30,6 +30,8 @@ import PracticeQuiz from './pages/PracticeQuiz'
 import PracticeResult from './pages/PracticeResult'
 import OrtuDaftar from './pages/OrtuDaftar'
 import AdminPengajuanOrtu from './pages/AdminPengajuanOrtu'
+import AdminParents from './pages/AdminParents'
+import OrtuLupaPassword from './pages/OrtuLupaPassword'
 import OrtuHome from './pages/OrtuHome'
 import OrtuRiwayat from './pages/OrtuRiwayat'
 import OrtuNilai from './pages/OrtuNilai'
@@ -44,14 +46,11 @@ function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      // Tahan loading sampai role dari Firestore selesai, hindari redirect
-      // ke /siswa pakai isStudent basi dari user sebelumnya (dummy).
       setLoading(true)
       setUser(currentUser)
       if (currentUser?.email) {
         const email = currentUser.email.toLowerCase()
         try {
-          // Staff (guru/admin) menang atas parents/students jika email bentrok.
           const staff = await isStaffEmail(email)
           if (staff) {
             setIsStudent(false)
@@ -89,10 +88,6 @@ function App() {
 
   const isAdmin = !!user && !isStudent && !isParent
 
-  // Selalu render Login di /login agar form bisa dipakai ganti akun.
-  // Login.tsx sendiri yang me-redirect jika Auth cocok dengan siswa/ortu.
-  // Jangan hard-redirect ke /siswa di sini — itu yang membuat sisa Auth dummy
-  // mengunci user di "halaman akun dummy" tanpa bisa login ulang.
   const loginRedirect = isAdmin ? <Navigate to="/dashboard" replace /> : <Login />
 
   const homeRedirect = (
@@ -124,6 +119,7 @@ function App() {
         <Route path="/kerjakan/:latihanId" element={<KerjakanQuiz />} />
 
         <Route path="/ortu/daftar" element={<OrtuDaftar />} />
+        <Route path="/ortu/lupa-password" element={<OrtuLupaPassword />} />
         <Route path="/ortu" element={parentGuard(<OrtuHome />)} />
         <Route path="/ortu/riwayat" element={parentGuard(<OrtuRiwayat />)} />
         <Route path="/ortu/nilai" element={parentGuard(<OrtuNilai />)} />
@@ -168,6 +164,10 @@ function App() {
         <Route
           path="/pengajuan-ortu"
           element={isAdmin ? <AdminPengajuanOrtu /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/akun-ortu"
+          element={isAdmin ? <AdminParents /> : <Navigate to="/login" />}
         />
 
         <Route path="/questions" element={<Navigate to="/bank-soal" replace />} />
