@@ -1,51 +1,43 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  collection,
-  getDocs,
-  orderBy,
-  query,
-  limit,
-  doc,
-  updateDoc,
-} from 'firebase/firestore'
-import { db } from '../lib/firebase'
 import type { AdminNotification } from '../types/parent'
 import {
   formatNotifTime,
   subscribePendingParentCount,
+  subscribeUnreadNotifCount,
+  fetchUnreadNotifications,
+  dismissNotification,
+  dismissAllNotifications,
   toMillis,
 } from '../lib/adminNotifications'
 
 /**
  * Loneng notifikasi di header admin + badge pengajuan ortu pending.
+ * Hanya menampilkan notifikasi belum dibaca; setelah diklik, dihapus otomatis.
  */
 export default function AdminNotifBell() {
   const [open, setOpen] = useState(false)
   const [pendingOrtu, setPendingOrtu] = useState(0)
+  const [unreadCount, setUnreadCount] = useState(0)
   const [notifs, setNotifs] = useState<AdminNotification[]>([])
   const [loading, setLoading] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const unsub = subscribePendingParentCount(setPendingOrtu)
-    return () => unsub()
+    const unsubPending = subscribePendingParentCount(setPendingOrtu)
+    const unsubUnread = subscribeUnreadNotifCount(setUnreadCount)
+    return () => {
+      unsubPending()
+      unsubUnread()
+    }
   }, [])
 
   const loadNotifs = async () => {
     setLoading(true)
     try {
-      let snap
-      try {
-        snap = await getDocs(
-          query(collection(db, 'adminNotifications'), orderBy('createdAt', 'desc'), limit(20))
-        )
-      } catch {
-        snap = await getDocs(collection(db, 'adminNotifications'))
-      }
-      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as AdminNotification))
-      list.sort((a, b) => (toMillis(b.createdAt) || 0) - (toMillis(a.createdAt) || 0))
-      setNotifs(list.slice(0, 20))
+      const list = await fetchUnreadNotifications()
+      setNotifs(list)
     } catch (err) {
       console.warn('adminNotifications', err)
       setNotifs([])
@@ -68,21 +60,39 @@ export default function AdminNotifBell() {
     return () => document.removeEventListener('mousedown', onDoc)
   }, [open])
 
-  const unread = notifs.filter((n) => !n.read).length
-  const badgeTotal = pendingOrtu + unread
+  const badgeTotal = pendingOrtu + unreadCount
 
-  const markRead = async (id: string) => {
+  const handleDismiss = async (id: string) => {
     try {
-      await updateDoc(doc(db, 'adminNotifications', id), { read: true })
-      setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
+      await dismissNotification(id)
+      setNotifs((prev) => prev.filter((n) => n.id !== id))
+      setUnreadCount((c) => Math.max(0, c - 1))
     } catch (err) {
       console.warn(err)
+    }
+  }
+
+  const handleClearAll = async () => {
+    if (notifs.length === 0) return
+    setClearing(true)
+    try {
+      const ids = notifs.map((n) => n.id!).filter(Boolean)
+      await dismissAllNotifications(ids)
+      setNotifs([])
+      setUnreadCount(0)
+    } catch (err) {
+      console.warn(err)
+    } finally {
+      setClearing(false)
     }
   }
 
   const linkFor = (n: AdminNotification): string => {
     if (n.type === 'parent_request' || n.refCollection === 'parentRequests') {
       return '/pengajuan-ortu'
+    }
+    if (n.type === 'parent_password_reset' || n.refCollection === 'parentPasswordResets') {
+      return '/akun-ortu'
     }
     if (n.type === 'student_attempt') return '/laporan'
     return '/dashboard'
@@ -114,15 +124,27 @@ export default function AdminNotifBell() {
 
       {open && (
         <div className="absolute right-0 mt-2 w-[min(100vw-2rem,22rem)] bg-white rounded-2xl border border-gray-100 shadow-lg z-50 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <p className="text-sm font-semibold text-gray-900">Notifikasi</p>
-            <button
-              type="button"
-              onClick={() => loadNotifs()}
-              className="text-[11px] text-indigo-600 hover:underline"
-            >
-              Muat ulang
-            </button>
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-gray-900">Notifikasi baru</p>
+            <div className="flex items-center gap-2">
+              {notifs.length > 0 && (
+                <button
+                  type="button"
+                  disabled={clearing}
+                  onClick={handleClearAll}
+                  className="text-[11px] text-gray-500 hover:text-red-600 disabled:opacity-50"
+                >
+                  {clearing ? '…' : 'Bersihkan'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => loadNotifs()}
+                className="text-[11px] text-indigo-600 hover:underline"
+              >
+                Muat ulang
+              </button>
+            </div>
           </div>
 
           {pendingOrtu > 0 && (
@@ -144,7 +166,7 @@ export default function AdminNotifBell() {
             ) : notifs.length === 0 && pendingOrtu === 0 ? (
               <p className="p-6 text-center text-xs text-gray-400">Tidak ada notifikasi baru</p>
             ) : notifs.length === 0 ? (
-              <p className="p-4 text-center text-xs text-gray-400">Tidak ada log notifikasi lain</p>
+              <p className="p-4 text-center text-xs text-gray-400">Tidak ada notifikasi lain</p>
             ) : (
               <ul className="divide-y divide-gray-50">
                 {notifs.map((n) => (
@@ -152,18 +174,14 @@ export default function AdminNotifBell() {
                     <Link
                       to={linkFor(n)}
                       onClick={() => {
-                        if (n.id && !n.read) markRead(n.id)
+                        if (n.id) handleDismiss(n.id)
                         setOpen(false)
                       }}
-                      className={`block px-4 py-3 hover:bg-gray-50 transition ${
-                        !n.read ? 'bg-indigo-50/40' : ''
-                      }`}
+                      className="block px-4 py-3 hover:bg-gray-50 transition bg-indigo-50/40"
                     >
                       <div className="flex gap-2 items-start">
-                        {!n.read && (
-                          <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
-                        )}
-                        <div className={`min-w-0 flex-1 ${n.read ? 'pl-3.5' : ''}`}>
+                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                        <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-gray-900 leading-snug">{n.title}</p>
                           {n.body && (
                             <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-2">{n.body}</p>
@@ -180,13 +198,20 @@ export default function AdminNotifBell() {
             )}
           </div>
 
-          <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/80">
+          <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/80 flex flex-wrap gap-x-3 gap-y-1">
             <Link
               to="/pengajuan-ortu"
               onClick={() => setOpen(false)}
               className="text-xs font-medium text-indigo-600 hover:underline"
             >
-              Buka pengajuan orang tua →
+              Pengajuan ortu →
+            </Link>
+            <Link
+              to="/akun-ortu"
+              onClick={() => setOpen(false)}
+              className="text-xs font-medium text-indigo-600 hover:underline"
+            >
+              Akun ortu →
             </Link>
           </div>
         </div>
