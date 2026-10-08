@@ -1,6 +1,8 @@
 import { initializeApp } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getAuth } from 'firebase-admin/auth'
 import { onDocumentCreated } from 'firebase-functions/v2/firestore'
+import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { defineSecret } from 'firebase-functions/params'
 import { Resend } from 'resend'
 import { logger } from 'firebase-functions'
@@ -36,10 +38,10 @@ function isValidEmail(value: unknown): value is string {
 
 function escapeHtml(s: string): string {
   return s
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/"/g, '"')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
 
 /** Potong deskripsi TP agar ringkas untuk orang tua. */
@@ -51,11 +53,6 @@ function shortenStatement(text: string, max = TP_LABEL_MAX): string {
   return (lastSpace > 40 ? cut.slice(0, lastSpace) : cut).trim() + '…'
 }
 
-/**
- * Ambil label TP dari learningObjectives/{code}.
- * Format tampil: "kode — deskripsi singkat".
- * Jika tidak ada di master → tampilkan kode saja.
- */
 async function resolveTpLabels(codes: string[]): Promise<Record<string, string>> {
   const unique = [...new Set(codes.map((c) => c.trim()).filter(Boolean))]
   const labels: Record<string, string> = {}
@@ -177,7 +174,6 @@ async function sendParentEmail(
   let parentEmail: unknown = student.parentEmail
   let emailSource = 'students.parentEmail'
 
-  // Fallback: email akun ortu yang terhubung ke anak (koleksi parents)
   if (!isValidEmail(parentEmail)) {
     try {
       const parentsSnap = await db
@@ -316,5 +312,69 @@ export const onPracticeAttemptCreated = onDocumentCreated(
     const snap = event.data
     if (!snap) return
     await sendParentEmail(snap, snap.data() as AttemptData, event.params.attemptId, true)
+  }
+)
+
+/**
+ * Samakan password Firebase Auth siswa dengan field `nisn` di Firestore.
+ * Hanya untuk user yang sudah login (admin/guru). Dipanggil dari Daftar Siswa.
+ */
+export const syncStudentPasswordsToNisn = onCall(
+  { region: 'asia-southeast2' },
+  async (request) => {
+    if (!request.auth?.uid) {
+      throw new HttpsError('unauthenticated', 'Harus login sebagai guru/admin')
+    }
+
+    const authAdmin = getAuth()
+    const snap = await db.collection('students').where('active', '==', true).get()
+    let updated = 0
+    let skipped = 0
+    let failed = 0
+    const errors: string[] = []
+
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data()
+      const nisn = String(data.nisn || '').replace(/\s/g, '')
+      const email = String(data.email || '').trim().toLowerCase()
+      const authUid = data.authUid ? String(data.authUid) : ''
+      if (!nisn || nisn.length < 5) {
+        skipped++
+        continue
+      }
+
+      try {
+        let uid = authUid
+        if (!uid && email) {
+          try {
+            const user = await authAdmin.getUserByEmail(email)
+            uid = user.uid
+            await docSnap.ref.update({ authUid: uid })
+          } catch {
+            skipped++
+            continue
+          }
+        }
+        if (!uid) {
+          skipped++
+          continue
+        }
+        await authAdmin.updateUser(uid, { password: nisn })
+        updated++
+      } catch (err: unknown) {
+        failed++
+        const msg = err instanceof Error ? err.message : String(err)
+        errors.push(`${email || docSnap.id}: ${msg.slice(0, 80)}`)
+        logger.error('sync password gagal', { email, error: msg })
+      }
+    }
+
+    logger.info('syncStudentPasswordsToNisn', { updated, skipped, failed })
+    return {
+      updated,
+      skipped,
+      failed,
+      errors: errors.slice(0, 8),
+    }
   }
 )
