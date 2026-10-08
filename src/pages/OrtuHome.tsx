@@ -9,9 +9,11 @@ import {
   updateDoc,
   where,
   serverTimestamp,
+  signOut as _unused,
 } from 'firebase/firestore'
-import { db } from '../lib/firebase'
-import { ensureParentSession } from '../lib/parentSession'
+import { signOut } from 'firebase/auth'
+import { auth, db } from '../lib/firebase'
+import { ensureParentSession, clearParentSession } from '../lib/parentSession'
 import type { ParentSession } from '../types/parent'
 import type { LatihanAttempt } from '../types/question'
 import OrtuLayout from '../components/OrtuLayout'
@@ -55,6 +57,70 @@ function formatDuration(ms?: number | null): string {
   const h = Math.floor(m / 60)
   return `${h} jam ${m % 60} mnt`
 }
+
+function scoreTone(pct: number) {
+  if (pct >= 70) return { text: 'text-emerald-600', bar: 'bg-emerald-500', soft: 'bg-emerald-50' }
+  if (pct >= 40) return { text: 'text-amber-600', bar: 'bg-amber-500', soft: 'bg-amber-50' }
+  return { text: 'text-rose-600', bar: 'bg-rose-500', soft: 'bg-rose-50' }
+}
+
+const QUICK = [
+  {
+    to: '/ortu/riwayat',
+    title: 'Riwayat',
+    desc: 'Kuis & durasi',
+    gradient: 'from-sky-500 to-cyan-500',
+    soft: 'bg-sky-50 border-sky-100',
+    icon: (
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
+    ),
+  },
+  {
+    to: '/ortu/nilai',
+    title: 'Nilai mapel',
+    desc: 'Rata-rata kuis',
+    gradient: 'from-emerald-500 to-teal-500',
+    soft: 'bg-emerald-50 border-emerald-100',
+    icon: (
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+      />
+    ),
+  },
+  {
+    to: '/ortu/peringkat',
+    title: 'Peringkat',
+    desc: 'Posisi anak',
+    gradient: 'from-amber-500 to-orange-500',
+    soft: 'bg-amber-50 border-amber-100',
+    icon: (
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+      />
+    ),
+  },
+  {
+    to: '/ortu/buat-kuis',
+    title: 'Buat kuis',
+    desc: 'Latihan anak',
+    gradient: 'from-violet-500 to-fuchsia-500',
+    soft: 'bg-violet-50 border-violet-100',
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 4v16m8-8H4" />
+    ),
+  },
+]
 
 export default function OrtuHome() {
   const navigate = useNavigate()
@@ -154,11 +220,14 @@ export default function OrtuHome() {
     const n = attempts.length
     const avg = n ? Math.round(attempts.reduce((s, a) => s + (a.percent || 0), 0) / n) : null
     const last = attempts[0]
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+    const thisWeek = attempts.filter((a) => (toMillis(a.finishedAt) || 0) >= weekAgo).length
     return {
       count: n,
       avgPercent: avg,
       lastAt: last ? toMillis(last.finishedAt) : null,
       lastPercent: last?.percent ?? null,
+      thisWeek,
     }
   }, [attempts])
 
@@ -175,158 +244,337 @@ export default function OrtuHome() {
     }
   }
 
+  const handleLogout = async () => {
+    clearParentSession()
+    try {
+      await signOut(auth)
+    } catch {
+      /* */
+    }
+    navigate('/login?tab=ortu', { replace: true })
+  }
+
   if (loading || !session) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F5F6FA]">
-        <p className="text-gray-500 text-sm">Memuat...</p>
+        <div className="text-center">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 mx-auto mb-3 animate-pulse" />
+          <p className="text-gray-400 text-sm">Memuat portal…</p>
+        </div>
       </div>
     )
   }
 
   const recent = attempts.slice(0, 5)
+  const firstName = (session.fullName || 'Orang tua').split(/\s+/)[0]
+  const childInitial = ((selectedChild?.fullName || 'A').trim()[0] || 'A').toUpperCase()
+  const avgTone = stats.avgPercent != null ? scoreTone(stats.avgPercent) : null
 
   return (
-    <OrtuLayout parentName={session.fullName} title="Beranda" subtitle={session.fullName}>
-      <div className="space-y-4">
+    <OrtuLayout parentName={session.fullName} hideHeader>
+      <div className="space-y-5 -mt-1">
+        {/* Hero */}
+        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 text-white shadow-lg shadow-indigo-200/40">
+          <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-white/10 blur-2xl" />
+          <div className="absolute -left-6 bottom-0 w-32 h-32 rounded-full bg-fuchsia-400/20 blur-2xl" />
+          <div className="relative px-5 pt-5 pb-6 sm:px-6">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-indigo-100 text-xs font-medium tracking-wide">
+                  Portal orang tua · Ruang Kuis
+                </p>
+                <h1 className="text-2xl sm:text-3xl font-bold mt-1 leading-tight">
+                  Halo, {firstName}
+                </h1>
+                <p className="text-indigo-100/90 text-sm mt-1.5 leading-relaxed max-w-sm">
+                  Pantau belajar anak, nilai kuis, dan buat latihan khusus — semua di satu tempat.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="text-xs font-medium text-white/80 hover:text-white bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg transition shrink-0"
+              >
+                Keluar
+              </button>
+            </div>
+
+            {/* Child chips */}
+            {children.length > 0 && (
+              <div className="mt-5 flex flex-wrap gap-2">
+                {children.map((c) => {
+                  const on = c.id === selectedChildId
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setSelectedChildId(c.id)}
+                      className={`inline-flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full text-xs font-semibold transition ${
+                        on
+                          ? 'bg-white text-indigo-700 shadow-md'
+                          : 'bg-white/15 text-white hover:bg-white/25'
+                      }`}
+                    >
+                      <span
+                        className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold ${
+                          on ? 'bg-indigo-100 text-indigo-700' : 'bg-white/20 text-white'
+                        }`}
+                      >
+                        {(c.fullName.trim()[0] || 'A').toUpperCase()}
+                      </span>
+                      <span className="truncate max-w-[9rem]">{c.fullName.split(/\s+/)[0]}</span>
+                      {c.className && (
+                        <span className={on ? 'text-indigo-400 font-medium' : 'text-white/60'}>
+                          {c.className}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Guide */}
         {showGuide && (
-          <div className="rounded-2xl border border-indigo-100 bg-indigo-50/90 p-4">
-            <p className="text-sm font-semibold text-indigo-900">Selamat datang di Ruang Kuis</p>
-            <ul className="mt-2 space-y-1.5 text-xs text-indigo-800/90 leading-relaxed">
-              <li>• Pantau riwayat kuis dan latihan anak Anda (termasuk durasi).</li>
-              <li>• Lihat ringkasan nilai dari kuis/latihan (bukan nilai proyek di sekolah).</li>
-              <li>• Peringkat bersifat privasi: posisi anak + total peserta.</li>
-              <li>• Fitur buat kuis latihan untuk anak menyusul.</li>
-            </ul>
-            <button
-              type="button"
-              onClick={dismissGuide}
-              className="mt-3 text-xs font-medium text-indigo-700 hover:underline"
-            >
-              Mengerti, tutup panduan
-            </button>
+          <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-violet-50 p-4 sm:p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.75}
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-indigo-950">Panduan singkat</p>
+                <ul className="mt-2 space-y-1.5 text-xs text-indigo-900/80 leading-relaxed">
+                  <li className="flex gap-2">
+                    <span className="text-indigo-400">✓</span>
+                    Riwayat kuis guru & latihan mandiri, lengkap dengan durasi pengerjaan.
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-indigo-400">✓</span>
+                    Nilai per mapel dari kuis saja (bukan nilai proyek sekolah).
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-indigo-400">✓</span>
+                    Peringkat privasi: posisi anak + total peserta.
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-indigo-400">✓</span>
+                    Buat latihan khusus hanya untuk anak Anda.
+                  </li>
+                </ul>
+                <button
+                  type="button"
+                  onClick={dismissGuide}
+                  className="mt-3 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3.5 py-2 rounded-xl transition"
+                >
+                  Mengerti
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
-        {children.length > 1 && (
-          <div>
-            <label className="block text-[11px] font-medium text-gray-400 uppercase tracking-wide mb-1.5">
-              Anak
-            </label>
-            <select
-              value={selectedChildId}
-              onChange={(e) => setSelectedChildId(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm"
-            >
-              {children.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.fullName}
-                  {c.className ? ` · ${c.className}` : ''}
-                </option>
-              ))}
-            </select>
+        {/* Child card + stats */}
+        <section className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 pt-5 pb-4 flex items-center gap-3.5">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center text-xl font-bold shadow-md shadow-indigo-200/50 shrink-0">
+              {childInitial}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold text-indigo-500 uppercase tracking-wider">
+                Sedang dipantau
+              </p>
+              <h2 className="text-lg font-bold text-gray-900 truncate leading-snug">
+                {selectedChild?.fullName || '—'}
+              </h2>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {selectedChild?.className ? `Kelas ${selectedChild.className}` : 'Kelas belum diisi'}
+                {selectedChild?.nickname ? ` · ${selectedChild.nickname}` : ''}
+              </p>
+            </div>
           </div>
-        )}
 
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Anak</p>
-          <h1 className="text-lg font-bold text-gray-900 mt-0.5">
-            {selectedChild?.fullName || '—'}
-            {selectedChild?.nickname ? (
-              <span className="text-gray-400 font-normal text-sm"> ({selectedChild.nickname})</span>
-            ) : null}
-          </h1>
-          {selectedChild?.className && (
-            <p className="text-xs text-gray-500 mt-0.5">Kelas {selectedChild.className}</p>
-          )}
-
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            <div className="rounded-xl bg-gray-50 px-3 py-2.5 text-center">
-              <p className="text-[10px] text-gray-400 uppercase">Pengerjaan</p>
-              <p className="text-lg font-semibold text-gray-900 tabular-nums">
+          <div className="grid grid-cols-3 border-t border-gray-50">
+            <div className="px-3 py-4 text-center border-r border-gray-50">
+              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Kuis</p>
+              <p className="text-2xl font-bold text-gray-900 tabular-nums mt-1">
                 {loadingAttempts ? '…' : stats.count}
               </p>
+              <p className="text-[10px] text-gray-400 mt-0.5">total</p>
             </div>
-            <div className="rounded-xl bg-gray-50 px-3 py-2.5 text-center">
-              <p className="text-[10px] text-gray-400 uppercase">Rata skor</p>
-              <p className="text-lg font-semibold text-gray-900 tabular-nums">
-                {loadingAttempts ? '…' : stats.avgPercent != null ? `${stats.avgPercent}%` : '—'}
+            <div className="px-3 py-4 text-center border-r border-gray-50">
+              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Rata-rata</p>
+              <p
+                className={`text-2xl font-bold tabular-nums mt-1 ${
+                  avgTone ? avgTone.text : 'text-gray-300'
+                }`}
+              >
+                {loadingAttempts
+                  ? '…'
+                  : stats.avgPercent != null
+                    ? `${stats.avgPercent}%`
+                    : '—'}
               </p>
+              {stats.avgPercent != null && (
+                <div className="mt-1.5 mx-auto h-1.5 w-12 rounded-full bg-gray-100 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${avgTone?.bar || 'bg-gray-300'}`}
+                    style={{ width: `${Math.min(100, stats.avgPercent)}%` }}
+                  />
+                </div>
+              )}
             </div>
-            <div className="rounded-xl bg-gray-50 px-3 py-2.5 text-center">
-              <p className="text-[10px] text-gray-400 uppercase">Terakhir</p>
-              <p className="text-lg font-semibold text-gray-900 tabular-nums">
-                {loadingAttempts ? '…' : stats.lastPercent != null ? `${stats.lastPercent}%` : '—'}
+            <div className="px-3 py-4 text-center">
+              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wide">Minggu ini</p>
+              <p className="text-2xl font-bold text-sky-600 tabular-nums mt-1">
+                {loadingAttempts ? '…' : stats.thisWeek}
               </p>
+              <p className="text-[10px] text-gray-400 mt-0.5">pengerjaan</p>
             </div>
           </div>
+
           {stats.lastAt && (
-            <p className="text-[11px] text-gray-400 mt-2">
-              Pengerjaan terakhir: {formatShort(stats.lastAt)}
-            </p>
+            <div className="px-5 py-3 bg-gray-50/80 border-t border-gray-50 text-[11px] text-gray-500 flex items-center justify-between gap-2">
+              <span>Terakhir mengerjakan</span>
+              <span className="font-medium text-gray-700">
+                {formatShort(stats.lastAt)}
+                {stats.lastPercent != null ? ` · ${stats.lastPercent}%` : ''}
+              </span>
+            </div>
           )}
-        </div>
+        </section>
 
-        <div className="grid grid-cols-2 gap-2.5">
-          {[
-            { to: '/ortu/riwayat', title: 'Riwayat', desc: 'Kuis & latihan + durasi', color: 'text-sky-700' },
-            { to: '/ortu/nilai', title: 'Nilai', desc: 'Ringkasan per mapel', color: 'text-emerald-700' },
-            { to: '/ortu/peringkat', title: 'Peringkat', desc: 'Posisi di kelas/paket', color: 'text-amber-800' },
-            { to: '/ortu/buat-kuis', title: 'Buat kuis', desc: 'Latihan untuk anak', color: 'text-violet-700' },
-          ].map((item) => (
+        {/* Quick actions */}
+        <section>
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5 px-0.5">
+            Menu cepat
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
+            {QUICK.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`group relative rounded-2xl border ${item.soft} p-4 hover:shadow-md transition overflow-hidden`}
+              >
+                <div
+                  className={`w-10 h-10 rounded-xl bg-gradient-to-br ${item.gradient} text-white flex items-center justify-center shadow-sm mb-3`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {item.icon}
+                  </svg>
+                </div>
+                <p className="text-sm font-bold text-gray-900">{item.title}</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">{item.desc}</p>
+                <span className="absolute top-3.5 right-3 text-gray-300 group-hover:text-gray-500 transition">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        {/* Recent activity */}
+        <section className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-gray-900">Aktivitas terbaru</h2>
+              <p className="text-[11px] text-gray-400 mt-0.5">Kuis yang dikerjakan anak</p>
+            </div>
             <Link
-              key={item.to}
-              to={item.to}
-              className="rounded-xl border border-gray-100 bg-white p-3.5 hover:border-gray-200 hover:shadow-sm transition"
+              to="/ortu/riwayat"
+              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition"
             >
-              <p className={`text-sm font-semibold ${item.color}`}>{item.title}</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">{item.desc}</p>
-            </Link>
-          ))}
-        </div>
-
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-50 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-900">Pengerjaan terbaru</h2>
-            <Link to="/ortu/riwayat" className="text-xs font-medium text-indigo-600 hover:underline">
               Semua
             </Link>
           </div>
+
           {loadingAttempts ? (
-            <p className="p-6 text-center text-xs text-gray-400">Memuat…</p>
+            <div className="p-10 text-center">
+              <div className="w-8 h-8 rounded-full border-2 border-indigo-200 border-t-indigo-600 animate-spin mx-auto" />
+              <p className="text-xs text-gray-400 mt-3">Memuat aktivitas…</p>
+            </div>
           ) : recent.length === 0 ? (
-            <p className="p-6 text-center text-xs text-gray-400">Belum ada pengerjaan untuk anak ini.</p>
+            <div className="p-10 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-gray-50 text-gray-300 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+              </div>
+              <p className="text-sm font-medium text-gray-600">Belum ada pengerjaan</p>
+              <p className="text-xs text-gray-400 mt-1 max-w-[220px] mx-auto">
+                Saat anak menyelesaikan kuis, hasilnya akan muncul di sini.
+              </p>
+              <Link
+                to="/ortu/buat-kuis"
+                className="inline-flex mt-4 text-xs font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 px-3.5 py-2 rounded-xl transition"
+              >
+                Buat latihan untuk anak
+              </Link>
+            </div>
           ) : (
             <ul className="divide-y divide-gray-50">
               {recent.map((a) => {
                 const fin = toMillis(a.finishedAt)
                 const pct = a.percent ?? 0
+                const tone = scoreTone(pct)
                 return (
-                  <li key={a.id} className="px-4 py-3 flex items-center gap-3">
+                  <li key={a.id} className="px-5 py-3.5 flex items-center gap-3.5 hover:bg-gray-50/50 transition">
+                    <div
+                      className={`w-11 h-11 rounded-xl ${tone.soft} flex items-center justify-center shrink-0`}
+                    >
+                      <span className={`text-sm font-bold tabular-nums ${tone.text}`}>{pct}</span>
+                    </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-900 truncate">
+                      <p className="text-sm font-semibold text-gray-900 truncate">
                         {a.latihanTitle || 'Latihan'}
                       </p>
-                      <p className="text-[11px] text-gray-400 mt-0.5">
-                        {fin ? formatShort(fin) : '—'}
-                        {a.durationMs ? ` · ${formatDuration(a.durationMs)}` : ''}
+                      <p className="text-[11px] text-gray-400 mt-0.5 flex flex-wrap gap-x-1.5">
+                        <span>{fin ? formatShort(fin) : '—'}</span>
+                        {a.durationMs ? (
+                          <>
+                            <span className="text-gray-300">·</span>
+                            <span>{formatDuration(a.durationMs)}</span>
+                          </>
+                        ) : null}
                       </p>
                     </div>
-                    <span
-                      className={`text-sm font-semibold tabular-nums shrink-0 ${
-                        pct >= 70 ? 'text-emerald-600' : pct >= 40 ? 'text-amber-600' : 'text-red-600'
-                      }`}
-                    >
-                      {pct}%
-                    </span>
+                    <div className="shrink-0 w-14">
+                      <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${tone.bar}`}
+                          style={{ width: `${Math.min(100, pct)}%` }}
+                        />
+                      </div>
+                    </div>
                   </li>
                 )
               })}
             </ul>
           )}
-        </div>
+        </section>
 
-        <p className="text-center text-[11px] text-gray-400 pt-1">
-          Akun: {session.email}
+        <p className="text-center text-[11px] text-gray-400 pb-2">
+          {session.email}
           {session.whatsapp ? ` · WA ${session.whatsapp}` : ''}
         </p>
       </div>
