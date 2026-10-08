@@ -30,6 +30,8 @@ import PracticeResult from './pages/PracticeResult'
 import OrtuDaftar from './pages/OrtuDaftar'
 import AdminPengajuanOrtu from './pages/AdminPengajuanOrtu'
 import OrtuHome from './pages/OrtuHome'
+import OrtuRiwayat from './pages/OrtuRiwayat'
+import OrtuPlaceholder from './pages/OrtuPlaceholder'
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -91,6 +93,9 @@ function App() {
     />
   )
 
+  const parentGuard = (el: React.ReactNode) =>
+    isParent ? el : <Navigate to="/login?tab=ortu" />
+
   return (
     <BrowserRouter>
       <Routes>
@@ -110,8 +115,11 @@ function App() {
         <Route path="/kerjakan/:latihanId" element={<KerjakanQuiz />} />
 
         <Route path="/ortu/daftar" element={<OrtuDaftar />} />
-        <Route path="/ortu" element={isParent ? <OrtuHome /> : <Navigate to="/login?tab=ortu" />} />
-        <Route path="/ortu/*" element={isParent ? <OrtuHome /> : <Navigate to="/login?tab=ortu" />} />
+        <Route path="/ortu" element={parentGuard(<OrtuHome />)} />
+        <Route path="/ortu/riwayat" element={parentGuard(<OrtuRiwayat />)} />
+        <Route path="/ortu/nilai" element={parentGuard(<OrtuPlaceholder />)} />
+        <Route path="/ortu/peringkat" element={parentGuard(<OrtuPlaceholder />)} />
+        <Route path="/ortu/buat-kuis" element={parentGuard(<OrtuPlaceholder />)} />
 
         <Route path="/login" element={loginRedirect} />
 
