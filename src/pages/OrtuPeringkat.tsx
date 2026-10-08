@@ -196,7 +196,7 @@ export default function OrtuPeringkat() {
   }, [ranks, me])
 
   const displayName = (r: RankRow) => {
-    if (r.isChild) return selectedChild?.fullName || 'Anak Anda'
+    if (r.isChild) return selectedChild?.fullName || 'Anak Ayah/Bunda'
     if (showNames) return r.name
     return `Peserta #${r.rank}`
   }
@@ -232,7 +232,7 @@ export default function OrtuPeringkat() {
         <div className="rounded-xl border border-indigo-100 bg-indigo-50/80 px-3.5 py-2.5 text-xs text-indigo-900 leading-relaxed">
           Peringkat dari <strong>rata-rata skor kuis</strong>
           {filterLatihan !== 'all' ? ' (skor terbaik di paket yang dipilih)' : ''}. Nama peserta
-          lain disamarkan demi privasi — Anda bisa menampilkannya jika perlu.
+          lain disamarkan demi privasi — Ayah/Bunda dapat menampilkannya jika perlu.
         </div>
 
         <section className="grid grid-cols-3 gap-2.5">
@@ -246,7 +246,7 @@ export default function OrtuPeringkat() {
             </p>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-3 py-3.5 text-center">
-            <p className="text-[10px] text-gray-400 font-medium uppercase">
+            <p className="text-[10px] font-medium text-gray-400 font-medium uppercase">
               {filterLatihan !== 'all' ? 'Skor' : 'Rata-rata'}
             </p>
             <p
@@ -378,7 +378,7 @@ export default function OrtuPeringkat() {
                       {displayName(r)}
                       {r.isChild && (
                         <span className="ml-1.5 text-[10px] font-medium text-indigo-600 bg-indigo-100/80 px-1.5 py-0.5 rounded">
-                          Anak Anda
+                          Anak Ayah/Bunda
                         </span>
                       )}
                     </p>
@@ -394,7 +394,7 @@ export default function OrtuPeringkat() {
               ))}
               {ranks.length > 12 && me && me.rank > 10 && (
                 <li className="px-4 py-2 text-center text-[11px] text-gray-400">
-                  … {me.rank - 10} peringkat di atas anak Anda disembunyikan
+                  … {me.rank - 10} peringkat di atas anak Ayah/Bunda disembunyikan
                 </li>
               )}
             </ul>
