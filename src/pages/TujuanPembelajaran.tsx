@@ -387,7 +387,6 @@ export default function TujuanPembelajaran() {
     const code = editor.code.trim()
     if (!code || !editor.statement.trim()) { setError('Kode dan rumusan wajib.'); return }
 
-    // Doc Firestore = code. Kode sama menimpa TP lain (elemen CP tetap ada di field element).
     const existing = items.find((t) => t.code === code)
     const isEditSameDoc = !!editor.id && (editor.id === code || editor.code === code)
     if (existing && !isEditSameDoc) {
@@ -487,22 +486,14 @@ export default function TujuanPembelajaran() {
           <FilterChip
             active={subjectFilter === 'semua'}
             onClick={() => setSubjectFilter('semua')}
-            label={
-              tab === 'tp'
-                ? `Semua (${items.length} TP)`
-                : `Semua (${materials.length} materi)`
-            }
+            label={tab === 'tp' ? `Semua (${items.length} TP)` : `Semua (${materials.length} materi)`}
           />
           {SUBJECTS.map((s) => (
             <FilterChip
               key={s.key}
               active={subjectFilter === s.key}
               onClick={() => setSubjectFilter(s.key)}
-              label={
-                tab === 'tp'
-                  ? `${s.shortName} (${tpCountBySubject[s.key] || 0} TP)`
-                  : `${s.shortName} (${materialCountBySubject[s.key] || 0} materi)`
-              }
+              label={tab === 'tp' ? `${s.shortName} (${tpCountBySubject[s.key] || 0} TP)` : `${s.shortName} (${materialCountBySubject[s.key] || 0} materi)`}
             />
           ))}
         </div>
@@ -632,7 +623,7 @@ export default function TujuanPembelajaran() {
         <Modal title={editor.id ? `Edit ${editor.code}` : 'Tambah TP'} onClose={() => setEditor(null)}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Kode">
-              <input value={editor.code} disabled={!!editor.id} onChange={(e) => setEditor({ ...editor, code: e.target.value.toUpperCase() })} className="field" />
+              <input value={editor.code} disabled={!!editor.id} onChange={(e) => setEditor({ ...editor, code: e.target.value.toUpperCase() })} className="field" placeholder="Unik, mis. ISL-QH.1" />
             </Field>
             <Field label="Mapel">
               <select value={editor.subjectKey} onChange={(e) => setEditor({ ...editor, subjectKey: e.target.value as SubjectKey })} className="field">
@@ -640,7 +631,7 @@ export default function TujuanPembelajaran() {
               </select>
             </Field>
             <Field label="Elemen / tema">
-              <input value={editor.element} onChange={(e) => setEditor({ ...editor, element: e.target.value })} className="field" />
+              <input value={editor.element} onChange={(e) => setEditor({ ...editor, element: e.target.value })} className="field" placeholder="Sesuai CP, mis. Al-Qur'an dan Hadis" />
             </Field>
             <Field label="Urutan">
               <input type="number" value={editor.order} onChange={(e) => setEditor({ ...editor, order: Number(e.target.value) })} className="field" />
@@ -656,60 +647,76 @@ export default function TujuanPembelajaran() {
             </Field>
           </div>
           <Field label="Rumusan">
-            <textarea value={editor.statement} onChange={(e) => setEditor({ ...editor, statement: e.target.value })} rows={4} className="field" />
+            <textarea value={editor.statement} onChange={(e) => setEditor({ ...editor, statement: e.target.value })} rows={4} className="field" placeholder="Rumusan tujuan pembelajaran…" />
           </Field>
-          <div className="flex justify-between gap-2 pt-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-gray-100 mt-1">
             <div>
               {(editor.id || items.some((t) => t.code === editor.code)) && (
                 <button type="button" onClick={() => deleteTp(editor)} disabled={saving || deletingId === editor.code}
                   className="px-4 py-2 rounded-xl text-sm font-medium text-red-600 border border-red-100 hover:bg-red-50 disabled:opacity-50">
-                  {deletingId === editor.code ? 'Menghapus...' : 'Hapus TP'}
+                  {deletingId === editor.code ? 'Menghapus…' : 'Hapus TP'}
                 </button>
               )}
             </div>
-            <div className="flex gap-2">
-              <button type="button" onClick={() => setEditor(null)} className="px-4 py-2 rounded-xl text-sm text-gray-600">Batal</button>
-              <button type="button" onClick={saveTp} disabled={saving} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm disabled:opacity-60">{saving ? 'Menyimpan...' : 'Simpan'}</button>
+            <div className="flex gap-2 ml-auto">
+              <button type="button" onClick={() => setEditor(null)} className="px-4 py-2 rounded-xl text-sm text-gray-600 border border-gray-200 hover:bg-gray-50">Batal</button>
+              <button type="button" onClick={saveTp} disabled={saving} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium disabled:opacity-60">{saving ? 'Menyimpan…' : 'Simpan'}</button>
             </div>
           </div>
         </Modal>
       )}
 
       {materialEditor && (
-        <Modal title={materialEditor.id ? 'Edit materi' : 'Tambah materi buku'} onClose={() => { setMaterialEditor(null); setTpPickerQuery('') }} size="lg">
-          <Field label="Mapel">
-            <select value={materialEditor.subjectKey} onChange={(e) => setMaterialEditor({ ...materialEditor, subjectKey: e.target.value as SubjectKey })} className="field">
-              {SUBJECTS.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Judul">
-            <input value={materialEditor.title} onChange={(e) => setMaterialEditor({ ...materialEditor, title: e.target.value })} className="field" />
-          </Field>
+        <Modal title={materialEditor.id ? 'Edit materi buku' : 'Tambah materi buku'} onClose={() => { setMaterialEditor(null); setTpPickerQuery('') }} size="lg">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Mapel">
+              <select value={materialEditor.subjectKey} onChange={(e) => setMaterialEditor({ ...materialEditor, subjectKey: e.target.value as SubjectKey })} className="field">
+                {SUBJECTS.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Judul">
+              <input value={materialEditor.title} onChange={(e) => setMaterialEditor({ ...materialEditor, title: e.target.value })} className="field" placeholder="Judul materi buku" />
+            </Field>
+          </div>
           <Field label="Ringkasan">
-            <textarea value={materialEditor.summary} onChange={(e) => setMaterialEditor({ ...materialEditor, summary: e.target.value })} rows={5} className="field" />
+            <textarea value={materialEditor.summary} onChange={(e) => setMaterialEditor({ ...materialEditor, summary: e.target.value })} rows={5} className="field" placeholder="Ringkasan / poin utama materi…" />
           </Field>
           <Field label="Catatan tautan (opsional)">
-            <input value={materialEditor.linkNote || ''} onChange={(e) => setMaterialEditor({ ...materialEditor, linkNote: e.target.value })} className="field" />
+            <input value={materialEditor.linkNote || ''} onChange={(e) => setMaterialEditor({ ...materialEditor, linkNote: e.target.value })} className="field" placeholder="Catatan atau tautan buku" />
           </Field>
-          <div className="mt-3">
-            <p className="text-sm font-medium text-gray-700 mb-2">Kaitkan TP</p>
-            <input value={tpPickerQuery} onChange={(e) => setTpPickerQuery(e.target.value)} placeholder="Cari TP…" className="field mb-2" />
-            <div className="max-h-48 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50">
-              {tpOptionsForMaterial.map((t) => (
-                <label key={t.code} className="flex items-start gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50">
-                  <input type="checkbox" className="mt-1" checked={(materialEditor.suggestedTpCodes || []).includes(t.code)} onChange={() => toggleTpCode(t.code)} />
-                  <span><span className="font-mono text-xs text-indigo-600">{t.code}</span> — {t.statement}</span>
-                </label>
-              ))}
-              {tpOptionsForMaterial.length === 0 && <p className="px-3 py-2 text-sm text-gray-400">Tidak ada TP mapel ini.</p>}
+          <div>
+            <p className="text-xs font-medium text-gray-600 mb-1">Kaitkan TP</p>
+            <input value={tpPickerQuery} onChange={(e) => setTpPickerQuery(e.target.value)} placeholder="Cari kode / rumusan / elemen…" className="field mb-2" />
+            <div className="max-h-48 overflow-y-auto rounded-xl border border-gray-200 divide-y divide-gray-100">
+              {tpOptionsForMaterial.map((t) => {
+                const checked = (materialEditor.suggestedTpCodes || []).includes(t.code)
+                return (
+                  <label key={t.code} className={`flex items-start gap-2 px-3 py-2.5 text-sm cursor-pointer hover:bg-gray-50 ${checked ? 'bg-indigo-50/70' : ''}`}>
+                    <input type="checkbox" className="mt-1 rounded border-gray-300 text-indigo-600" checked={checked} onChange={() => toggleTpCode(t.code)} />
+                    <span className="min-w-0">
+                      <span className="font-mono text-xs font-semibold text-indigo-700">{t.code}</span>
+                      {t.element ? <span className="text-[11px] text-gray-400 ml-1.5">{t.element}</span> : null}
+                      <span className="block text-gray-700 mt-0.5 leading-snug">{t.statement}</span>
+                    </span>
+                  </label>
+                )
+              })}
+              {tpOptionsForMaterial.length === 0 && (
+                <p className="px-3 py-3 text-sm text-gray-400">Tidak ada TP untuk mapel ini.</p>
+              )}
             </div>
+            {(materialEditor.suggestedTpCodes || []).length > 0 && (
+              <p className="mt-2 text-xs text-gray-500">Terpilih: {(materialEditor.suggestedTpCodes || []).join(', ')}</p>
+            )}
           </div>
-          <div className="flex justify-end gap-2 pt-3">
-            <button type="button" onClick={() => { setMaterialEditor(null); setTpPickerQuery('') }} className="px-4 py-2 rounded-xl text-sm text-gray-600">Batal</button>
-            <button type="button" onClick={saveMaterial} disabled={saving} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm disabled:opacity-60">{saving ? 'Menyimpan...' : 'Simpan'}</button>
+          <div className="flex justify-end gap-2 pt-1 border-t border-gray-100 mt-1">
+            <button type="button" onClick={() => { setMaterialEditor(null); setTpPickerQuery('') }} className="px-4 py-2 rounded-xl text-sm text-gray-600 border border-gray-200 hover:bg-gray-50">Batal</button>
+            <button type="button" onClick={saveMaterial} disabled={saving} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium disabled:opacity-60">{saving ? 'Menyimpan…' : 'Simpan'}</button>
           </div>
         </Modal>
       )}
+
+      <style>{`.field{width:100%;border:1px solid #e5e7eb;border-radius:12px;padding:8px 12px;font-size:14px;background:white;outline:none}.field:focus{border-color:#a5b4fc;box-shadow:0 0 0 3px rgba(99,102,241,.15)}.field:disabled{background:#f9fafb;color:#6b7280}`}</style>
     </Layout>
   )
 }
@@ -732,15 +739,16 @@ function FilterChip({ active, onClick, label }: { active: boolean; onClick: () =
   )
 }
 
-function Modal({ title, onClose, children, size = 'md' }: { title: string; onClose: () => void; children: ReactNode; size?: 'md' | 'lg' }) {
+function Modal({ title, onClose, children, size = 'md' }: { title: string; onClose: () => void; children: ReactNode; size?: 'md' | 'lg' | 'xl' }) {
+  const width = size === 'xl' ? 'sm:max-w-3xl' : size === 'lg' ? 'sm:max-w-2xl' : 'sm:max-w-lg'
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-3" onClick={onClose}>
-      <div className={`bg-white rounded-2xl shadow-xl w-full ${size === 'lg' ? 'max-w-2xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto p-5`} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40" onClick={onClose}>
+      <div className={`bg-white w-full ${width} sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[94vh] flex flex-col`} onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
           <h2 className="text-base font-semibold text-gray-900">{title}</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
+          <button type="button" onClick={onClose} className="text-sm text-gray-400 hover:text-gray-700 px-1">Tutup</button>
         </div>
-        {children}
+        <div className="p-5 overflow-y-auto space-y-3 flex-1">{children}</div>
       </div>
     </div>
   )
@@ -748,7 +756,7 @@ function Modal({ title, onClose, children, size = 'md' }: { title: string; onClo
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <label className="block mb-3">
+    <label className="block">
       <span className="text-xs font-medium text-gray-600">{label}</span>
       <div className="mt-1">{children}</div>
     </label>
