@@ -9,7 +9,6 @@ import {
   updateDoc,
   where,
   serverTimestamp,
-  signOut as _unused,
 } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../lib/firebase'
@@ -273,7 +272,6 @@ export default function OrtuHome() {
   return (
     <OrtuLayout parentName={session.fullName} hideHeader>
       <div className="space-y-5 -mt-1">
-        {/* Hero */}
         <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 text-white shadow-lg shadow-indigo-200/40">
           <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-white/10 blur-2xl" />
           <div className="absolute -left-6 bottom-0 w-32 h-32 rounded-full bg-fuchsia-400/20 blur-2xl" />
@@ -299,7 +297,6 @@ export default function OrtuHome() {
               </button>
             </div>
 
-            {/* Child chips */}
             {children.length > 0 && (
               <div className="mt-5 flex flex-wrap gap-2">
                 {children.map((c) => {
@@ -336,7 +333,6 @@ export default function OrtuHome() {
           </div>
         </section>
 
-        {/* Guide */}
         {showGuide && (
           <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-violet-50 p-4 sm:p-5 shadow-sm">
             <div className="flex items-start gap-3">
@@ -382,7 +378,6 @@ export default function OrtuHome() {
           </div>
         )}
 
-        {/* Child card + stats */}
         <section className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 pt-5 pb-4 flex items-center gap-3.5">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center text-xl font-bold shadow-md shadow-indigo-200/50 shrink-0">
@@ -452,7 +447,6 @@ export default function OrtuHome() {
           )}
         </section>
 
-        {/* Quick actions */}
         <section>
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5 px-0.5">
             Menu cepat
@@ -488,7 +482,6 @@ export default function OrtuHome() {
           </div>
         </section>
 
-        {/* Recent activity */}
         <section className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
             <div>
@@ -538,7 +531,10 @@ export default function OrtuHome() {
                 const pct = a.percent ?? 0
                 const tone = scoreTone(pct)
                 return (
-                  <li key={a.id} className="px-5 py-3.5 flex items-center gap-3.5 hover:bg-gray-50/50 transition">
+                  <li
+                    key={a.id}
+                    className="px-5 py-3.5 flex items-center gap-3.5 hover:bg-gray-50/50 transition"
+                  >
                     <div
                       className={`w-11 h-11 rounded-xl ${tone.soft} flex items-center justify-center shrink-0`}
                     >
@@ -563,8 +559,7 @@ export default function OrtuHome() {
                         <div
                           className={`h-full rounded-full ${tone.bar}`}
                           style={{ width: `${Math.min(100, pct)}%` }}
-                        />
-                      </div>
+                      />
                     </div>
                   </li>
                 )
