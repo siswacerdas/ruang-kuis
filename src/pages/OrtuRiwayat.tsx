@@ -9,6 +9,18 @@ import OrtuLayout from '../components/OrtuLayout'
 
 type ChildInfo = { id: string; fullName: string; className?: string }
 
+/** Baris riwayat gabungan kuis guru + latihan mandiri / ortu */
+type HistoryRow = {
+  id: string
+  title: string
+  finishedAt?: unknown
+  durationMs?: number | null
+  score?: number
+  total?: number
+  percent?: number
+  source: 'guru' | 'ortu' | 'mandiri'
+}
+
 function toMillis(v: unknown): number | null {
   if (!v) return null
   if (typeof v === 'number') return v
@@ -43,12 +55,131 @@ function formatDuration(ms?: number | null): string {
   return `${h} jam ${m % 60} mnt`
 }
 
+function sourceFromPractice(d: Record<string, unknown>): HistoryRow['source'] {
+  if (d.createdByParent === true || d.kind === 'parent_assigned') return 'ortu'
+  return 'mandiri'
+}
+
+function sourceBadge(source: HistoryRow['source']) {
+  if (source === 'guru')
+    return {
+      label: 'Guru',
+      className: 'bg-indigo-50 text-indigo-700 border-indigo-100',
+    }
+  if (source === 'ortu')
+    return {
+      label: 'Ortu',
+      className: 'bg-violet-50 text-violet-700 border-violet-100',
+    }
+  return {
+    label: 'Mandiri',
+    className: 'bg-teal-50 text-teal-700 border-teal-100',
+  }
+}
+
+async function loadAttemptsForChild(child: ChildInfo): Promise<HistoryRow[]> {
+  const rows: HistoryRow[] = []
+  const nameKey = child.fullName.trim().toLowerCase()
+
+  const matchStudent = (a: { studentId?: string | null; studentName?: string }) => {
+    if (a.studentId && a.studentId === child.id) return true
+    return (a.studentName || '').trim().toLowerCase() === nameKey
+  }
+
+  try {
+    const byId = await getDocs(
+      query(collection(db, 'attempts'), where('studentId', '==', child.id))
+    )
+    byId.docs.forEach((d) => {
+      const a = d.data() as LatihanAttempt
+      rows.push({
+        id: `g-${d.id}`,
+        title: a.latihanTitle || 'Latihan guru',
+        finishedAt: a.finishedAt,
+        durationMs: a.durationMs,
+        score: a.score,
+        total: a.total,
+        percent: a.percent,
+        source: 'guru',
+      })
+    })
+  } catch {
+    try {
+      const all = await getDocs(collection(db, 'attempts'))
+      all.docs.forEach((d) => {
+        const a = { id: d.id, ...d.data() } as LatihanAttempt
+        if (!matchStudent(a)) return
+        rows.push({
+          id: `g-${d.id}`,
+          title: a.latihanTitle || 'Latihan guru',
+          finishedAt: a.finishedAt,
+          durationMs: a.durationMs,
+          score: a.score,
+          total: a.total,
+          percent: a.percent,
+          source: 'guru',
+        })
+      })
+    } catch (err) {
+      console.warn('attempts', err)
+    }
+  }
+
+  try {
+    const byId = await getDocs(
+      query(collection(db, 'practiceAttempts'), where('studentId', '==', child.id))
+    )
+    byId.docs.forEach((d) => {
+      const a = d.data() as Record<string, unknown>
+      rows.push({
+        id: `p-${d.id}`,
+        title: String(a.title || a.latihanTitle || 'Latihan mandiri'),
+        finishedAt: a.finishedAt,
+        durationMs: typeof a.durationMs === 'number' ? a.durationMs : null,
+        score: typeof a.score === 'number' ? a.score : undefined,
+        total: typeof a.total === 'number' ? a.total : undefined,
+        percent: typeof a.percent === 'number' ? a.percent : undefined,
+        source: sourceFromPractice(a),
+      })
+    })
+  } catch {
+    try {
+      const all = await getDocs(collection(db, 'practiceAttempts'))
+      all.docs.forEach((d) => {
+        const a = d.data() as Record<string, unknown>
+        if (
+          !matchStudent({
+            studentId: a.studentId as string | undefined,
+            studentName: a.studentName as string | undefined,
+          })
+        )
+          return
+        rows.push({
+          id: `p-${d.id}`,
+          title: String(a.title || a.latihanTitle || 'Latihan mandiri'),
+          finishedAt: a.finishedAt,
+          durationMs: typeof a.durationMs === 'number' ? a.durationMs : null,
+          score: typeof a.score === 'number' ? a.score : undefined,
+          total: typeof a.total === 'number' ? a.total : undefined,
+          percent: typeof a.percent === 'number' ? a.percent : undefined,
+          source: sourceFromPractice(a),
+        })
+      })
+    } catch (err) {
+      console.warn('practiceAttempts', err)
+    }
+  }
+
+  rows.sort((a, b) => (toMillis(b.finishedAt) || 0) - (toMillis(a.finishedAt) || 0))
+  return rows
+}
+
 export default function OrtuRiwayat() {
   const navigate = useNavigate()
   const [session, setSession] = useState<ParentSession | null>(null)
   const [children, setChildren] = useState<ChildInfo[]>([])
   const [selectedChildId, setSelectedChildId] = useState('')
-  const [attempts, setAttempts] = useState<LatihanAttempt[]>([])
+  const [attempts, setAttempts] = useState<HistoryRow[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -96,26 +227,7 @@ export default function OrtuRiwayat() {
     ;(async () => {
       setLoading(true)
       try {
-        let list: LatihanAttempt[] = []
-        try {
-          const byId = await getDocs(
-            query(collection(db, 'attempts'), where('studentId', '==', selectedChild.id))
-          )
-          list = byId.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanAttempt))
-        } catch {
-          /* */
-        }
-        if (list.length === 0) {
-          const all = await getDocs(collection(db, 'attempts'))
-          const nameKey = selectedChild.fullName.trim().toLowerCase()
-          list = all.docs
-            .map((d) => ({ id: d.id, ...d.data() } as LatihanAttempt))
-            .filter((a) => {
-              if (a.studentId && a.studentId === selectedChild.id) return true
-              return (a.studentName || '').trim().toLowerCase() === nameKey
-            })
-        }
-        list.sort((a, b) => (toMillis(b.finishedAt) || 0) - (toMillis(a.finishedAt) || 0))
+        const list = await loadAttemptsForChild(selectedChild)
         if (!cancelled) setAttempts(list)
       } catch (err) {
         console.error(err)
@@ -156,7 +268,8 @@ export default function OrtuRiwayat() {
         )}
 
         <p className="text-xs text-gray-500">
-          Kuis dari guru. Durasi dihitung dari waktu mulai sampai selesai (jika tersedia).
+          Semua pengerjaan anak: kuis guru, kuis dari orang tua, dan latihan mandiri. Durasi dihitung
+          dari mulai sampai selesai (jika tersedia).
         </p>
 
         {loading ? (
@@ -170,19 +283,27 @@ export default function OrtuRiwayat() {
             {attempts.map((a) => {
               const fin = toMillis(a.finishedAt)
               const pct = a.percent ?? 0
+              const badge = sourceBadge(a.source)
               return (
                 <li
                   key={a.id}
                   className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3.5 flex items-start gap-3"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-gray-900">{a.latihanTitle || 'Latihan'}</p>
+                    <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                      <span
+                        className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${badge.className}`}
+                      >
+                        {badge.label}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-900">{a.title}</p>
                     <p className="text-[11px] text-gray-400 mt-1">
                       {fin ? formatShort(fin) : '—'}
                       {' · '}
                       Durasi {formatDuration(a.durationMs)}
                       {' · '}
-                      {a.score}/{a.total} benar
+                      {a.score ?? '—'}/{a.total ?? '—'} benar
                     </p>
                   </div>
                   <span
