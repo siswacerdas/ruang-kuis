@@ -320,14 +320,27 @@ export const onPracticeAttemptCreated = onDocumentCreated(
  * Hanya untuk user yang sudah login (admin/guru). Dipanggil dari Daftar Siswa.
  */
 export const syncStudentPasswordsToNisn = onCall(
-  { region: 'asia-southeast2' },
+  {
+    region: 'asia-southeast2',
+    // Gen2/Cloud Run: wajib public invoker agar preflight CORS dari browser lolos.
+    // Auth tetap dicek di dalam handler (request.auth).
+    invoker: 'public',
+    cors: [
+      'https://ruang-kuis.web.app',
+      'https://ruang-kuis.firebaseapp.com',
+      'http://localhost:5173',
+      'http://localhost:4173',
+      'http://127.0.0.1:5173',
+    ],
+  },
   async (request) => {
     if (!request.auth?.uid) {
       throw new HttpsError('unauthenticated', 'Harus login sebagai guru/admin')
     }
 
     const authAdmin = getAuth()
-    const snap = await db.collection('students').where('active', '==', true).get()
+    // Ambil semua siswa; filter active di kode (field active bisa absen di dokumen lama)
+    const snap = await db.collection('students').get()
     let updated = 0
     let skipped = 0
     let failed = 0
@@ -335,6 +348,10 @@ export const syncStudentPasswordsToNisn = onCall(
 
     for (const docSnap of snap.docs) {
       const data = docSnap.data()
+      if (data.active === false) {
+        skipped++
+        continue
+      }
       const nisn = String(data.nisn || '').replace(/\s/g, '')
       const email = String(data.email || '').trim().toLowerCase()
       const authUid = data.authUid ? String(data.authUid) : ''
