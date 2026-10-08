@@ -32,6 +32,7 @@ import AdminPengajuanOrtu from './pages/AdminPengajuanOrtu'
 import OrtuHome from './pages/OrtuHome'
 import OrtuRiwayat from './pages/OrtuRiwayat'
 import OrtuPlaceholder from './pages/OrtuPlaceholder'
+import OrtuNilai from './pages/OrtuNilai'
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -117,7 +118,7 @@ function App() {
         <Route path="/ortu/daftar" element={<OrtuDaftar />} />
         <Route path="/ortu" element={parentGuard(<OrtuHome />)} />
         <Route path="/ortu/riwayat" element={parentGuard(<OrtuRiwayat />)} />
-        <Route path="/ortu/nilai" element={parentGuard(<OrtuPlaceholder />)} />
+        <Route path="/ortu/nilai" element={parentGuard(<OrtuNilai />)} />
         <Route path="/ortu/peringkat" element={parentGuard(<OrtuPlaceholder />)} />
         <Route path="/ortu/buat-kuis" element={parentGuard(<OrtuPlaceholder />)} />
 
