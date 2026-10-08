@@ -34,6 +34,12 @@ export default function PracticeSetup() {
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState('')
   const [pendingSessionId, setPendingSessionId] = useState<string | null>(null)
+  const [pendingMeta, setPendingMeta] = useState<{
+    title?: string
+    createdByParent?: boolean
+    parentName?: string
+    questionCount?: number
+  } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -45,7 +51,7 @@ export default function PracticeSetup() {
         return
       }
       setStudent(s)
-      // Cek sesi mandiri yang belum selesai
+      // Hanya sesi milik siswa login (filter studentId)
       try {
         const snap = await getDocs(
           query(
@@ -55,7 +61,17 @@ export default function PracticeSetup() {
           )
         )
         if (!snap.empty) {
-          setPendingSessionId(snap.docs[0].id)
+          const d = snap.docs[0]
+          const data = d.data()
+          setPendingSessionId(d.id)
+          setPendingMeta({
+            title: data.title ? String(data.title) : undefined,
+            createdByParent: data.createdByParent === true,
+            parentName: data.parentName ? String(data.parentName) : undefined,
+            questionCount: typeof data.questionCount === 'number' ? data.questionCount : undefined,
+          })
+        } else {
+          setPendingMeta(null)
         }
       } catch (err) {
         console.warn('cek practiceSessions', err)
@@ -131,11 +147,9 @@ export default function PracticeSetup() {
     }
     setStarting(true)
     try {
-      // Ambil soal dari materi terpilih
       const allQs: Question[] = []
       for (let i = 0; i < selectedTopicIds.length; i += 10) {
         const chunk = selectedTopicIds.slice(i, i + 10)
-        // Firestore 'in' max 30; kita pakai per topic jika banyak
         for (const tid of chunk) {
           const qSnap = await getDocs(
             query(collection(db, 'questions'), where('topicId', '==', tid))
@@ -150,7 +164,9 @@ export default function PracticeSetup() {
       }
       const picked = shuffle(withId).slice(0, Math.min(count, withId.length))
       if (picked.length < 5) {
-        setError(`Soal terlalu sedikit (${picked.length}). Pilih materi lain atau minta guru menambah soal.`)
+        setError(
+          `Soal terlalu sedikit (${picked.length}). Pilih materi lain atau minta guru menambah soal.`
+        )
         return
       }
       const topicNames = selectedTopicIds
@@ -167,6 +183,9 @@ export default function PracticeSetup() {
         questionIds: picked.map((q) => q.id!),
         questionCount: picked.length,
         status: 'in_progress',
+        kind: 'self',
+        visibility: 'student_only',
+        createdByParent: false,
         createdAt: serverTimestamp(),
       })
       navigate(`/siswa/latihan-mandiri/${ref.id}`)
@@ -208,9 +227,23 @@ export default function PracticeSetup() {
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6 pb-28 space-y-5">
         {pendingSessionId && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
-            <p className="text-sm font-semibold text-amber-900">Ada latihan yang belum selesai</p>
+            <p className="text-sm font-semibold text-amber-900">
+              {pendingMeta?.createdByParent
+                ? 'Ada latihan dari orang tua yang belum selesai'
+                : 'Ada latihan yang belum selesai'}
+            </p>
             <p className="text-xs text-amber-800/90 mt-1">
-              Selesaikan dulu sebelum membuat paket baru.
+              {pendingMeta?.title ? (
+                <>
+                  <span className="font-medium">{pendingMeta.title}</span>
+                  {pendingMeta.questionCount ? ` · ${pendingMeta.questionCount} soal` : ''}
+                  {pendingMeta.createdByParent && pendingMeta.parentName
+                    ? ` · dari ${pendingMeta.parentName}`
+                    : ''}
+                  .{' '}
+                </>
+              ) : null}
+              Selesaikan dulu sebelum membuat paket baru. Latihan ini hanya untuk akunmu.
             </p>
             <button
               type="button"
