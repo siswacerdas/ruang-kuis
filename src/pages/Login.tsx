@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { signInWithEmailAndPassword } from 'firebase/auth'
+import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth'
 import { collection, getDocs, query, orderBy, where } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
-import { ensureStudentSession, setStudentSession } from '../lib/studentSession'
+import { clearStudentSession, ensureStudentSession, setStudentSession } from '../lib/studentSession'
 import { ensureParentSession, setParentSession } from '../lib/parentSession'
 import { STAFF_ACCOUNTS, roleLabel, type NamedAccount } from '../lib/loginAccounts'
 import { isDummyStudent, type Student } from '../types/student'
@@ -123,21 +123,32 @@ export default function Login() {
 
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (cancelled) return
+      // Jangan percaya sisa localStorage (sering akun dummy uji).
+      // Redirect hanya jika Firebase Auth benar-benar akun siswa/ortu itu.
+      if (!user) {
+        clearStudentSession()
+        setCheckingSession(false)
+        return
+      }
       const s = await ensureStudentSession()
-      if (!cancelled && s) {
+      if (cancelled) return
+      if (s) {
         navigate('/siswa', { replace: true })
         return
       }
       const p = await ensureParentSession()
-      if (!cancelled && p) {
+      if (cancelled) return
+      if (p) {
         navigate('/ortu', { replace: true })
         return
       }
-      if (!cancelled) setCheckingSession(false)
-    })()
+      setCheckingSession(false)
+    })
     return () => {
       cancelled = true
+      unsub()
     }
   }, [navigate])
 
@@ -318,6 +329,7 @@ export default function Login() {
         }
         return
       }
+      clearStudentSession()
       setParentSession(session)
       navigate('/ortu', { replace: true })
     } catch (err: any) {
@@ -357,6 +369,7 @@ export default function Login() {
         selectedAccount.email.trim().toLowerCase(),
         staffPassword
       )
+      clearStudentSession()
     } catch (err: any) {
       console.error(err)
       if (
@@ -460,7 +473,7 @@ export default function Login() {
       <main className="flex-1 flex flex-col justify-center px-5 py-8 sm:px-10 lg:px-14 xl:px-16">
         <div className="w-full max-w-md mx-auto">
           <div className="flex gap-1 p-1 rounded-2xl bg-white/80 border border-gray-100 shadow-sm mb-7">
-            {TABS.map((t) => (
+            {TABS.filter((t) => t.key !== 'tes' || import.meta.env.DEV || tab === 'tes').map((t) => (
               <button
                 key={t.key}
                 type="button"
