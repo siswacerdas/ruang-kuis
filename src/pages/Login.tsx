@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth'
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
 import { collection, getDocs, query, orderBy, where } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 import { clearStudentSession, ensureStudentSession, setStudentSession } from '../lib/studentSession'
@@ -125,35 +125,46 @@ export default function Login() {
     let cancelled = false
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (cancelled) return
-      // Jangan percaya sisa localStorage (sering akun dummy uji).
-      // Redirect hanya jika Firebase Auth benar-benar akun siswa/ortu itu.
+      // JANGAN auto-redirect ke /siswa atau /ortu dari halaman login.
+      // Itu yang mengunci user di akun dummy: Auth persistence masih dummy →
+      // ensureStudentSession sukses → navigate /siswa sebelum user sempat ganti akun.
+      // Form login harus selalu bisa dipakai untuk ganti peran/akun.
       if (!user) {
         clearStudentSession()
         clearParentSession()
-        setCheckingSession(false)
-        return
+      } else {
+        // Rapikan sesi localStorage agar tidak nyasar ke akun lama
+        const email = (user.email || '').toLowerCase()
+        try {
+          const raw = localStorage.getItem('rk_student')
+          if (raw) {
+            const s = JSON.parse(raw)
+            if ((s.email || '').toLowerCase() !== email) {
+              clearStudentSession()
+            }
+          }
+        } catch {
+          clearStudentSession()
+        }
+        try {
+          const raw = localStorage.getItem('rk_parent')
+          if (raw) {
+            const s = JSON.parse(raw)
+            if ((s.email || '').toLowerCase() !== email) {
+              clearParentSession()
+            }
+          }
+        } catch {
+          clearParentSession()
+        }
       }
-      const s = await ensureStudentSession()
-      if (cancelled) return
-      if (s) {
-        clearParentSession()
-        navigate('/siswa', { replace: true })
-        return
-      }
-      const p = await ensureParentSession()
-      if (cancelled) return
-      if (p) {
-        clearStudentSession()
-        navigate('/ortu', { replace: true })
-        return
-      }
-      setCheckingSession(false)
+      if (!cancelled) setCheckingSession(false)
     })
     return () => {
       cancelled = true
       unsub()
     }
-  }, [navigate])
+  }, [])
 
   useEffect(() => {
     if ((tab !== 'siswa' && tab !== 'tes') || checkingSession) return
@@ -272,10 +283,17 @@ export default function Login() {
 
     setLoading(true)
     try {
+      try {
+        await signOut(auth)
+      } catch {
+        /* ignore */
+      }
+      clearStudentSession()
+      clearParentSession()
+
       const em = selectedStudent.email.trim().toLowerCase()
       const cred = await signInWithEmailAndPassword(auth, em, studentPassword.trim())
 
-      clearParentSession()
       setStudentSession({
         studentId: selectedStudent.id!,
         fullName: selectedStudent.fullName,
@@ -320,6 +338,14 @@ export default function Login() {
 
     setLoading(true)
     try {
+      try {
+        await signOut(auth)
+      } catch {
+        /* ignore */
+      }
+      clearStudentSession()
+      clearParentSession()
+
       await signInWithEmailAndPassword(auth, em, parentPassword)
       const session = await ensureParentSession()
       if (!session) {
@@ -368,13 +394,19 @@ export default function Login() {
 
     setLoading(true)
     try {
+      try {
+        await signOut(auth)
+      } catch {
+        /* ignore */
+      }
+      clearStudentSession()
+      clearParentSession()
+
       await signInWithEmailAndPassword(
         auth,
         selectedAccount.email.trim().toLowerCase(),
         staffPassword
       )
-      clearStudentSession()
-      clearParentSession()
       navigate('/dashboard', { replace: true })
     } catch (err: any) {
       console.error(err)
@@ -531,18 +563,17 @@ export default function Login() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    NISN (password)
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Password (NISN)</label>
                   <input
                     type={showPassword ? 'text' : 'password'}
                     value={studentPassword}
                     onChange={(e) => setStudentPassword(e.target.value)}
-                    className={`${inputClass} ${tabMeta.ring}`}
-                    placeholder="Masukkan NISN"
                     required
                     autoComplete="current-password"
+                    className={`${inputClass} ${tabMeta.ring} font-mono`}
+                    placeholder="NISN kamu"
                   />
+                  {copy.tip && <p className="text-[11px] text-gray-400 mt-1.5">{copy.tip}</p>}
                 </div>
                 <button
                   type="button"
@@ -551,10 +582,9 @@ export default function Login() {
                 >
                   {showPassword ? 'Sembunyikan' : 'Tampilkan'} password
                 </button>
-                {copy.tip && <p className="text-[11px] text-gray-400 leading-relaxed">{copy.tip}</p>}
                 <button
                   type="submit"
-                  disabled={loading || !selectedStudentId}
+                  disabled={loading || loadingStudents || !selectedStudentId}
                   className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:from-emerald-400 disabled:to-teal-400 text-white font-semibold py-3.5 rounded-xl transition shadow-md shadow-emerald-200/50"
                 >
                   {loading ? 'Memeriksa…' : copy.cta}
@@ -570,10 +600,10 @@ export default function Login() {
                     type="email"
                     value={parentEmail}
                     onChange={(e) => setParentEmail(e.target.value)}
-                    className={`${inputClass} focus:ring-amber-500/30`}
-                    placeholder="email@contoh.com"
                     required
                     autoComplete="username"
+                    className={`${inputClass} focus:ring-amber-500/30`}
+                    placeholder="email@contoh.com"
                   />
                 </div>
                 <div>
@@ -582,11 +612,12 @@ export default function Login() {
                     type={showPassword ? 'text' : 'password'}
                     value={parentPassword}
                     onChange={(e) => setParentPassword(e.target.value)}
-                    className={`${inputClass} focus:ring-amber-500/30`}
-                    placeholder="••••••••"
                     required
                     autoComplete="current-password"
+                    className={`${inputClass} focus:ring-amber-500/30`}
+                    placeholder="••••••••"
                   />
+                  {copy.tip && <p className="text-[11px] text-gray-400 mt-1.5">{copy.tip}</p>}
                 </div>
                 <button
                   type="button"
@@ -595,7 +626,6 @@ export default function Login() {
                 >
                   {showPassword ? 'Sembunyikan' : 'Tampilkan'} password
                 </button>
-                {copy.tip && <p className="text-[11px] text-gray-400 leading-relaxed">{copy.tip}</p>}
                 <button
                   type="submit"
                   disabled={loading}
@@ -604,11 +634,9 @@ export default function Login() {
                   {loading ? 'Memeriksa…' : copy.cta}
                 </button>
                 <p className="text-center text-xs text-gray-500">
-                  <Link
-                    to="/ortu/daftar"
-                    className="text-amber-700 hover:underline font-semibold"
-                  >
-                    Belum punya akun? Ajukan portal orang tua
+                  Belum punya akun?{' '}
+                  <Link to="/ortu/daftar" className="text-amber-700 font-medium hover:underline">
+                    Ajukan akun orang tua
                   </Link>
                 </p>
               </form>
@@ -617,9 +645,7 @@ export default function Login() {
             {tab === 'guru' && (
               <form onSubmit={handleStaffSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Nama guru / admin
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Nama</label>
                   <select
                     value={selectedAccountId}
                     onChange={(e) => setSelectedAccountId(e.target.value)}
