@@ -9,6 +9,8 @@ interface OrtuLayoutProps {
   title?: string
   subtitle?: string
   parentName?: string
+  /** Sembunyikan header default (mis. beranda pakai hero sendiri) */
+  hideHeader?: boolean
 }
 
 const NAV = [
@@ -64,9 +66,28 @@ const NAV = [
       />
     ),
   },
+  {
+    path: '/ortu/buat-kuis',
+    label: 'Buat',
+    match: (p: string) => p.startsWith('/ortu/buat-kuis'),
+    icon: (
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M12 4v16m8-8H4"
+      />
+    ),
+  },
 ]
 
-export default function OrtuLayout({ children, title, subtitle, parentName }: OrtuLayoutProps) {
+export default function OrtuLayout({
+  children,
+  title,
+  subtitle,
+  parentName,
+  hideHeader,
+}: OrtuLayoutProps) {
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -80,57 +101,71 @@ export default function OrtuLayout({ children, title, subtitle, parentName }: Or
     navigate('/login?tab=ortu', { replace: true })
   }
 
+  const initial = ((parentName || title || 'O').trim()[0] || 'O').toUpperCase()
+
   return (
-    <div className="min-h-screen bg-[#F5F6FA] pb-20">
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-20">
-        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <Link
-              to="/ortu"
-              className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold shrink-0"
-            >
-              RK
-            </Link>
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-gray-900 truncate">
-                {title || 'Ruang Kuis · Orang Tua'}
-              </p>
-              <p className="text-[11px] text-gray-400 truncate">
-                {subtitle || parentName || 'Portal orang tua'}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="text-xs text-gray-500 hover:text-red-600 px-2 py-1.5 shrink-0"
-          >
-            Keluar
-          </button>
-        </div>
-      </header>
-
-      <main className="max-w-3xl mx-auto px-4 py-5">{children}</main>
-
-      <nav className="fixed bottom-0 inset-x-0 z-30 bg-white border-t border-gray-100">
-        <div className="max-w-3xl mx-auto flex">
-          {NAV.map((item) => {
-            const active = item.match(location.pathname)
-            return (
+    <div className="min-h-screen bg-[#F5F6FA] pb-24">
+      {!hideHeader && (
+        <header className="bg-white/90 backdrop-blur-md border-b border-gray-100/80 sticky top-0 z-20">
+          <div className="max-w-3xl mx-auto px-4 sm:px-5 py-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               <Link
-                key={item.path}
-                to={item.path}
-                className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition ${
-                  active ? 'text-indigo-600' : 'text-gray-400 hover:text-gray-600'
-                }`}
+                to="/ortu"
+                className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 flex items-center justify-center text-white text-sm font-bold shrink-0 shadow-md shadow-indigo-200/50"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  {item.icon}
-                </svg>
-                {item.label}
+                {initial}
               </Link>
-            )
-          })}
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-gray-900 truncate leading-tight">
+                  {title || 'Ruang Kuis'}
+                </p>
+                <p className="text-[11px] text-gray-400 truncate mt-0.5">
+                  {subtitle || parentName || 'Portal orang tua'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="text-xs font-medium text-gray-500 hover:text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-50 transition shrink-0"
+            >
+              Keluar
+            </button>
+          </div>
+        </header>
+      )}
+
+      <main className="max-w-3xl mx-auto px-4 sm:px-5 py-5">{children}</main>
+
+      <nav className="fixed bottom-0 inset-x-0 z-30">
+        <div className="max-w-3xl mx-auto px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+          <div className="bg-white/95 backdrop-blur-lg border border-gray-100 shadow-[0_-4px_24px_rgba(15,23,42,0.06)] rounded-2xl flex">
+            {NAV.map((item) => {
+              const active = item.match(location.pathname)
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[10px] sm:text-[11px] font-semibold transition relative ${
+                    active ? 'text-indigo-600' : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  {active && (
+                    <span className="absolute top-1 w-1 h-1 rounded-full bg-indigo-500" />
+                  )}
+                  <svg
+                    className={`w-5 h-5 ${active ? 'scale-105' : ''} transition-transform`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    {item.icon}
+                  </svg>
+                  {item.label}
+                </Link>
+              )
+            })}
+          </div>
         </div>
       </nav>
     </div>
