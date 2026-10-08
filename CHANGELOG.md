@@ -8,6 +8,16 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Added — Akun orang tua (Fase A, sedang dikerjakan)
+- Desain: `docs/PARENT_ACCOUNT.md` (skema, alur pengajuan → approve, multi-anak, notifikasi, dummy uji).
+- Types: `src/types/parent.ts` (`ParentRequest`, `Parent`, notifikasi, session).
+- Session: `src/lib/parentSession.ts`.
+- Publik: form pengajuan `/ortu/daftar` (`OrtuDaftar.tsx`) — pilih anak, WA, email, password.
+- Admin: `/pengajuan-ortu` (`AdminPengajuanOrtu.tsx`) — setujui (buat Auth + `parents`) / tolak; hapus `tempPassword` setelah diproses.
+- Koleksi baru: `parentRequests`, `parents`, `adminNotifications` (opsional `parentPasswordResets` di fase berikutnya).
+- **Sementara — dummy uji live:** siswa `Siswa Uji Ortu` (`uji.ortu@ruang-kuis.test`, NISN `9999000001`, `isDummy: true`) agar dropdown pengajuan bisa diuji tanpa data kelas nyata. Login siswa via tab **Tes Sistem**.
+- **TODO wajib di akhir percakapan / sebelum production ortu:** hapus dummy uji ortu + Auth terkait, bersihkan request/parent uji, centang item ini. Jangan biarkan `isDummy` uji ortu tertinggal di daftar nilai/laporan produksi.
+
 ### Added — Rekap Nilai (nilai akhir per TP / mapel)
 - Halaman admin **Rekap Nilai** (`/rekap-nilai`): pilih mata pelajaran → matriks siswa × kode TP (nilai akhir %), filter kelas, rata kelas, export CSV.
 - Panel kanan: deskripsi TP (kode, elemen, rumusan), rata kelas, sumber aktivitas/komponen, sebaran capaian.
