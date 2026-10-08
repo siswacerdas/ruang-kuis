@@ -8,6 +8,14 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Fixed — Tampilan kuis mobile & optimasi biaya Firebase
+- **Navigator nomor soal** di `KerjakanQuiz` / `PracticeQuiz`: scroll horizontal (tidak lagi `flex-wrap` yang membuat header tinggi di smartphone).
+- **Teks soal / opsi / stimulus**: `break-words` agar teks panjang tidak merusak layout.
+- **Gambar stimulus ke Firebase Storage**: helper `src/lib/stimulusImage.ts` — base64 diunggah ke Storage, dokumen Firestore hanya menyimpan URL. Integrasi di simpan form & `saveAiDrafts` (`TopicQuestions.tsx`).
+- **Storage rules** + `firebase.json` storage; `firebase.ts` ekspor `storage`.
+- **Cache `usedQuestionIds`** di `sessionStorage` agar form paket tidak selalu scan seluruh koleksi `latihan`.
+- Kompatibel mundur: soal lama dengan data-URL tetap ditampilkan.
+
 ### Added — Nonaktifkan ortu, lupa password, notifikasi & laporan
 - **Notifikasi admin:** lonceng hanya menampilkan yang belum dibaca; setelah diklik, notifikasi dihapus otomatis. Tombol Bersihkan + badge real-time unread.
 - **Laporan:** panel Export diperkecil menjadi dropdown compact agar ringkasan nilai tetap menonjol; tip filter mapel jika "Semua mapel".
