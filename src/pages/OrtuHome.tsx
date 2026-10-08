@@ -6,9 +6,7 @@ import {
   getDoc,
   getDocs,
   query,
-  updateDoc,
   where,
-  serverTimestamp,
 } from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../lib/firebase'
@@ -16,6 +14,8 @@ import { ensureParentSession, clearParentSession } from '../lib/parentSession'
 import type { ParentSession } from '../types/parent'
 import type { LatihanAttempt } from '../types/question'
 import OrtuLayout from '../components/OrtuLayout'
+import OrtuGuideLightbox from '../components/OrtuGuideLightbox'
+import { PARENT_GUIDE_MAX_LOGINS } from '../types/parent'
 
 type ChildInfo = {
   id: string
@@ -141,7 +141,8 @@ export default function OrtuHome() {
         return
       }
       setSession(s)
-      setShowGuide(!s.guideSeenAt)
+      // Lightbox: tampil di login 1–3, hilang mulai login ke-4
+      setShowGuide((s.loginCount ?? 0) <= PARENT_GUIDE_MAX_LOGINS)
 
       const kids: ChildInfo[] = []
       for (const id of s.studentIds || []) {
@@ -230,17 +231,9 @@ export default function OrtuHome() {
     }
   }, [attempts])
 
-  const dismissGuide = async () => {
+  const dismissGuide = () => {
+    // Hanya tutup di sesi ini; login berikutnya tetap tampil sampai login ke-3 selesai
     setShowGuide(false)
-    if (!session?.parentId) return
-    try {
-      await updateDoc(doc(db, 'parents', session.parentId), {
-        guideSeenAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      })
-    } catch (err) {
-      console.warn('guideSeenAt', err)
-    }
   }
 
   const handleLogout = async () => {
@@ -272,6 +265,14 @@ export default function OrtuHome() {
   return (
     <OrtuLayout parentName={session.fullName} hideHeader>
       <div className="space-y-5 -mt-1">
+        {showGuide && session && (
+          <OrtuGuideLightbox
+            parentName={session.fullName}
+            loginCount={session.loginCount ?? 1}
+            onClose={dismissGuide}
+          />
+        )}
+
         <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 text-white shadow-lg shadow-indigo-200/40">
           <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-white/10 blur-2xl" />
           <div className="absolute -left-6 bottom-0 w-32 h-32 rounded-full bg-fuchsia-400/20 blur-2xl" />
@@ -332,51 +333,6 @@ export default function OrtuHome() {
             )}
           </div>
         </section>
-
-        {showGuide && (
-          <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-violet-50 p-4 sm:p-5 shadow-sm">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.75}
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold text-indigo-950">Panduan singkat</p>
-                <ul className="mt-2 space-y-1.5 text-xs text-indigo-900/80 leading-relaxed">
-                  <li className="flex gap-2">
-                    <span className="text-indigo-400">✓</span>
-                    Riwayat kuis guru & latihan mandiri, lengkap dengan durasi pengerjaan.
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="text-indigo-400">✓</span>
-                    Nilai per mapel dari kuis saja (bukan nilai proyek sekolah).
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="text-indigo-400">✓</span>
-                    Peringkat privasi: posisi anak + total peserta.
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="text-indigo-400">✓</span>
-                    Buat latihan khusus hanya untuk anak Anda.
-                  </li>
-                </ul>
-                <button
-                  type="button"
-                  onClick={dismissGuide}
-                  className="mt-3 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3.5 py-2 rounded-xl transition"
-                >
-                  Mengerti
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         <section className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 pt-5 pb-4 flex items-center gap-3.5">
