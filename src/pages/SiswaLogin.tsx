@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { signInWithEmailAndPassword } from 'firebase/auth'
+import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth'
 import { collection, getDocs, query, orderBy } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
-import { ensureStudentSession, setStudentSession } from '../lib/studentSession'
+import { clearStudentSession, ensureStudentSession, setStudentSession } from '../lib/studentSession'
 import { useNavigate, Link } from 'react-router-dom'
 import { isDummyStudent, type Student } from '../types/student'
 
@@ -18,16 +18,24 @@ export default function SiswaLogin() {
 
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (cancelled) return
+      if (!user) {
+        clearStudentSession()
+        setCheckingSession(false)
+        return
+      }
       const s = await ensureStudentSession()
-      if (!cancelled && s) {
+      if (cancelled) return
+      if (s) {
         navigate('/siswa', { replace: true })
         return
       }
-      if (!cancelled) setCheckingSession(false)
-    })()
+      setCheckingSession(false)
+    })
     return () => {
       cancelled = true
+      unsub()
     }
   }, [navigate])
 
