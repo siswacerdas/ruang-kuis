@@ -103,7 +103,6 @@ export default function OrtuDaftar() {
 
     setSubmitting(true)
     try {
-      // Jangan query parents / parentRequests di sini (butuh admin auth).
       const payload: Omit<ParentRequest, 'id'> = {
         fullName: fullName.trim(),
         whatsapp: normalizeWhatsapp(whatsapp),
@@ -132,7 +131,7 @@ export default function OrtuDaftar() {
       }
 
       setMessage(
-        'Pengajuan terkirim. Admin akan memeriksa dan menyetujui akun Anda. Setelah disetujui, silakan masuk di halaman login tab Orang Tua.'
+        'Pengajuan terkirim. Admin akan memeriksa dan menyetujui akun Ayah/Bunda. Setelah disetujui, silakan masuk di halaman login tab Orang Tua.'
       )
       setPassword('')
       setPassword2('')
@@ -154,7 +153,7 @@ export default function OrtuDaftar() {
           </Link>
           <h1 className="text-2xl font-bold text-gray-900 mt-3">Ajukan akun orang tua</h1>
           <p className="text-sm text-gray-500 mt-1 leading-relaxed">
-            Pilih nama anak, isi data Anda. Admin sekolah akan menyetujui sebelum akun aktif.
+            Pilih nama anak, isi data Ayah/Bunda. Admin sekolah akan menyetujui sebelum akun aktif.
           </p>
         </div>
 
@@ -207,7 +206,7 @@ export default function OrtuDaftar() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Nama Anda (orang tua / wali) *
+                  Nama Ayah/Bunda (orang tua / wali) *
                 </label>
                 <input
                   value={fullName}
@@ -239,7 +238,7 @@ export default function OrtuDaftar() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-sm"
-                  placeholder="email@anda.com"
+                  placeholder="email@contoh.com"
                   autoComplete="email"
                 />
               </div>
@@ -290,7 +289,7 @@ export default function OrtuDaftar() {
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-4">
-          Dengan mengajukan, Anda menyatakan sebagai orang tua/wali siswa yang dipilih.
+          Dengan mengajukan, Ayah/Bunda menyatakan sebagai orang tua/wali siswa yang dipilih.
         </p>
       </div>
     </div>
