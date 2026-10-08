@@ -23,6 +23,9 @@ import {
  * Rules hanya mengizinkan admin membaca koleksi itu — query dari user
  * belum login → FirebaseError Missing or insufficient permissions.
  * Duplikat dicek admin saat approve.
+ *
+ * Siswa dummy / uji sistem tidak ditampilkan di dropdown (tetap ada di Firestore
+ * untuk tes internal admin).
  */
 export default function OrtuDaftar() {
   const navigate = useNavigate()
@@ -54,6 +57,8 @@ export default function OrtuDaftar() {
         const list = snap.docs
           .map((d) => ({ id: d.id, ...d.data() } as Student))
           .filter((s) => s.active !== false)
+          // Sembunyikan akun dummy / uji sistem dari form publik
+          .filter((s) => !isDummyStudent(s))
           .sort((a, b) => a.fullName.localeCompare(b.fullName, 'id'))
         setStudents(list)
       } catch (err) {
@@ -77,6 +82,11 @@ export default function OrtuDaftar() {
 
     if (!selected?.id) {
       setError('Pilih nama anak dari daftar')
+      return
+    }
+    // Guard ekstra: jangan izinkan submit ke siswa dummy
+    if (isDummyStudent(selected)) {
+      setError('Siswa uji sistem tidak dapat dipilih. Pilih nama anak yang terdaftar di sekolah.')
       return
     }
     if (!fullName.trim() || fullName.trim().length < 3) {
@@ -189,12 +199,13 @@ export default function OrtuDaftar() {
                   required
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-sm"
                 >
-                  <option value="">{loadingStudents ? 'Memuat daftar...' : '— Pilih nama anak —'}</option>
+                  <option value="">
+                    {loadingStudents ? 'Memuat daftar...' : '— Pilih nama anak —'}
+                  </option>
                   {students.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.fullName}
                       {s.nickname ? ` (${s.nickname})` : ''}
-                      {isDummyStudent(s) ? ' · uji' : ''}
                       {s.className ? ` · ${s.className}` : ''}
                     </option>
                   ))}
