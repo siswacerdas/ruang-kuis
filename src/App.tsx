@@ -43,6 +43,9 @@ function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      // Tahan loading sampai role dari Firestore selesai, hindari redirect
+      // ke /siswa pakai isStudent basi dari user sebelumnya (dummy).
+      setLoading(true)
       setUser(currentUser)
       if (currentUser?.email) {
         const email = currentUser.email.toLowerCase()

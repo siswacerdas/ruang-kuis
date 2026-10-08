@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { onAuthStateChanged, signInWithEmailAndPassword } from 'firebase/auth'
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
 import { collection, getDocs, query, orderBy } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 import { clearStudentSession, ensureStudentSession, setStudentSession } from '../lib/studentSession'
@@ -21,26 +21,19 @@ export default function SiswaLogin() {
     let cancelled = false
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (cancelled) return
+      // Jangan auto-redirect — biarkan form login selalu bisa ganti akun
+      // (termasuk keluar dari sisa Auth dummy).
       if (!user) {
         clearStudentSession()
         clearParentSession()
-        setCheckingSession(false)
-        return
       }
-      const s = await ensureStudentSession()
-      if (cancelled) return
-      if (s) {
-        clearParentSession()
-        navigate('/siswa', { replace: true })
-        return
-      }
-      setCheckingSession(false)
+      if (!cancelled) setCheckingSession(false)
     })
     return () => {
       cancelled = true
       unsub()
     }
-  }, [navigate])
+  }, [])
 
   useEffect(() => {
     if (checkingSession) return
@@ -89,10 +82,17 @@ export default function SiswaLogin() {
 
     setLoading(true)
     try {
+      try {
+        await signOut(auth)
+      } catch {
+        /* ignore */
+      }
+      clearStudentSession()
+      clearParentSession()
+
       const em = selected.email.trim().toLowerCase()
       const cred = await signInWithEmailAndPassword(auth, em, password.trim())
 
-      clearParentSession()
       setStudentSession({
         studentId: selected.id!,
         fullName: selected.fullName,
