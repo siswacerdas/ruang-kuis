@@ -15,6 +15,7 @@ import {
   normalizeWhatsapp,
   type ParentRequest,
 } from '../types/parent'
+import { isConfiguredStaffEmail } from '../lib/loginAccounts'
 
 /**
  * Form pengajuan akun orang tua (publik, tanpa login).
@@ -102,6 +103,12 @@ export default function OrtuDaftar() {
       setError('Email login tidak valid')
       return
     }
+    if (isConfiguredStaffEmail(em)) {
+      setError(
+        'Email ini terdaftar sebagai guru/admin sekolah. Gunakan email lain untuk akun orang tua.'
+      )
+      return
+    }
     if (password.length < 8) {
       setError('Password minimal 8 karakter')
       return
@@ -141,14 +148,13 @@ export default function OrtuDaftar() {
       }
 
       setMessage(
-        'Pengajuan terkirim. Admin akan memeriksa dan menyetujui akun Ayah/Bunda. Setelah disetujui, silakan masuk di halaman login tab Orang Tua.'
+        'Pengajuan terkirim. Admin akan meninjau. Anda bisa login setelah disetujui.'
       )
       setPassword('')
       setPassword2('')
-    } catch (err: unknown) {
+    } catch (err) {
       console.error(err)
-      const msg = err instanceof Error ? err.message : String(err)
-      setError(`Gagal mengirim pengajuan: ${msg.slice(0, 160)}`)
+      setError('Gagal mengirim pengajuan. Coba lagi nanti.')
     } finally {
       setSubmitting(false)
     }
@@ -158,38 +164,31 @@ export default function OrtuDaftar() {
     <div className="min-h-screen bg-[#F5F6FA] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
-          <Link to="/login?tab=ortu" className="inline-flex items-center gap-2 text-indigo-600 text-sm font-medium">
-            ← Kembali ke login
-          </Link>
-          <h1 className="text-2xl font-bold text-gray-900 mt-3">Ajukan akun orang tua</h1>
-          <p className="text-sm text-gray-500 mt-1 leading-relaxed">
-            Pilih nama anak, isi data Ayah/Bunda. Admin sekolah akan menyetujui sebelum akun aktif.
-          </p>
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center mx-auto mb-3 shadow-sm">
+            <span className="text-white font-bold text-sm">OT</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">Pengajuan akun orang tua</h1>
+          <p className="text-sm text-gray-500 mt-1">Ruang Kuis · Kelas 5A</p>
         </div>
 
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          {error && (
-            <div className="mb-4 bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-3 rounded-xl">
-              {error}
-            </div>
-          )}
-          {message && (
-            <div className="mb-4 bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm px-4 py-3 rounded-xl">
-              {message}
-              <div className="mt-3">
-                <button
-                  type="button"
-                  onClick={() => navigate('/login?tab=ortu')}
-                  className="text-indigo-600 font-medium text-sm hover:underline"
-                >
-                  Ke halaman login
-                </button>
+          {message ? (
+            <div className="space-y-4 text-center">
+              <div className="rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm px-3 py-3">
+                {message}
               </div>
+              <Link to="/login?tab=ortu" className="text-sm text-indigo-600 hover:underline font-medium">
+                Ke halaman login
+              </Link>
             </div>
-          )}
-
-          {!message && (
+          ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
+              {error && (
+                <div className="rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm px-3 py-2">
+                  {error}
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Nama anak *</label>
                 <select
@@ -199,50 +198,44 @@ export default function OrtuDaftar() {
                   required
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-sm"
                 >
-                  <option value="">
-                    {loadingStudents ? 'Memuat daftar...' : '— Pilih nama anak —'}
-                  </option>
+                  <option value="">{loadingStudents ? 'Memuat...' : '— Pilih nama anak —'}</option>
                   {students.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.fullName}
                       {s.nickname ? ` (${s.nickname})` : ''}
-                      {s.className ? ` · ${s.className}` : ''}
                     </option>
                   ))}
                 </select>
-                <p className="text-[11px] text-gray-400 mt-1">
-                  Hanya anak yang sudah terdaftar di sekolah. Jika nama tidak ada, hubungi guru.
-                </p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Nama Ayah/Bunda (orang tua / wali) *
+                  Nama orang tua / wali *
                 </label>
                 <input
+                  type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   required
-                  minLength={3}
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-sm"
                   placeholder="Nama lengkap"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Nomor WhatsApp *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">WhatsApp *</label>
                 <input
+                  type="tel"
                   value={whatsapp}
                   onChange={(e) => setWhatsapp(e.target.value)}
                   required
-                  inputMode="tel"
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-indigo-500/30 outline-none text-sm"
                   placeholder="081234567890"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Email untuk login *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Email login *</label>
                 <input
                   type="email"
                   value={email}
