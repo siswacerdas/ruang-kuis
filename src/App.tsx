@@ -27,26 +27,37 @@ import Materi from './pages/Materi'
 import PracticeSetup from './pages/PracticeSetup'
 import PracticeQuiz from './pages/PracticeQuiz'
 import PracticeResult from './pages/PracticeResult'
+import OrtuDaftar from './pages/OrtuDaftar'
+import AdminPengajuanOrtu from './pages/AdminPengajuanOrtu'
+import OrtuHome from './pages/OrtuHome'
 
 function App() {
   const [user, setUser] = useState<any>(null)
   const [isStudent, setIsStudent] = useState(false)
+  const [isParent, setIsParent] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser)
       if (currentUser?.email) {
+        const email = currentUser.email.toLowerCase()
         try {
-          const snap = await getDocs(
-            query(collection(db, 'students'), where('email', '==', currentUser.email.toLowerCase()))
+          const studentSnap = await getDocs(
+            query(collection(db, 'students'), where('email', '==', email))
           )
-          setIsStudent(!snap.empty)
+          const parentSnap = await getDocs(
+            query(collection(db, 'parents'), where('email', '==', email))
+          )
+          setIsStudent(!studentSnap.empty)
+          setIsParent(!parentSnap.empty)
         } catch {
           setIsStudent(false)
+          setIsParent(false)
         }
       } else {
         setIsStudent(false)
+        setIsParent(false)
       }
       setLoading(false)
     })
@@ -61,15 +72,34 @@ function App() {
     )
   }
 
-  const isAdmin = !!user && !isStudent
+  const isAdmin = !!user && !isStudent && !isParent
+
+  const loginRedirect = isAdmin ? (
+    <Navigate to="/dashboard" />
+  ) : isStudent ? (
+    <Navigate to="/siswa" />
+  ) : isParent ? (
+    <Navigate to="/ortu" />
+  ) : (
+    <Login />
+  )
+
+  const homeRedirect = (
+    <Navigate
+      to={isAdmin ? '/dashboard' : isStudent ? '/siswa' : isParent ? '/ortu' : '/login'}
+      replace
+    />
+  )
 
   return (
     <BrowserRouter>
       <Routes>
-        {/* Siswa */}
         <Route path="/kerjakan" element={<SiswaLogin />} />
         <Route path="/siswa" element={<KerjakanEntry />} />
-        <Route path="/siswa/materi" element={isStudent || isAdmin ? <Materi audience="student" /> : <Navigate to="/login" />} />
+        <Route
+          path="/siswa/materi"
+          element={isStudent || isAdmin ? <Materi audience="student" /> : <Navigate to="/login" />}
+        />
         <Route path="/siswa/latihan-mandiri" element={<PracticeSetup />} />
         <Route path="/siswa/latihan-mandiri/hasil" element={<PracticeResult />} />
         <Route path="/siswa/latihan-mandiri/:sessionId" element={<PracticeQuiz />} />
@@ -79,18 +109,17 @@ function App() {
         <Route path="/siswa/peringkat" element={<SiswaPeringkat />} />
         <Route path="/kerjakan/:latihanId" element={<KerjakanQuiz />} />
 
-        {/* Auth terpadu (Siswa / Guru / Tes) */}
-        <Route
-          path="/login"
-          element={
-            isAdmin ? <Navigate to="/dashboard" /> : isStudent ? <Navigate to="/siswa" /> : <Login />
-          }
-        />
+        <Route path="/ortu/daftar" element={<OrtuDaftar />} />
+        <Route path="/ortu" element={isParent ? <OrtuHome /> : <Navigate to="/login?tab=ortu" />} />
+        <Route path="/ortu/*" element={isParent ? <OrtuHome /> : <Navigate to="/login?tab=ortu" />} />
 
-        {/* Admin pages */}
+        <Route path="/login" element={loginRedirect} />
+
         <Route
           path="/dashboard"
-          element={isAdmin ? <Dashboard /> : <Navigate to={isStudent ? '/siswa' : '/login'} />}
+          element={
+            isAdmin ? <Dashboard /> : <Navigate to={isStudent ? '/siswa' : isParent ? '/ortu' : '/login'} />
+          }
         />
         <Route path="/bank-soal" element={isAdmin ? <BankSoal /> : <Navigate to="/login" />} />
         <Route
@@ -102,10 +131,7 @@ function App() {
           element={isAdmin ? <TopicQuestions /> : <Navigate to="/login" />}
         />
         <Route path="/latihan-soal" element={isAdmin ? <LatihanSoal /> : <Navigate to="/login" />} />
-        <Route
-          path="/latihan-soal/baru"
-          element={isAdmin ? <LatihanForm /> : <Navigate to="/login" />}
-        />
+        <Route path="/latihan-soal/baru" element={isAdmin ? <LatihanForm /> : <Navigate to="/login" />} />
         <Route
           path="/latihan-soal/:id/hasil"
           element={isAdmin ? <LatihanHasil /> : <Navigate to="/login" />}
@@ -121,14 +147,13 @@ function App() {
         <Route path="/input-nilai" element={isAdmin ? <InputNilai /> : <Navigate to="/login" />} />
         <Route path="/rekap-nilai" element={isAdmin ? <RekapNilai /> : <Navigate to="/login" />} />
         <Route path="/materi" element={isAdmin ? <Materi audience="admin" /> : <Navigate to="/login" />} />
+        <Route
+          path="/pengajuan-ortu"
+          element={isAdmin ? <AdminPengajuanOrtu /> : <Navigate to="/login" />}
+        />
 
         <Route path="/questions" element={<Navigate to="/bank-soal" replace />} />
-        <Route
-          path="/"
-          element={
-            <Navigate to={isAdmin ? '/dashboard' : isStudent ? '/siswa' : '/login'} replace />
-          }
-        />
+        <Route path="/" element={homeRedirect} />
       </Routes>
     </BrowserRouter>
   )
