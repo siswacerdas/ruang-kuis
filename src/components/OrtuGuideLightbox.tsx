@@ -11,11 +11,11 @@ const STEPS = [
   {
     badge: 'Selamat datang',
     title: 'Portal orang tua Ruang Kuis',
-    body: 'Pantau belajar anak, lihat nilai kuis, peringkat, dan buat latihan khusus — aman dan hanya untuk anak Anda.',
+    body: 'Pantau belajar anak, lihat nilai kuis, peringkat, dan buat latihan khusus — aman dan hanya untuk anak Ayah/Bunda.',
     points: [
       'Satu akun dapat terhubung ke satu atau beberapa anak',
       'Data nilai berasal dari kuis di aplikasi, bukan rapor sekolah',
-      'Panduan ini muncul di beberapa login pertama agar Anda familiar',
+      'Panduan ini muncul di beberapa login pertama agar Ayah/Bunda familiar',
     ],
     accent: 'from-indigo-500 to-violet-600',
     icon: (
@@ -30,7 +30,7 @@ const STEPS = [
   {
     badge: 'Pantau progress',
     title: 'Riwayat & nilai mapel',
-    body: 'Setiap kali anak menyelesaikan kuis guru atau latihan mandiri, hasilnya bisa Anda lihat di sini.',
+    body: 'Setiap kali anak menyelesaikan kuis guru atau latihan mandiri, hasilnya bisa Ayah/Bunda lihat di sini.',
     points: [
       'Riwayat: skor, waktu selesai, dan durasi pengerjaan',
       'Nilai: rata-rata per mata pelajaran dari kuis saja',
@@ -53,7 +53,7 @@ const STEPS = [
     points: [
       'Default: nama peserta lain disamarkan (Peserta #N)',
       'Filter kelas, mapel, atau paket kuis tertentu',
-      'Opsional: tampilkan nama jika Anda membutuhkannya',
+      'Opsional: tampilkan nama jika Ayah/Bunda membutuhkannya',
     ],
     accent: 'from-amber-500 to-orange-600',
     icon: (
@@ -68,7 +68,7 @@ const STEPS = [
   {
     badge: 'Dukung di rumah',
     title: 'Buat latihan untuk anak',
-    body: 'Susun paket latihan dari bank soal sekolah. Hanya anak Anda yang melihat dan mengerjakannya.',
+    body: 'Susun paket latihan dari bank soal sekolah. Hanya anak Ayah/Bunda yang melihat dan mengerjakannya.',
     points: [
       'Pilih mapel, materi, dan jumlah soal (15/20)',
       'Tidak masuk daftar kuis guru atau siswa lain',
@@ -126,7 +126,6 @@ export default function OrtuGuideLightbox({ parentName, loginCount, onClose }: O
       />
 
       <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl shadow-indigo-900/20 overflow-hidden animate-[slideUp_0.28s_ease-out]">
-        {/* Accent header */}
         <div className={`relative bg-gradient-to-br ${current.accent} px-6 pt-6 pb-8 text-white`}>
           <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-white/10 blur-xl" />
           <div className="relative flex items-start justify-between gap-3">
@@ -177,7 +176,6 @@ export default function OrtuGuideLightbox({ parentName, loginCount, onClose }: O
             ))}
           </ul>
 
-          {/* Dots */}
           <div className="flex items-center justify-center gap-1.5 mt-6">
             {STEPS.map((_, i) => (
               <button
