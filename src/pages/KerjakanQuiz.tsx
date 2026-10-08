@@ -414,27 +414,29 @@ export default function KerjakanQuiz() {
             </span>
           </div>
         </div>
-        <div className="max-w-3xl mx-auto mt-2 flex gap-1 flex-wrap">
-          {questions.map((qq, i) => {
-            const a = answers[qq.id!]
-            const done = a && a.length > 0 && !(qq.type === 'category' && a.some((x) => x < 0))
-            return (
-              <button
-                key={qq.id}
-                type="button"
-                onClick={() => goTo(i)}
-                className={`w-7 h-7 rounded-md text-[11px] font-semibold transition ${
-                  i === current
-                    ? 'bg-indigo-600 text-white'
-                    : done
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                }`}
-              >
-                {i + 1}
-              </button>
-            )
-          })}
+        <div className="max-w-3xl mx-auto mt-2 -mx-1 px-1 overflow-x-auto">
+          <div className="flex gap-1 min-w-min pb-0.5">
+            {questions.map((qq, i) => {
+              const a = answers[qq.id!]
+              const done = a && a.length > 0 && !(qq.type === 'category' && a.some((x) => x < 0))
+              return (
+                <button
+                  key={qq.id}
+                  type="button"
+                  onClick={() => goTo(i)}
+                  className={`w-7 h-7 shrink-0 rounded-md text-[11px] font-semibold transition ${
+                    i === current
+                      ? 'bg-indigo-600 text-white'
+                      : done
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                >
+                  {i + 1}
+                </button>
+              )
+            })}
+          </div>
         </div>
       </header>
 
@@ -445,7 +447,7 @@ export default function KerjakanQuiz() {
             {q.tp ? ` · TP ${q.tp}` : ''}
           </p>
           {(q.stimulus || q.stimulusImage) && (
-            <div className="mb-4 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
+            <div className="mb-4 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden break-words">
               {q.stimulusImage &&
                 (q.stimulusImage.startsWith('data:image') ||
                   /^https?:\/\//i.test(q.stimulusImage)) && (
@@ -475,7 +477,7 @@ export default function KerjakanQuiz() {
             </div>
           )}
           <div className="flex items-start justify-between gap-2 mb-6">
-            <p className="text-base md:text-lg font-medium text-gray-900 leading-relaxed flex-1">
+            <p className="text-base md:text-lg font-medium text-gray-900 leading-relaxed flex-1 break-words">
               {q.question}
             </p>
             {q.skor != null && q.skor > 0 && (
@@ -530,7 +532,7 @@ export default function KerjakanQuiz() {
               <div className="sm:hidden space-y-3">
                 {(q.options || []).map((stmt, si) => (
                   <div key={si} className="rounded-xl border border-gray-100 p-3">
-                    <p className="text-sm text-gray-800 mb-2">
+                    <p className="text-sm text-gray-800 mb-2 break-words">
                       <span className="text-gray-400 mr-1">{si + 1}.</span>
                       {stmt}
                     </p>

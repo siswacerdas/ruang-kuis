@@ -25,6 +25,7 @@ import {
   type AiDraftQuestion,
   type OptionVerification,
 } from '../lib/openaiQuestions'
+import { ensureStimulusImageStored } from '../lib/stimulusImage'
 import { analyzeOptionLength } from '../lib/optionPattern'
 import {
   getSubject,
@@ -1127,6 +1128,7 @@ export default function TopicQuestions() {
     if (!topicId || !subjectKey) return
     setSaving(true)
     try {
+      const storedImage = await ensureStimulusImageStored(form.stimulusImage)
       const payload: Record<string, any> = {
         topicId,
         subjectKey: subjectKey as SubjectKey,
@@ -1136,7 +1138,7 @@ export default function TopicQuestions() {
         correctAnswers: form.correctAnswers,
         explanation: form.explanation.trim() || null,
         stimulus: form.stimulus.trim() || null,
-        stimulusImage: form.stimulusImage.trim() || null,
+        stimulusImage: storedImage,
         skor: Number(form.skor) > 0 ? Number(form.skor) : 1,
         kompleksitas: form.kompleksitas.trim() || null,
         tp: parseTpCodes(form.tpCodes || form.tp)[0] || null,
@@ -1358,6 +1360,7 @@ export default function TopicQuestions() {
     const codes = topic.tpCodes || []
     for (const d of drafts) {
       const tpCodes = d.tpCodes?.length ? d.tpCodes : codes
+      const storedImage = await ensureStimulusImageStored(d.stimulusImage)
       await addDoc(collection(db, 'questions'), {
         topicId,
         subjectKey,
@@ -1368,7 +1371,7 @@ export default function TopicQuestions() {
         categoryLabels: d.type === 'category' ? d.categoryLabels || ['Benar', 'Salah'] : null,
         explanation: d.explanation || null,
         stimulus: d.stimulus || null,
-        stimulusImage: d.stimulusImage || null,
+        stimulusImage: storedImage,
         tp: tpCodes[0] || null,
         tpCodes: tpCodes.length ? tpCodes : null,
         kompleksitas: d.kompleksitas || null,

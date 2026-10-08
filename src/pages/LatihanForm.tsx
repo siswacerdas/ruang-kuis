@@ -146,14 +146,27 @@ export default function LatihanForm() {
       setSelectedIds(p.questionIds || [])
 
       try {
-        const all = await getDocs(collection(db, 'latihan'))
-        const used = new Set<string>()
-        all.docs.forEach((d) => {
-          if (d.id === paketId) return
-          const qids = (d.data().questionIds || []) as string[]
-          qids.forEach((qid) => used.add(qid))
-        })
-        setUsedQuestionIds(used)
+        const cacheKey = 'rk_used_qids'
+        const cached = sessionStorage.getItem(cacheKey)
+        if (cached) {
+          const set = new Set(JSON.parse(cached) as string[])
+          // exclude current paket ids when editing
+          setUsedQuestionIds(set)
+        } else {
+          const all = await getDocs(collection(db, 'latihan'))
+          const used = new Set<string>()
+          all.docs.forEach((d) => {
+            if (d.id === paketId) return
+            const qids = (d.data().questionIds || []) as string[]
+            qids.forEach((qid) => used.add(qid))
+          })
+          setUsedQuestionIds(used)
+          try {
+            sessionStorage.setItem(cacheKey, JSON.stringify([...used]))
+          } catch {
+            /* quota */
+          }
+        }
       } catch {
         /* ignore */
       }
@@ -178,13 +191,24 @@ export default function LatihanForm() {
 
       if (isNew) {
         try {
-          const all = await getDocs(collection(db, 'latihan'))
-          const used = new Set<string>()
-          all.docs.forEach((d) => {
-            const qids = (d.data().questionIds || []) as string[]
-            qids.forEach((qid) => used.add(qid))
-          })
-          setUsedQuestionIds(used)
+          const cacheKey = 'rk_used_qids'
+          const cached = sessionStorage.getItem(cacheKey)
+          if (cached) {
+            setUsedQuestionIds(new Set(JSON.parse(cached) as string[]))
+          } else {
+            const all = await getDocs(collection(db, 'latihan'))
+            const used = new Set<string>()
+            all.docs.forEach((d) => {
+              const qids = (d.data().questionIds || []) as string[]
+              qids.forEach((qid) => used.add(qid))
+            })
+            setUsedQuestionIds(used)
+            try {
+              sessionStorage.setItem(cacheKey, JSON.stringify([...used]))
+            } catch {
+              /* quota */
+            }
+          }
         } catch {
           /* ignore */
         }
