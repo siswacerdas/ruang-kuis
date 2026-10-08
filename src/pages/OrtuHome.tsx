@@ -559,7 +559,8 @@ export default function OrtuHome() {
                         <div
                           className={`h-full rounded-full ${tone.bar}`}
                           style={{ width: `${Math.min(100, pct)}%` }}
-                      />
+                        />
+                      </div>
                     </div>
                   </li>
                 )
