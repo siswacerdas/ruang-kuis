@@ -16,6 +16,16 @@ import { createStudentAuthAccount } from '../lib/createStudentAuth'
 import { isStaffEmail } from '../lib/loginAccounts'
 import type { ParentRequest } from '../types/parent'
 
+function statusMeta(status: string) {
+  if (status === 'pending')
+    return { label: 'Menunggu', className: 'bg-amber-50 text-amber-800 border-amber-200' }
+  if (status === 'approved')
+    return { label: 'Disetujui', className: 'bg-emerald-50 text-emerald-800 border-emerald-200' }
+  if (status === 'rejected')
+    return { label: 'Ditolak', className: 'bg-gray-100 text-gray-600 border-gray-200' }
+  return { label: status, className: 'bg-gray-100 text-gray-600 border-gray-200' }
+}
+
 /**
  * Admin: daftar pengajuan akun orang tua — setujui / tolak.
  * Saat setujui: buat Firebase Auth + dokumen parents, hapus tempPassword.
@@ -49,6 +59,7 @@ export default function AdminPengajuanOrtu() {
     load()
   }, [])
 
+  const pendingCount = requests.filter((r) => r.status === 'pending').length
   const filtered =
     filter === 'pending' ? requests.filter((r) => r.status === 'pending') : requests
 
@@ -77,9 +88,7 @@ export default function AdminPengajuanOrtu() {
         return
       }
 
-      const existing = await getDocs(
-        query(collection(db, 'parents'), where('email', '==', em))
-      )
+      const existing = await getDocs(query(collection(db, 'parents'), where('email', '==', em)))
       if (!existing.empty) {
         setError('Email sudah terdaftar di parents. Tolak atau perbaiki manual.')
         setBusyId(null)
@@ -154,103 +163,140 @@ export default function AdminPengajuanOrtu() {
   }
 
   return (
-    <Layout>
-      <div className="max-w-3xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Pengajuan akun orang tua</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Setujui untuk membuat login Firebase Auth + profil parents.
-          </p>
-        </div>
-
-        {error && (
-          <div className="rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm px-3 py-2">
-            {error}
-          </div>
-        )}
-        {message && (
-          <div className="rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm px-3 py-2">
-            {message}
-          </div>
-        )}
-
-        <div className="flex gap-2">
+    <Layout
+      title="Pengajuan orang tua"
+      subtitle="Setujui akun ortu. Email disalin ke parentEmail pada data siswa."
+      actions={
+        <div className="inline-flex rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
           {(['pending', 'all'] as const).map((f) => (
             <button
               key={f}
               type="button"
               onClick={() => setFilter(f)}
-              className={`text-xs font-medium px-3 py-1.5 rounded-full border ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
                 filter === f
-                  ? 'bg-indigo-600 text-white border-indigo-600'
-                  : 'bg-white text-gray-600 border-gray-200'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
               }`}
             >
-              {f === 'pending' ? 'Menunggu' : 'Semua'}
+              {f === 'pending' ? `Menunggu${pendingCount ? ` (${pendingCount})` : ''}` : 'Semua'}
             </button>
           ))}
         </div>
+      }
+    >
+      <div className="max-w-3xl space-y-4">
+        {(error || message) && (
+          <div
+            className={`rounded-xl border text-sm px-4 py-3 ${
+              error
+                ? 'bg-red-50 border-red-100 text-red-700'
+                : 'bg-emerald-50 border-emerald-100 text-emerald-800'
+            }`}
+          >
+            {error || message}
+          </div>
+        )}
 
         {loading ? (
-          <p className="text-sm text-gray-400">Memuat…</p>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6 py-16 text-center">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 mx-auto mb-3 animate-pulse" />
+            <p className="text-sm text-gray-400">Memuat pengajuan…</p>
+          </div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-500">
-            Tidak ada pengajuan{filter === 'pending' ? ' menunggu' : ''}.
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6 py-14 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center mx-auto mb-3">
+              <svg
+                className="w-6 h-6 text-gray-300"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.75}
+                  d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                />
+              </svg>
+            </div>
+            <p className="text-sm font-medium text-gray-700">
+              {filter === 'pending' ? 'Tidak ada pengajuan menunggu' : 'Belum ada pengajuan'}
+            </p>
+            <p className="text-xs text-gray-400 mt-1.5 max-w-sm mx-auto leading-relaxed">
+              Ortu mengajukan lewat{' '}
+              <code className="bg-gray-50 px-1 rounded text-[11px]">/ortu/daftar</code>. Setelah
+              disetujui, mereka bisa login di tab Orang Tua.
+            </p>
           </div>
         ) : (
           <ul className="space-y-3">
-            {filtered.map((r) => (
-              <li
-                key={r.id}
-                className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-2"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="font-semibold text-gray-900">{r.fullName}</p>
-                  <span
-                    className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
-                      r.status === 'pending'
-                        ? 'bg-amber-50 text-amber-700'
-                        : r.status === 'approved'
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'bg-gray-100 text-gray-500'
-                    }`}
-                  >
-                    {r.status}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-500">
-                  {r.email} · WA {r.whatsapp}
-                </p>
-                <p className="text-xs text-gray-600">
-                  Anak: {(r.studentNames || []).join(', ') || (r.studentIds || []).join(', ')}
-                </p>
-                {r.status === 'pending' && (
-                  <div className="flex gap-2 pt-1">
-                    <button
-                      type="button"
-                      disabled={busyId === r.id}
-                      onClick={() => approve(r)}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold disabled:opacity-50"
+            {filtered.map((r) => {
+              const st = statusMeta(r.status)
+              return (
+                <li
+                  key={r.id}
+                  className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900 truncate">{r.fullName}</p>
+                      <p className="text-xs text-gray-500 mt-1 break-all">
+                        {r.email}
+                        {r.whatsapp ? ` · WA ${r.whatsapp}` : ''}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border ${st.className}`}
                     >
-                      Setujui
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busyId === r.id}
-                      onClick={() => reject(r)}
-                      className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-medium text-gray-600 disabled:opacity-50"
-                    >
-                      Tolak
-                    </button>
+                      {st.label}
+                    </span>
                   </div>
-                )}
-              </li>
-            ))}
+
+                  <div className="mt-3 rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5">
+                    <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">
+                      Anak terhubung
+                    </p>
+                    <p className="text-sm text-gray-800 mt-0.5">
+                      {(r.studentNames || []).join(', ') ||
+                        (r.studentIds || []).join(', ') ||
+                        '—'}
+                    </p>
+                  </div>
+
+                  {r.note && r.status === 'rejected' && (
+                    <p className="text-xs text-gray-500 mt-2">Catatan: {r.note}</p>
+                  )}
+
+                  {r.status === 'pending' && (
+                    <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-gray-100">
+                      <button
+                        type="button"
+                        disabled={busyId === r.id}
+                        onClick={() => approve(r)}
+                        className="inline-flex items-center justify-center px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-semibold transition"
+                      >
+                        {busyId === r.id ? 'Memproses…' : 'Setujui'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busyId === r.id}
+                        onClick={() => reject(r)}
+                        className="inline-flex items-center justify-center px-4 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 text-sm font-medium text-gray-700 transition"
+                      >
+                        Tolak
+                      </button>
+                    </div>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         )}
 
-        <p className="text-[11px] text-gray-400">
-          Password sementara disimpan di pengajuan sampai disetujui, lalu dihapus.
+        <p className="text-[11px] text-gray-400 leading-relaxed px-1">
+          Password sementara disimpan di pengajuan sampai diproses, lalu dihapus. Email ortu yang
+          disetujui tidak boleh sama dengan akun guru/admin.
         </p>
       </div>
     </Layout>
