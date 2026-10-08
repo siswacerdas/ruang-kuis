@@ -43,8 +43,11 @@ export interface PracticeAttempt {
   startedAt?: unknown
   finishedAt?: unknown
   durationMs?: number
-  /** Label untuk email & UI */
-  kind?: 'practice'
+  /** Label untuk email & UI: practice generik, self = anak, parent_assigned = ortu */
+  kind?: 'practice' | 'self' | 'parent_assigned'
+  createdByParent?: boolean
+  parentId?: string | null
+  parentName?: string
 }
 
 export const PRACTICE_COUNTS = [15, 20] as const
