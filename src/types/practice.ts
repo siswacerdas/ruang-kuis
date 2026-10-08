@@ -12,6 +12,15 @@ export interface PracticeSession {
   questionIds: string[]
   questionCount: number
   status: 'in_progress'
+  /** Judul tampilan (opsional, diisi ortu / sistem) */
+  title?: string
+  /** true jika dibuat dari portal orang tua */
+  createdByParent?: boolean
+  parentId?: string | null
+  parentName?: string
+  kind?: 'parent_assigned' | 'self'
+  /** Hanya siswa pemilik studentId yang boleh mengerjakan */
+  visibility?: 'student_only'
   createdAt?: unknown
 }
 
