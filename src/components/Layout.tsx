@@ -1,7 +1,10 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { signOut } from 'firebase/auth'
 import { auth } from '../lib/firebase'
 import type { ReactNode } from 'react'
+import AdminNotifBell from './AdminNotifBell'
+import { subscribePendingParentCount } from '../lib/adminNotifications'
 
 interface LayoutProps {
   children: ReactNode
@@ -13,6 +16,12 @@ interface LayoutProps {
 export default function Layout({ children, title, subtitle, actions }: LayoutProps) {
   const location = useLocation()
   const navigate = useNavigate()
+  const [pendingOrtu, setPendingOrtu] = useState(0)
+
+  useEffect(() => {
+    const unsub = subscribePendingParentCount(setPendingOrtu)
+    return () => unsub()
+  }, [])
 
   const handleLogout = async () => {
     try {
@@ -23,7 +32,12 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
     }
   }
 
-  const navItems = [
+  const navItems: {
+    path: string
+    label: string
+    badge?: number
+    icon: ReactNode
+  }[] = [
     {
       path: '/dashboard',
       label: 'Dashboard',
@@ -117,6 +131,7 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
     {
       path: '/pengajuan-ortu',
       label: 'Pengajuan Ortu',
+      badge: pendingOrtu,
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -155,7 +170,12 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
                 }`}
               >
                 <span className={active ? 'text-indigo-600' : 'text-gray-400'}>{item.icon}</span>
-                {item.label}
+                <span className="flex-1 min-w-0 truncate">{item.label}</span>
+                {!!item.badge && item.badge > 0 && (
+                  <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                    {item.badge > 99 ? '99+' : item.badge}
+                  </span>
+                )}
               </Link>
             )
           })}
@@ -187,6 +207,7 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
                 {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                <AdminNotifBell />
                 {actions}
                 <button
                   type="button"
@@ -205,13 +226,22 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border transition ${
+                    className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border transition inline-flex items-center gap-1.5 ${
                       active
                         ? 'bg-indigo-600 text-white border-indigo-600'
                         : 'bg-white text-gray-600 border-gray-200'
                     }`}
                   >
                     {item.label}
+                    {!!item.badge && item.badge > 0 && (
+                      <span
+                        className={`min-w-[1rem] h-4 px-1 rounded-full text-[10px] font-bold ${
+                          active ? 'bg-white text-indigo-700' : 'bg-red-500 text-white'
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
                   </Link>
                 )
               })}
