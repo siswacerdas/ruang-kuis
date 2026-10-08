@@ -7,7 +7,6 @@ import {
   query,
   orderBy,
   serverTimestamp,
-  where,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { isDummyStudent, type Student, isValidEmail } from '../types/student'
@@ -18,9 +17,12 @@ import {
 } from '../types/parent'
 
 /**
- * Form pengajuan akun orang tua.
- * Pilih anak (dropdown), isi nama, WA, email, password.
- * Admin menyetujui di halaman pengajuan.
+ * Form pengajuan akun orang tua (publik, tanpa login).
+ *
+ * PENTING: jangan getDocs/query ke `parents` atau `parentRequests` di sini.
+ * Rules hanya mengizinkan admin membaca koleksi itu — query dari user
+ * belum login → FirebaseError Missing or insufficient permissions.
+ * Duplikat dicek admin saat approve.
  */
 export default function OrtuDaftar() {
   const navigate = useNavigate()
@@ -101,27 +103,7 @@ export default function OrtuDaftar() {
 
     setSubmitting(true)
     try {
-      const [parentSnap, reqSnap] = await Promise.all([
-        getDocs(query(collection(db, 'parents'), where('email', '==', em))),
-        getDocs(
-          query(
-            collection(db, 'parentRequests'),
-            where('email', '==', em),
-            where('status', '==', 'pending')
-          )
-        ),
-      ])
-      if (!parentSnap.empty) {
-        setError('Email ini sudah terdaftar sebagai akun orang tua. Silakan masuk.')
-        setSubmitting(false)
-        return
-      }
-      if (!reqSnap.empty) {
-        setError('Pengajuan dengan email ini masih menunggu persetujuan admin.')
-        setSubmitting(false)
-        return
-      }
-
+      // Jangan query parents / parentRequests di sini (butuh admin auth).
       const payload: Omit<ParentRequest, 'id'> = {
         fullName: fullName.trim(),
         whatsapp: normalizeWhatsapp(whatsapp),
@@ -157,7 +139,7 @@ export default function OrtuDaftar() {
     } catch (err: unknown) {
       console.error(err)
       const msg = err instanceof Error ? err.message : String(err)
-      setError(`Gagal mengirim pengajuan: ${msg.slice(0, 120)}`)
+      setError(`Gagal mengirim pengajuan: ${msg.slice(0, 160)}`)
     } finally {
       setSubmitting(false)
     }
@@ -224,7 +206,9 @@ export default function OrtuDaftar() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Nama Anda (orang tua / wali) *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Nama Anda (orang tua / wali) *
+                </label>
                 <input
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
@@ -261,7 +245,9 @@ export default function OrtuDaftar() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Password * (min. 8 karakter)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Password * (min. 8 karakter)
+                </label>
                 <input
                   type={showPw ? 'text' : 'password'}
                   value={password}
@@ -284,7 +270,11 @@ export default function OrtuDaftar() {
                   autoComplete="new-password"
                 />
               </div>
-              <button type="button" onClick={() => setShowPw((v) => !v)} className="text-xs text-indigo-600 hover:underline">
+              <button
+                type="button"
+                onClick={() => setShowPw((v) => !v)}
+                className="text-xs text-indigo-600 hover:underline"
+              >
                 {showPw ? 'Sembunyikan' : 'Tampilkan'} password
               </button>
 
