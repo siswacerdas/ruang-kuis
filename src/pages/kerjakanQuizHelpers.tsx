@@ -26,7 +26,7 @@ export function sanitizeStimulusHtml(html: string): string {
     walk(doc.body)
     return doc.body.innerHTML
   } catch {
-    return html.replace(/</g, '&lt;')
+    return html.replace(/</g, '<')
   }
 }
 
@@ -53,7 +53,7 @@ export function StimulusBlock({ html }: { html: string }) {
   if (!html) return null
   if (!/<[a-z][\s\S]*>/i.test(html)) {
     return (
-      <div className="px-4 py-3 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+      <div className="px-4 py-3 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
         {html}
       </div>
     )
@@ -61,7 +61,7 @@ export function StimulusBlock({ html }: { html: string }) {
   return (
     <div
       ref={ref}
-      className="px-4 py-3 text-sm text-gray-700 leading-relaxed"
+      className="px-4 py-3 text-sm text-gray-700 leading-relaxed break-words"
       dangerouslySetInnerHTML={{ __html: sanitizeStimulusHtml(html) }}
     />
   )
