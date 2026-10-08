@@ -70,7 +70,13 @@ export default function TujuanPembelajaran() {
       setItems(
         tpSnap.docs
           .map((d) => ({ id: d.id, ...(d.data() as Omit<LearningObjective, 'id'>) }))
-          .sort((a, b) => a.subjectKey.localeCompare(b.subjectKey) || a.order - b.order || a.code.localeCompare(b.code)),
+          .sort(
+          (a, b) =>
+            a.subjectKey.localeCompare(b.subjectKey) ||
+            (a.element || '').localeCompare(b.element || '', 'id') ||
+            a.order - b.order ||
+            a.code.localeCompare(b.code),
+        ),
       )
       setMaterials(
         matSnap.docs
@@ -100,14 +106,35 @@ export default function TujuanPembelajaran() {
   }, [items, subjectFilter, queryText])
 
   const groupedTp = useMemo(() => {
-    const groups: { subjectKey: string; element: string; rows: LearningObjective[] }[] = []
+    // Group by subject + element (Map), bukan adjacency setelah sort,
+    // agar elemen yang sama tidak terpecah saat order antar-elemen saling silang.
+    const map = new Map<string, { subjectKey: string; element: string; rows: LearningObjective[] }>()
+    const orderKeys: string[] = []
     filteredTp.forEach((row) => {
       const element = (row.element || '').trim() || 'Umum'
-      const last = groups[groups.length - 1]
-      if (last && last.subjectKey === row.subjectKey && last.element === element) last.rows.push(row)
-      else groups.push({ subjectKey: row.subjectKey, element, rows: [row] })
+      const key = `${row.subjectKey}\0${element}`
+      let g = map.get(key)
+      if (!g) {
+        g = { subjectKey: row.subjectKey, element, rows: [] }
+        map.set(key, g)
+        orderKeys.push(key)
+      }
+      g.rows.push(row)
     })
-    return groups
+    orderKeys.forEach((k) => {
+      const g = map.get(k)!
+      g.rows.sort(
+        (a, b) => a.order - b.order || a.code.localeCompare(b.code),
+      )
+    })
+    // Urutkan grup: subject lalu nama elemen
+    return orderKeys
+      .map((k) => map.get(k)!)
+      .sort(
+        (a, b) =>
+          a.subjectKey.localeCompare(b.subjectKey) ||
+          a.element.localeCompare(b.element, 'id'),
+      )
   }, [filteredTp])
 
   const tpCountBySubject = useMemo(() => {
@@ -360,16 +387,37 @@ export default function TujuanPembelajaran() {
 
   const saveTp = async () => {
     if (!editor) return
-    const code = editor.code.trim()
+    const code = editor.code.trim().toUpperCase()
     if (!code || !editor.statement.trim()) { setError('Kode dan rumusan wajib.'); return }
+
+    // Doc ID = code. Kode ganda menimpa TP lain (sering terjadi di Al-Islam
+    // saat nomor urut/kode mirip antar elemen). Tolak overwrite silang.
+    const existing = items.find((t) => t.code === code)
+    const isEditSameDoc = !!editor.id && (editor.id === code || editor.code === code)
+    if (existing && !isEditSameDoc) {
+      const el = (existing.element || '').trim() || '—'
+      setError(
+        `Kode "${code}" sudah dipakai TP lain (elemen: ${el}). ` +
+          `Ganti kode unik — doc Firestore di-key oleh kode, bukan nomor urut.`,
+      )
+      return
+    }
+
     setSaving(true)
     setError('')
     try {
       const batch = writeBatch(db)
       batch.set(doc(db, 'learningObjectives', code), {
-        code, subjectKey: editor.subjectKey, element: editor.element.trim(), order: Number(editor.order) || 0,
-        statement: editor.statement.trim(), weight: Number(editor.weight) || 1, active: !!editor.active,
-        className: editor.className || '5A', phase: editor.phase || 'C', updatedAt: serverTimestamp(),
+        code,
+        subjectKey: editor.subjectKey,
+        element: editor.element.trim(),
+        order: Number(editor.order) || 0,
+        statement: editor.statement.trim(),
+        weight: Number(editor.weight) || 1,
+        active: !!editor.active,
+        className: editor.className || '5A',
+        phase: editor.phase || 'C',
+        updatedAt: serverTimestamp(),
       }, { merge: true })
       await batch.commit()
       setEditor(null)
@@ -472,146 +520,127 @@ export default function TujuanPembelajaran() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <TabButton active={tab === 'tp'} onClick={() => setTab('tp')} label="Tujuan Pembelajaran" />
-        <TabButton active={tab === 'materi'} onClick={() => setTab('materi')} label="Materi buku" />
-        <input value={queryText} onChange={(e) => setQueryText(e.target.value)} placeholder="Cari kode, rumusan, atau materi"
-          className="ml-auto w-full sm:w-72 rounded-xl border border-gray-200 px-3 py-2 text-sm" />
+        <TabButton active={tab === 'tp'} onClick={() => setTab('tp')}>Tujuan Pembelajaran</TabButton>
+        <TabButton active={tab === 'materi'} onClick={() => setTab('materi')}>Materi Buku</TabButton>
+        <input
+          value={queryText}
+          onChange={(e) => setQueryText(e.target.value)}
+          placeholder={tab === 'tp' ? 'Cari kode / rumusan / elemen…' : 'Cari judul / ringkasan / kode TP…'}
+          className="ml-auto min-w-[200px] flex-1 max-w-sm rounded-xl border border-gray-200 px-3 py-2 text-sm"
+        />
       </div>
 
-      {tab === 'tp' ? (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-gray-100 bg-white px-3 py-2">
-          <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-            <input type="checkbox" checked={allVisibleTpSelected} disabled={!filteredTp.length || bulkBusy}
-              onChange={() => {
-                if (allVisibleTpSelected) {
-                  const vis = new Set(filteredTp.map((t) => t.code))
-                  setSelectedTpCodes((p) => p.filter((c) => !vis.has(c)))
-                } else setSelectedTpCodes((p) => [...new Set([...p, ...filteredTp.map((t) => t.code)])])
-              }} className="rounded border-gray-300 text-indigo-600" />
-            Pilih semua yang tampil ({filteredTp.length})
-          </label>
-          <span className="text-xs text-gray-400">{selectedTpCodes.length ? `${selectedTpCodes.length} dipilih` : ''}</span>
-          <div className="ml-auto flex gap-2">
-            <button type="button" onClick={deleteSelectedTp} disabled={bulkBusy || !selectedTpCodes.length}
-              className="px-3 py-1.5 rounded-xl text-xs font-medium text-red-700 border border-red-200 hover:bg-red-50 disabled:opacity-40">Hapus terpilih</button>
-            <button type="button" onClick={deleteAllFilteredTp} disabled={bulkBusy || !filteredTp.length}
-              className="px-3 py-1.5 rounded-xl text-xs font-medium text-red-800 border border-red-300 hover:bg-red-50 disabled:opacity-40">Hapus semua yang tampil</button>
-          </div>
-        </div>
-      ) : (
-        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-gray-100 bg-white px-3 py-2">
-          <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-            <input type="checkbox" checked={allVisibleMatSelected} disabled={!filteredMaterials.length || bulkBusy}
-              onChange={() => {
-                const ids = filteredMaterials.map((m) => m.id).filter(Boolean) as string[]
-                if (allVisibleMatSelected) {
-                  const vis = new Set(ids)
-                  setSelectedMaterialIds((p) => p.filter((id) => !vis.has(id)))
-                } else setSelectedMaterialIds((p) => [...new Set([...p, ...ids])])
-              }} className="rounded border-gray-300 text-indigo-600" />
-            Pilih semua yang tampil ({filteredMaterials.length})
-          </label>
-          <span className="text-xs text-gray-400">{selectedMaterialIds.length ? `${selectedMaterialIds.length} dipilih` : ''}</span>
-          <div className="ml-auto flex gap-2">
-            <button type="button" onClick={deleteSelectedMaterials} disabled={bulkBusy || !selectedMaterialIds.length}
-              className="px-3 py-1.5 rounded-xl text-xs font-medium text-red-700 border border-red-200 hover:bg-red-50 disabled:opacity-40">Hapus terpilih</button>
-            <button type="button" onClick={deleteAllFilteredMaterials} disabled={bulkBusy || !filteredMaterials.length}
-              className="px-3 py-1.5 rounded-xl text-xs font-medium text-red-800 border border-red-300 hover:bg-red-50 disabled:opacity-40">Hapus semua yang tampil</button>
-          </div>
-        </div>
-      )}
-
       {loading ? (
-        <p className="text-sm text-gray-500">Memuat...</p>
+        <p className="text-sm text-gray-500">Memuat…</p>
       ) : tab === 'tp' ? (
-        groupedTp.length === 0 ? (
-          <Empty text="Belum ada TP. Impor JSON seed atau klik Tambah." />
-        ) : (
-          <div className="space-y-4">
-            {groupedTp.map((group, gi) => (
+        <>
+          <div className="flex flex-wrap gap-2 mb-3">
+            <button type="button" onClick={deleteSelectedTp} disabled={bulkBusy || !selectedTpCodes.length}
+              className="px-3 py-1.5 rounded-lg text-sm border border-red-100 text-red-600 disabled:opacity-40">Hapus terpilih</button>
+            <button type="button" onClick={deleteAllFilteredTp} disabled={bulkBusy || !filteredTp.length}
+              className="px-3 py-1.5 rounded-lg text-sm border border-red-100 text-red-600 disabled:opacity-40">Hapus semua yang tampil</button>
+            <label className="flex items-center gap-2 text-sm text-gray-600 ml-auto">
+              <input type="checkbox" checked={allVisibleTpSelected} onChange={(e) => {
+                if (e.target.checked) setSelectedTpCodes(filteredTp.map((t) => t.code))
+                else setSelectedTpCodes([])
+              }} />
+              Pilih semua tampilan
+            </label>
+          </div>
+          {groupedTp.length === 0 ? (
+            <p className="text-sm text-gray-500">Belum ada TP.</p>
+          ) : (
+            <div className="space-y-4">
+              {groupedTp.map((group, gi) => (
               <section key={`${group.subjectKey}__${group.element}__${gi}`} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-                <header className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-xs text-gray-500">{getSubject(group.subjectKey)?.name || group.subjectKey}</p>
+                <div className="px-4 py-3 border-b border-gray-50 bg-gray-50/80 flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-gray-400">{getSubject(group.subjectKey)?.name || group.subjectKey}</p>
                     <h3 className="text-sm font-semibold text-gray-900">{group.element}</h3>
                   </div>
-                  <span className="text-xs text-gray-400 shrink-0">{group.rows.length} TP</span>
-                </header>
-                <div className="divide-y divide-gray-100">
+                  <span className="text-xs text-gray-400">{group.rows.length} TP</span>
+                </div>
+                <ul className="divide-y divide-gray-50">
                   {group.rows.map((row) => (
-                    <div key={row.code} className="px-4 py-3 flex gap-3 items-start">
-                      <input type="checkbox" checked={selectedTpCodes.includes(row.code)} onChange={() =>
-                        setSelectedTpCodes((p) => p.includes(row.code) ? p.filter((c) => c !== row.code) : [...p, row.code])
-                      } disabled={bulkBusy} className="mt-1 rounded border-gray-300 text-indigo-600 shrink-0" />
-                      <span className="shrink-0 mt-0.5 text-xs font-semibold px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700">{row.code}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm leading-relaxed ${row.active !== false ? 'text-gray-800' : 'text-gray-400 line-through'}`}>{row.statement}</p>
-                        {(row.relatedMaterials || []).length > 0 && (
-                          <p className="text-xs text-gray-500 mt-1">Materi: {row.relatedMaterials!.join(' · ')}</p>
-                        )}
+                    <li key={row.code} className="px-4 py-3 flex flex-wrap items-start gap-3">
+                      <input type="checkbox" className="mt-1" checked={selectedTpCodes.includes(row.code)}
+                        onChange={(e) => setSelectedTpCodes((p) => e.target.checked ? [...p, row.code] : p.filter((c) => c !== row.code))} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
+                          <span className="font-mono text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">{row.code}</span>
+                          <span className="text-[11px] text-gray-400">urut {row.order}</span>
+                          {row.active === false && <span className="text-[11px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">nonaktif</span>}
+                        </div>
+                        <p className="text-sm text-gray-800 whitespace-pre-wrap">{row.statement}</p>
                       </div>
-                      <div className="shrink-0 flex items-center gap-2">
+                      <div className="flex gap-2 shrink-0">
                         <button type="button" onClick={() => setEditor(row)} className="text-sm font-medium text-indigo-600">Edit</button>
-                        <button type="button" onClick={() => deleteTp(row)} disabled={deletingId === row.code || bulkBusy}
-                          className="text-sm font-medium text-red-600 disabled:opacity-50">{deletingId === row.code ? '...' : 'Hapus'}</button>
+                        <button type="button" onClick={() => deleteTp(row)} disabled={deletingId === row.code}
+                          className="text-sm font-medium text-red-600 disabled:opacity-50">Hapus</button>
                       </div>
-                    </div>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </section>
-            ))}
-          </div>
-        )
-      ) : filteredMaterials.length === 0 ? (
-        <Empty text="Belum ada materi buku." />
+              ))}
+            </div>
+          )}
+        </>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {filteredMaterials.map((m) => (
-            <article key={m.id} className="bg-white rounded-2xl border border-gray-100 p-4 flex flex-col">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2 min-w-0">
-                  {m.id && (
-                    <input type="checkbox" checked={selectedMaterialIds.includes(m.id)} onChange={() =>
-                      setSelectedMaterialIds((p) => p.includes(m.id!) ? p.filter((x) => x !== m.id) : [...p, m.id!])
-                    } disabled={bulkBusy} className="mt-1 rounded border-gray-300 text-indigo-600 shrink-0" />
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-xs text-gray-500">{getSubject(m.subjectKey)?.name || m.subjectKey}</p>
-                    <h3 className="font-semibold text-gray-900">{m.title}</h3>
+        <>
+          <div className="flex flex-wrap gap-2 mb-3">
+            <button type="button" onClick={deleteSelectedMaterials} disabled={bulkBusy || !selectedMaterialIds.length}
+              className="px-3 py-1.5 rounded-lg text-sm border border-red-100 text-red-600 disabled:opacity-40">Hapus terpilih</button>
+            <button type="button" onClick={deleteAllFilteredMaterials} disabled={bulkBusy || !filteredMaterials.length}
+              className="px-3 py-1.5 rounded-lg text-sm border border-red-100 text-red-600 disabled:opacity-40">Hapus semua yang tampil</button>
+            <label className="flex items-center gap-2 text-sm text-gray-600 ml-auto">
+              <input type="checkbox" checked={allVisibleMatSelected} onChange={(e) => {
+                if (e.target.checked) setSelectedMaterialIds(filteredMaterials.map((m) => m.id!).filter(Boolean))
+                else setSelectedMaterialIds([])
+              }} />
+              Pilih semua tampilan
+            </label>
+          </div>
+          {filteredMaterials.length === 0 ? (
+            <p className="text-sm text-gray-500">Belum ada materi buku.</p>
+          ) : (
+            <div className="space-y-3">
+              {filteredMaterials.map((m) => (
+                <article key={m.id} className="bg-white rounded-2xl border border-gray-100 p-4">
+                  <div className="flex items-start gap-3">
+                    <input type="checkbox" className="mt-1" checked={!!m.id && selectedMaterialIds.includes(m.id)}
+                      onChange={(e) => m.id && setSelectedMaterialIds((p) => e.target.checked ? [...p, m.id!] : p.filter((id) => id !== m.id))} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] uppercase tracking-wide text-gray-400">{getSubject(m.subjectKey)?.name || m.subjectKey}</p>
+                      <h3 className="text-sm font-semibold text-gray-900">{m.title}</h3>
+                      <SummaryBlock text={m.summary} className="mt-2" />
+                      {(m.suggestedTpCodes || []).length > 0 && (
+                        <p className="mt-2 text-xs text-gray-500">TP: {(m.suggestedTpCodes || []).join(', ')}</p>
+                      )}
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button type="button" onClick={() => setMaterialEditor({ ...m })} className="text-sm font-medium text-indigo-600">Edit</button>
+                      <button type="button" onClick={() => deleteMaterial(m)} disabled={deletingId === m.id}
+                        className="text-sm font-medium text-red-600 disabled:opacity-50">Hapus</button>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button type="button" onClick={() => { setTpPickerQuery(''); setMaterialEditor(m) }} className="text-sm font-medium text-indigo-600">Edit</button>
-                  <button type="button" onClick={() => deleteMaterial(m)} disabled={deletingId === m.id || bulkBusy}
-                    className="text-sm font-medium text-red-600 disabled:opacity-50">{deletingId === m.id ? '...' : 'Hapus'}</button>
-                </div>
-              </div>
-              <div className="mt-2 flex-1 max-h-40 overflow-y-auto rounded-lg bg-slate-50/80 px-2.5 py-2 border border-slate-100">
-                <SummaryBlock text={m.summary} />
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {(m.suggestedTpCodes || []).length === 0 ? (
-                  <span className="text-xs text-gray-400">Belum dikaitkan ke TP</span>
-                ) : m.suggestedTpCodes.map((code) => {
-                  const tp = tpByCode.get(code)
-                  return (
-                    <span key={code} className="text-xs px-2 py-1 rounded-lg bg-indigo-50 text-indigo-800" title={tp?.statement || code}>
-                      <span className="font-semibold">{code}</span>
-                      {tp?.statement ? <span className="text-indigo-600/80"> · {tp.statement.slice(0, 48)}{tp.statement.length > 48 ? '…' : ''}</span> : null}
-                    </span>
-                  )
-                })}
-              </div>
-            </article>
-          ))}
-        </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {editor && (
         <Modal title={editor.id ? `Edit ${editor.code}` : 'Tambah TP'} onClose={() => setEditor(null)}>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Kode">
-              <input value={editor.code} disabled={!!editor.id} onChange={(e) => setEditor({ ...editor, code: e.target.value.toUpperCase() })} className="field" />
+              <input value={editor.code} disabled={!!editor.id} onChange={(e) => setEditor({ ...editor, code: e.target.value.toUpperCase() })} className="field" placeholder="Unik global, mis. AI-QH-01" />
+              {!editor.id && editor.code.trim() && items.some((t) => t.code === editor.code.trim().toUpperCase()) && (
+                <p className="mt-1 text-xs text-amber-700 bg-amber-50 rounded-lg px-2 py-1">
+                  Kode ini sudah dipakai TP lain. Menyimpan akan ditolak — pilih kode unik (disarankan sertakan singkatan elemen).
+                </p>
+              )}
             </Field>
             <Field label="Mapel">
               <select value={editor.subjectKey} onChange={(e) => setEditor({ ...editor, subjectKey: e.target.value as SubjectKey })} className="field">
@@ -667,75 +696,59 @@ export default function TujuanPembelajaran() {
           <Field label="Ringkasan">
             <textarea value={materialEditor.summary} onChange={(e) => setMaterialEditor({ ...materialEditor, summary: e.target.value })} rows={5} className="field" />
           </Field>
-          <Field label="TP terkait">
-            <input value={tpPickerQuery} onChange={(e) => setTpPickerQuery(e.target.value)} placeholder="Filter TP" className="field mb-2" />
-            <div className="max-h-40 overflow-y-auto rounded-xl border border-gray-200 divide-y">
-              {tpOptionsForMaterial.map((t) => {
-                const checked = (materialEditor.suggestedTpCodes || []).includes(t.code)
-                return (
-                  <label key={t.code} className={`flex gap-2 px-3 py-2 text-sm cursor-pointer ${checked ? 'bg-indigo-50/60' : ''}`}>
-                    <input type="checkbox" checked={checked} onChange={() => toggleTpCode(t.code)} className="mt-1 rounded text-indigo-600" />
-                    <span><span className="font-semibold text-indigo-700">{t.code}</span> — {t.statement}</span>
-                  </label>
-                )
-              })}
-            </div>
+          <Field label="Catatan tautan (opsional)">
+            <input value={materialEditor.linkNote || ''} onChange={(e) => setMaterialEditor({ ...materialEditor, linkNote: e.target.value })} className="field" />
           </Field>
-          <div className="flex justify-between gap-2 pt-2">
-            <div>
-              {materialEditor.id && (
-                <button type="button" onClick={() => deleteMaterial(materialEditor)} disabled={saving || deletingId === materialEditor.id}
-                  className="px-4 py-2 rounded-xl text-sm font-medium text-red-600 border border-red-100 hover:bg-red-50 disabled:opacity-50">
-                  {deletingId === materialEditor.id ? 'Menghapus...' : 'Hapus materi'}
-                </button>
-              )}
+          <div className="mt-3">
+            <p className="text-sm font-medium text-gray-700 mb-2">Kaitkan TP</p>
+            <input value={tpPickerQuery} onChange={(e) => setTpPickerQuery(e.target.value)} placeholder="Cari TP…" className="field mb-2" />
+            <div className="max-h-48 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50">
+              {tpOptionsForMaterial.map((t) => (
+                <label key={t.code} className="flex items-start gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50">
+                  <input type="checkbox" className="mt-1" checked={(materialEditor.suggestedTpCodes || []).includes(t.code)} onChange={() => toggleTpCode(t.code)} />
+                  <span><span className="font-mono text-xs text-indigo-600">{t.code}</span> — {t.statement}</span>
+                </label>
+              ))}
+              {tpOptionsForMaterial.length === 0 && <p className="px-3 py-2 text-sm text-gray-400">Tidak ada TP mapel ini.</p>}
             </div>
-            <div className="flex gap-2">
-              <button type="button" onClick={() => { setMaterialEditor(null); setTpPickerQuery('') }} className="px-4 py-2 rounded-xl text-sm text-gray-600">Batal</button>
-              <button type="button" onClick={saveMaterial} disabled={saving} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm disabled:opacity-60">{saving ? 'Menyimpan...' : 'Simpan'}</button>
-            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-3">
+            <button type="button" onClick={() => { setMaterialEditor(null); setTpPickerQuery('') }} className="px-4 py-2 rounded-xl text-sm text-gray-600">Batal</button>
+            <button type="button" onClick={saveMaterial} disabled={saving} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm disabled:opacity-60">{saving ? 'Menyimpan...' : 'Simpan'}</button>
           </div>
         </Modal>
       )}
-      <style>{`.field{width:100%;border:1px solid #e5e7eb;border-radius:12px;padding:8px 12px;font-size:14px;background:white}`}</style>
     </Layout>
+  )
+}
+
+function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={`px-3 py-1.5 rounded-lg text-sm font-medium ${active ? 'bg-indigo-600 text-white' : 'bg-white border border-gray-200 text-gray-700'}`}>
+      {children}
+    </button>
   )
 }
 
 function FilterChip({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
   return (
     <button type="button" onClick={onClick}
-      className={`px-3 py-1.5 rounded-xl text-xs font-medium ${active ? 'bg-indigo-600 text-white' : 'bg-gray-50 text-gray-600'}`}>
+      className={`px-3 py-1.5 rounded-full text-xs font-medium ${active ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
       {label}
     </button>
   )
 }
 
-function TabButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+function Modal({ title, onClose, children, size = 'md' }: { title: string; onClose: () => void; children: ReactNode; size?: 'md' | 'lg' }) {
   return (
-    <button type="button" onClick={onClick}
-      className={`px-3 py-1.5 rounded-xl text-sm font-medium ${active ? 'bg-slate-900 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>
-      {label}
-    </button>
-  )
-}
-
-function Empty({ text }: { text: string }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center text-sm text-gray-500">{text}</div>
-  )
-}
-
-function Modal({ title, onClose, children, size = 'md' }: { title: string; onClose: () => void; children: ReactNode; size?: 'md' | 'lg' | 'xl' }) {
-  const width = size === 'xl' ? 'sm:max-w-3xl' : size === 'lg' ? 'sm:max-w-2xl' : 'sm:max-w-lg'
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40">
-      <div className={`bg-white w-full ${width} sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[94vh] flex flex-col`}>
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-3" onClick={onClose}>
+      <div className={`bg-white rounded-2xl shadow-xl w-full ${size === 'lg' ? 'max-w-2xl' : 'max-w-lg'} max-h-[90vh] overflow-y-auto p-5`} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-gray-900">{title}</h2>
-          <button type="button" onClick={onClose} className="text-sm text-gray-400 hover:text-gray-700">Tutup</button>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
         </div>
-        <div className="p-5 overflow-y-auto space-y-3 flex-1">{children}</div>
+        {children}
       </div>
     </div>
   )
@@ -743,7 +756,7 @@ function Modal({ title, onClose, children, size = 'md' }: { title: string; onClo
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <label className="block">
+    <label className="block mb-3">
       <span className="text-xs font-medium text-gray-600">{label}</span>
       <div className="mt-1">{children}</div>
     </label>
