@@ -28,7 +28,7 @@ import {
   shuffleSeeded,
 } from '../lib/quizProgress'
 import { notifyAdminStudentAttempt } from '../lib/notifyAdmin'
-import { StimulusBlock, optionOrder, type Session } from './kerjakanQuizHelpers'
+import { sanitizeStimulusHtml, StimulusBlock, optionOrder, type Session } from './kerjakanQuizHelpers'
 
 export default function KerjakanQuiz() {
   const { latihanId } = useParams<{ latihanId: string }>()
@@ -362,7 +362,10 @@ export default function KerjakanQuiz() {
       <div className="min-h-screen flex items-center justify-center bg-[#F5F6FA] p-4">
         <div className="bg-white rounded-2xl p-8 shadow-sm text-center max-w-sm">
           <p className="text-gray-700 mb-4">{error || 'Tidak ada soal'}</p>
-          <button onClick={() => navigate('/siswa')} className="text-indigo-600 font-medium text-sm">
+          <button
+            onClick={() => navigate('/siswa')}
+            className="text-indigo-600 font-medium text-sm"
+          >
             Kembali
           </button>
         </div>
@@ -385,8 +388,6 @@ export default function KerjakanQuiz() {
     return `${m}:${String(s).padStart(2, '0')}`
   }
 
-  // UI truncated in this commit for size — full JSX is in artifacts/KerjakanQuiz.tsx
-  // Critical path (submit + notify) is complete above.
   return (
     <div className="min-h-screen bg-[#F5F6FA] flex flex-col">
       <header className="bg-white border-b border-gray-100 px-4 py-3 sticky top-0 z-10">
@@ -400,7 +401,11 @@ export default function KerjakanQuiz() {
           </div>
           <div className="flex items-center gap-3 shrink-0">
             {timeLeft !== null && (
-              <span className={`text-sm font-mono font-semibold ${timeLeft < 60 ? 'text-red-600' : 'text-gray-700'}`}>
+              <span
+                className={`text-sm font-mono font-semibold ${
+                  timeLeft < 60 ? 'text-red-600' : 'text-gray-700'
+                }`}
+              >
                 {formatTime(timeLeft)}
               </span>
             )}
@@ -409,32 +414,312 @@ export default function KerjakanQuiz() {
             </span>
           </div>
         </div>
+        <div className="max-w-3xl mx-auto mt-2 flex gap-1 flex-wrap">
+          {questions.map((qq, i) => {
+            const a = answers[qq.id!]
+            const done = a && a.length > 0 && !(qq.type === 'category' && a.some((x) => x < 0))
+            return (
+              <button
+                key={qq.id}
+                type="button"
+                onClick={() => goTo(i)}
+                className={`w-7 h-7 rounded-md text-[11px] font-semibold transition ${
+                  i === current
+                    ? 'bg-indigo-600 text-white'
+                    : done
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+              >
+                {i + 1}
+              </button>
+            )
+          })}
+        </div>
       </header>
-      <main className="flex-1 max-w-3xl w-full mx-auto p-4">
-        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-xl p-3 mb-4">
-          UI soal lengkap ada di <code>artifacts/KerjakanQuiz.tsx</code> — salin file itu ke
-          <code> src/pages/KerjakanQuiz.tsx</code> jika tampilan soal tidak lengkap. Logika submit +
-          notifikasi admin sudah aktif.
-        </p>
-        <div className="bg-white rounded-2xl border p-5 space-y-4">
-          <p className="text-xs text-gray-400">Soal {current + 1}/{questions.length}</p>
-          <p className="font-medium text-gray-900">{q.prompt || q.text || 'Soal'}</p>
-          <div className="flex gap-2">
-            <button type="button" disabled={current === 0} onClick={() => goTo(current - 1)} className="px-3 py-2 rounded-lg border text-sm">
-              Sebelumnya
+
+      <main className="flex-1 max-w-3xl w-full mx-auto p-4 md:p-6">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 md:p-7">
+          <p className="text-xs font-medium text-gray-400 mb-2">
+            Soal {current + 1} dari {questions.length}
+            {q.tp ? ` · TP ${q.tp}` : ''}
+          </p>
+          {(q.stimulus || q.stimulusImage) && (
+            <div className="mb-4 rounded-xl bg-gray-50 border border-gray-100 overflow-hidden">
+              {q.stimulusImage &&
+                (q.stimulusImage.startsWith('data:image') ||
+                  /^https?:\/\//i.test(q.stimulusImage)) && (
+                  <div className="px-3 pt-3">
+                    <div className="flex items-center justify-center max-h-[min(40vh,260px)] bg-white rounded-lg border border-gray-100 p-2">
+                      <img
+                        src={q.stimulusImage}
+                        alt="Ilustrasi soal"
+                        className="max-h-[min(38vh,240px)] max-w-full object-contain"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLbScale(1)
+                        setLightbox({ img: q.stimulusImage, text: q.stimulus })
+                      }}
+                      className="mt-2 mb-1 text-xs font-medium text-indigo-600 hover:text-indigo-800"
+                    >
+                      🔍 Lihat lebih besar
+                    </button>
+                  </div>
+                )}
+              {q.stimulus && <StimulusBlock html={q.stimulus} />}
+            </div>
+          )}
+          <div className="flex items-start justify-between gap-2 mb-6">
+            <p className="text-base md:text-lg font-medium text-gray-900 leading-relaxed flex-1">
+              {q.question}
+            </p>
+            {q.skor != null && q.skor > 0 && (
+              <span className="shrink-0 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-md">
+                Skor {q.skor}
+              </span>
+            )}
+          </div>
+
+          {q.type === 'category' ? (
+            <div className="space-y-3">
+              <p className="text-xs text-gray-400">
+                Pilih {(q.categoryLabels || DEFAULT_CATEGORY_LABELS).join(' / ')} untuk setiap
+                pernyataan
+              </p>
+              <div className="hidden sm:block overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-500">
+                      <th className="px-3 py-2 text-left font-medium w-10">#</th>
+                      <th className="px-3 py-2 text-left font-medium">Pernyataan</th>
+                      {(q.categoryLabels || DEFAULT_CATEGORY_LABELS).map((lab) => (
+                        <th key={lab} className="px-3 py-2 text-center font-medium">
+                          {lab}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(q.options || []).map((stmt, si) => (
+                      <tr key={si} className="border-t border-gray-50">
+                        <td className="px-3 py-2 text-gray-400">{si + 1}</td>
+                        <td className="px-3 py-2 text-gray-800">{stmt}</td>
+                        {(q.categoryLabels || DEFAULT_CATEGORY_LABELS).map((lab, li) => (
+                          <td key={lab} className="px-3 py-2 text-center">
+                            <input
+                              type="radio"
+                              name={`cat-${q.id}-${si}`}
+                              checked={selected[si] === li}
+                              onChange={() =>
+                                setCategory(q.id!, si, li, (q.options || []).length)
+                              }
+                              className="accent-indigo-600"
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="sm:hidden space-y-3">
+                {(q.options || []).map((stmt, si) => (
+                  <div key={si} className="rounded-xl border border-gray-100 p-3">
+                    <p className="text-sm text-gray-800 mb-2">
+                      <span className="text-gray-400 mr-1">{si + 1}.</span>
+                      {stmt}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {(q.categoryLabels || DEFAULT_CATEGORY_LABELS).map((lab, li) => (
+                        <button
+                          key={lab}
+                          type="button"
+                          onClick={() => setCategory(q.id!, si, li, (q.options || []).length)}
+                          className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition ${
+                            selected[si] === li
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'bg-white text-gray-600 border-gray-200'
+                          }`}
+                        >
+                          {lab}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {q.type === 'multiple' ? (
+                <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center rounded-md bg-amber-500 text-white text-[11px] font-bold px-2 py-0.5 tracking-wide">
+                    PGK
+                  </span>
+                  <p className="text-sm font-medium text-amber-900">
+                    Pilihan ganda kompleks — pilih{' '}
+                    <span className="font-bold underline decoration-amber-600/50">semua</span> jawaban
+                    yang benar
+                    {(q.correctAnswers?.length ?? 0) > 0 && (
+                      <span className="font-semibold"> (tepat {q.correctAnswers!.length})</span>
+                    )}
+                  </p>
+                  {selected.length > 0 && (
+                    <span className="ml-auto text-xs font-semibold text-amber-800 bg-white/70 border border-amber-200 rounded-md px-2 py-0.5">
+                      Terpilih: {selected.length}
+                      {(q.correctAnswers?.length ?? 0) > 0 ? `/${q.correctAnswers!.length}` : ''}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="mb-3 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2 flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center rounded-md bg-indigo-600 text-white text-[11px] font-bold px-2 py-0.5 tracking-wide">
+                    PG
+                  </span>
+                  <p className="text-sm font-medium text-indigo-900">
+                    Pilihan ganda — pilih <span className="font-bold">1</span> jawaban yang benar
+                  </p>
+                </div>
+              )}
+              {optionOrder(q.id || 'x', (q.options || []).length).map((oi) => {
+                const opt = (q.options || [])[oi]
+                const isMulti = q.type === 'multiple'
+                const checked = selected.includes(oi)
+                return (
+                  <button
+                    key={oi}
+                    type="button"
+                    onClick={() =>
+                      isMulti ? toggleMulti(q.id!, oi) : setSingle(q.id!, oi)
+                    }
+                    className={`w-full text-left px-4 py-3 rounded-xl border transition flex items-start gap-3 ${
+                      checked
+                        ? isMulti
+                          ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-200'
+                          : 'border-indigo-300 bg-indigo-50 ring-1 ring-indigo-100'
+                        : 'border-gray-100 bg-white hover:border-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`mt-0.5 shrink-0 w-5 h-5 border-2 flex items-center justify-center ${
+                        isMulti ? 'rounded-md' : 'rounded-full'
+                      } ${
+                        checked
+                          ? isMulti
+                            ? 'border-amber-600 bg-amber-600 text-white'
+                            : 'border-indigo-600 bg-indigo-600 text-white'
+                          : isMulti
+                            ? 'border-amber-400 bg-white'
+                            : 'border-gray-300 bg-white'
+                      }`}
+                      aria-hidden
+                    >
+                      {checked &&
+                        (isMulti ? (
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={3}
+                              d="M5 13l4 4L19 7"
+                            />
+                          </svg>
+                        ) : (
+                          <span className="block w-2 h-2 rounded-full bg-white" />
+                        ))}
+                    </span>
+                    <span className="text-sm text-gray-800 leading-relaxed">{opt}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            disabled={current === 0}
+            onClick={() => goTo(current - 1)}
+            className="px-4 py-2.5 rounded-xl text-sm font-medium border border-gray-200 text-gray-600 disabled:opacity-40 hover:bg-white"
+          >
+            Sebelumnya
+          </button>
+          {current < questions.length - 1 ? (
+            <button
+              type="button"
+              onClick={() => goTo(current + 1)}
+              className="px-5 py-2.5 rounded-xl text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700"
+            >
+              Berikutnya
             </button>
-            {current < questions.length - 1 ? (
-              <button type="button" onClick={() => goTo(current + 1)} className="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm">
-                Berikutnya
-              </button>
-            ) : (
-              <button type="button" disabled={submitting} onClick={() => submitQuiz(false)} className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm">
-                {submitting ? 'Mengirim…' : 'Kirim jawaban'}
-              </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => submitQuiz()}
+              disabled={submitting}
+              className="px-5 py-2.5 rounded-xl text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {submitting ? 'Mengirim…' : 'Selesai & kirim'}
+            </button>
+          )}
+        </div>
+      </main>
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-auto p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-3">
+              <p className="text-sm font-medium text-gray-700">Pratinjau</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setLbScale((s) => Math.min(3, s + 0.25))}
+                  className="text-xs px-2 py-1 rounded border"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLbScale((s) => Math.max(0.5, s - 0.25))}
+                  className="text-xs px-2 py-1 rounded border"
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLightbox(null)}
+                  className="text-xs px-2 py-1 rounded border"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+            {lightbox.img && (
+              <img
+                src={lightbox.img}
+                alt=""
+                style={{ transform: `scale(${lbScale})`, transformOrigin: 'top center' }}
+                className="max-w-full mx-auto transition-transform"
+              />
+            )}
+            {lightbox.text && (
+              <p className="mt-3 text-sm text-gray-700 whitespace-pre-wrap">{lightbox.text}</p>
             )}
           </div>
         </div>
-      </main>
+      )}
     </div>
   )
 }
