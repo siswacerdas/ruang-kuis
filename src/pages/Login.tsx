@@ -391,23 +391,17 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-[#F7F4EF] flex flex-col lg:flex-row">
-      {/* ===== LEFT PANEL — Hero with illustration background ===== */}
       <aside className="relative lg:w-[52%] xl:w-[50%] overflow-hidden text-white min-h-[320px] lg:min-h-screen">
-        {/* Background image */}
         <div
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: "url('/login-hero-bg.jpg')" }}
         />
-        {/* Soft gradient overlay for readability */}
         <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/75 via-teal-800/65 to-amber-900/55" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10" />
-
-        {/* Decorative leaves (subtle) */}
         <div className="absolute -bottom-8 -left-8 w-48 h-48 rounded-full bg-emerald-400/10 blur-3xl" />
         <div className="absolute top-20 right-10 w-32 h-32 rounded-full bg-amber-300/15 blur-2xl" />
 
         <div className="relative z-10 flex flex-col min-h-[320px] lg:min-h-screen px-6 py-8 sm:px-10 lg:px-12 lg:py-12">
-          {/* Brand */}
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center font-bold text-sm shadow-lg">
               RK
@@ -418,7 +412,6 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Main copy */}
           <div className="flex-1 flex flex-col justify-center py-8 lg:py-12">
             <p className="text-emerald-100/95 text-sm font-medium mb-3 tracking-wide">
               Untuk kelas 5A · SD Muhammadiyah 01 Kukusan
@@ -436,7 +429,6 @@ export default function Login() {
               </p>
             </blockquote>
 
-            {/* Soft feature chips */}
             <ul className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-2.5 max-w-lg">
               {[
                 { t: 'Latihan mandiri', d: 'Sesuai tempo anak' },
@@ -454,7 +446,6 @@ export default function Login() {
             </ul>
           </div>
 
-          {/* Hadith footer */}
           <div className="mt-auto pt-4 pb-2">
             <div className="rounded-2xl bg-black/25 backdrop-blur-md border border-white/15 px-4 py-3.5 max-w-lg">
               <p className="text-[13px] sm:text-sm leading-relaxed text-white/95">
@@ -466,10 +457,8 @@ export default function Login() {
         </div>
       </aside>
 
-      {/* ===== RIGHT PANEL — Login form ===== */}
       <main className="flex-1 flex flex-col justify-center px-5 py-8 sm:px-10 lg:px-14 xl:px-16">
         <div className="w-full max-w-md mx-auto">
-          {/* Tabs */}
           <div className="flex gap-1 p-1 rounded-2xl bg-white/80 border border-gray-100 shadow-sm mb-7">
             {TABS.map((t) => (
               <button
@@ -477,7 +466,7 @@ export default function Login() {
                 type="button"
                 onClick={() => setTab(t.key)}
                 className={`flex-1 py-2.5 px-2 rounded-xl text-sm font-semibold transition ${
-                  tab === t.key ? t.active : `text-gray-500 hover:${t.accent}`
+                  tab === t.key ? t.active : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
                 <span className="hidden sm:inline">{t.label}</span>
