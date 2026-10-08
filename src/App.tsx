@@ -31,9 +31,9 @@ import OrtuDaftar from './pages/OrtuDaftar'
 import AdminPengajuanOrtu from './pages/AdminPengajuanOrtu'
 import OrtuHome from './pages/OrtuHome'
 import OrtuRiwayat from './pages/OrtuRiwayat'
-import OrtuPlaceholder from './pages/OrtuPlaceholder'
 import OrtuNilai from './pages/OrtuNilai'
 import OrtuPeringkat from './pages/OrtuPeringkat'
+import OrtuBuatKuis from './pages/OrtuBuatKuis'
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -121,7 +121,7 @@ function App() {
         <Route path="/ortu/riwayat" element={parentGuard(<OrtuRiwayat />)} />
         <Route path="/ortu/nilai" element={parentGuard(<OrtuNilai />)} />
         <Route path="/ortu/peringkat" element={parentGuard(<OrtuPeringkat />)} />
-        <Route path="/ortu/buat-kuis" element={parentGuard(<OrtuPlaceholder />)} />
+        <Route path="/ortu/buat-kuis" element={parentGuard(<OrtuBuatKuis />)} />
 
         <Route path="/login" element={loginRedirect} />
 
@@ -154,7 +154,8 @@ function App() {
           path="/tujuan-pembelajaran"
           element={isAdmin ? <TujuanPembelajaran /> : <Navigate to="/login" />}
         />
-        <Route path="/input-nilai" element={isAdmin ? <InputNilai /> : <Navigate to="/login" />} />
+        <Route path="/input-nilai" element={isAdmin ? <InputNilai /> : <Navigate to="/login" />}
+        />
         <Route path="/rekap-nilai" element={isAdmin ? <RekapNilai /> : <Navigate to="/login" />} />
         <Route path="/materi" element={isAdmin ? <Materi audience="admin" /> : <Navigate to="/login" />} />
         <Route
