@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import {
   addDoc,
   collection,
@@ -29,7 +29,6 @@ import { isConfiguredStaffEmail } from '../lib/loginAccounts'
  * untuk tes internal admin).
  */
 export default function OrtuDaftar() {
-  const navigate = useNavigate()
   const [students, setStudents] = useState<Student[]>([])
   const [loadingStudents, setLoadingStudents] = useState(true)
   const [studentId, setStudentId] = useState('')
