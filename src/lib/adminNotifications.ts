@@ -6,6 +6,7 @@ import {
   orderBy,
   query,
   updateDoc,
+  deleteDoc,
   where,
   onSnapshot,
   type Unsubscribe,
@@ -79,6 +80,20 @@ export async function fetchUnreadNotifications(): Promise<AdminNotification[]> {
   }
 }
 
+/** Setelah dilihat: tandai read lalu hapus dokumen. */
+export async function dismissNotification(id: string): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'adminNotifications', id), { read: true })
+  } catch {
+    /* ignore */
+  }
+  try {
+    await deleteDoc(doc(db, 'adminNotifications', id))
+  } catch (err) {
+    console.warn('dismissNotification delete', err)
+  }
+}
+
 export async function markNotificationRead(id: string): Promise<void> {
   await updateDoc(doc(db, 'adminNotifications', id), { read: true })
 }
@@ -87,14 +102,26 @@ export async function markAllNotificationsRead(ids: string[]): Promise<void> {
   await Promise.all(ids.map((id) => markNotificationRead(id)))
 }
 
-/**
- * Subscribe jumlah pending parent requests (untuk badge nav).
- */
+export async function dismissAllNotifications(ids: string[]): Promise<void> {
+  await Promise.all(ids.map((id) => dismissNotification(id)))
+}
+
 export function subscribePendingParentCount(onCount: (n: number) => void): Unsubscribe {
   return onSnapshot(
     collection(db, 'parentRequests'),
     (snap) => {
       const n = snap.docs.filter((d) => d.data().status === 'pending').length
+      onCount(n)
+    },
+    () => onCount(0)
+  )
+}
+
+export function subscribeUnreadNotifCount(onCount: (n: number) => void): Unsubscribe {
+  return onSnapshot(
+    collection(db, 'adminNotifications'),
+    (snap) => {
+      const n = snap.docs.filter((d) => d.data().read === false).length
       onCount(n)
     },
     () => onCount(0)
