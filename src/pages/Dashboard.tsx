@@ -4,6 +4,7 @@ import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import Layout from '../components/Layout'
 import type { LatihanAttempt } from '../types/question'
+import { subscribePendingParentCount } from '../lib/adminNotifications'
 
 function toMillis(v: unknown): number | null {
   if (!v) return null
@@ -139,6 +140,12 @@ export default function Dashboard() {
     topics: 0,
   })
   const [recent, setRecent] = useState<LatihanAttempt[]>([])
+  const [pendingOrtu, setPendingOrtu] = useState(0)
+
+  useEffect(() => {
+    const unsub = subscribePendingParentCount(setPendingOrtu)
+    return () => unsub()
+  }, [])
 
   useEffect(() => {
     const load = async () => {
@@ -222,6 +229,26 @@ export default function Dashboard() {
             Pantau pengerjaan siswa, kelola materi dan paket latihan, lalu tinjau laporan di satu tempat.
           </p>
         </header>
+
+        {pendingOrtu > 0 && (
+          <Link
+            to="/pengajuan-ortu"
+            className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5 hover:bg-amber-100/80 transition"
+          >
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-200/80 text-amber-900 text-sm font-bold shrink-0">
+              {pendingOrtu}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-amber-950">
+                Pengajuan akun orang tua menunggu persetujuan
+              </p>
+              <p className="text-xs text-amber-800/80 mt-0.5">
+                Buka menu Pengajuan Ortu untuk menyetujui atau menolak.
+              </p>
+            </div>
+            <span className="text-amber-700 text-sm font-medium shrink-0">Tinjau →</span>
+          </Link>
+        )}
 
         <section className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
           {metrics.map((c) => (
