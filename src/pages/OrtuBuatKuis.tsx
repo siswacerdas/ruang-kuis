@@ -35,8 +35,13 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 /**
- * Orang tua membuat paket latihan mandiri untuk anak (reuse bank soal + practiceSessions).
- * Anak mengerjakan lewat /siswa → Latihan Mandiri.
+ * Orang tua membuat paket latihan mandiri untuk anak.
+ *
+ * Isolasi:
+ * - Hanya menulis ke `practiceSessions` dengan studentId anak yang dipilih
+ * - Tidak menulis ke `latihan` (paket guru) → tidak muncul di Latihan Soal admin
+ * - Query siswa memfilter studentId → siswa lain tidak melihat sesi ini
+ * - PracticeQuiz menolak jika studentId sesi ≠ siswa login
  */
 export default function OrtuBuatKuis() {
   const navigate = useNavigate()
@@ -216,6 +221,8 @@ export default function OrtuBuatKuis() {
         .map((id) => topics.find((t) => t.id === id)?.name || '')
         .filter(Boolean)
 
+      // Hanya practiceSessions milik studentId anak ini.
+      // Tidak menulis ke `latihan` (paket guru).
       const ref = await addDoc(collection(db, 'practiceSessions'), {
         studentId: selectedChild.id,
         studentName: selectedChild.fullName,
@@ -226,6 +233,8 @@ export default function OrtuBuatKuis() {
         questionIds: picked.map((q) => q.id!),
         questionCount: picked.length,
         status: 'in_progress',
+        kind: 'parent_assigned',
+        visibility: 'student_only',
         createdByParent: true,
         parentId: session.parentId || null,
         parentName: session.fullName,
@@ -261,9 +270,9 @@ export default function OrtuBuatKuis() {
     <OrtuLayout title="Buat kuis" subtitle={selectedChild?.fullName} parentName={session.fullName}>
       <div className="space-y-4">
         <div className="rounded-xl border border-violet-100 bg-violet-50/80 px-3.5 py-2.5 text-xs text-violet-900 leading-relaxed">
-          Anda menyusun latihan dari bank soal sekolah. Setelah dibuat,{' '}
-          <strong>anak mengerjakan</strong> lewat login siswa → <em>Latihan Mandiri</em>. Hasilnya
-          masuk riwayat anak (bukan paket kuis guru).
+          Latihan ini <strong>hanya untuk anak yang dipilih</strong>. Tidak masuk daftar paket guru
+          dan tidak terlihat siswa lain. Anak mengerjakan lewat login siswa →{' '}
+          <em>Latihan Mandiri</em> (bukan menu kerjakan token).
         </div>
 
         {children.length > 1 && (
@@ -303,13 +312,19 @@ export default function OrtuBuatKuis() {
             <p className="text-xs text-emerald-800 leading-relaxed">
               <strong>{success.questionCount} soal</strong> · {success.title}
               <br />
-              Untuk: <strong>{success.childName}</strong>
+              Untuk: <strong>{success.childName}</strong> saja
             </p>
             <ol className="text-xs text-emerald-900 list-decimal pl-4 space-y-1 mt-1">
-              <li>Minta anak login di tab Siswa</li>
-              <li>Buka menu Latihan Mandiri</li>
-              <li>Lanjutkan sesi yang sedang berjalan</li>
+              <li>Minta anak login di tab Siswa (akun anak sendiri)</li>
+              <li>
+                Buka <strong>Latihan Mandiri</strong> — bukan daftar kuis guru
+              </li>
+              <li>Lanjutkan sesi yang menunggu (hanya muncul di akun anak ini)</li>
             </ol>
+            <p className="text-[11px] text-emerald-800/80 mt-2">
+              Guru tidak melihat paket ini di menu Latihan Soal. Siswa lain tidak bisa membuka sesi
+              ini.
+            </p>
             <button
               type="button"
               onClick={() => setSuccess(null)}
