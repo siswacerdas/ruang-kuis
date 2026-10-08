@@ -114,6 +114,15 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
         </svg>
       ),
     },
+    {
+      path: '/pengajuan-ortu',
+      label: 'Pengajuan Ortu',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+      ),
+    },
   ]
 
   return (
@@ -131,7 +140,7 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
           </Link>
         </div>
 
-        <nav className="flex-1 px-3 py-5 space-y-1">
+        <nav className="flex-1 px-3 py-5 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const active =
               location.pathname === item.path || location.pathname.startsWith(item.path + '/')
