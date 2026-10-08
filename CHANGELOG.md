@@ -14,9 +14,12 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 - Session: `src/lib/parentSession.ts`.
 - Publik: form pengajuan `/ortu/daftar` (`OrtuDaftar.tsx`) — pilih anak, WA, email, password.
 - Admin: `/pengajuan-ortu` (`AdminPengajuanOrtu.tsx`) — setujui (buat Auth + `parents`) / tolak; hapus `tempPassword` setelah diproses.
-- Koleksi baru: `parentRequests`, `parents`, `adminNotifications` (opsional `parentPasswordResets` di fase berikutnya).
-- **Sementara — dummy uji live:** siswa `Siswa Uji Ortu` (`uji.ortu@ruang-kuis.test`, NISN `9999000001`, `isDummy: true`) agar dropdown pengajuan bisa diuji tanpa data kelas nyata. Login siswa via tab **Tes Sistem**.
-- **TODO wajib di akhir percakapan / sebelum production ortu:** hapus dummy uji ortu + Auth terkait, bersihkan request/parent uji, centang item ini. Jangan biarkan `isDummy` uji ortu tertinggal di daftar nilai/laporan produksi.
+- Beranda placeholder: `OrtuHome.tsx` (`/ortu`).
+- Wiring: `App.tsx` (isParent, routes `/ortu`, `/ortu/daftar`, `/pengajuan-ortu`), `Layout` nav Pengajuan Ortu, `firestore.rules` untuk parentRequests/parents/adminNotifications.
+- Login tab Orang Tua: salin `Login.parent.tsx` (artifacts) → `src/pages/Login.tsx` jika belum ter-merge di mesin lokal, lalu commit.
+- Koleksi baru: `parentRequests`, `parents`, `adminNotifications`.
+- **Sementara — dummy uji live:** siswa `Siswa Uji Ortu` (`uji.ortu@ruang-kuis.test`, NISN `9999000001`, `isDummy: true`). Login siswa via tab **Tes**.
+- **TODO wajib di akhir percakapan / sebelum production ortu:** hapus dummy uji ortu + Auth terkait, bersihkan request/parent uji, centang item ini.
 
 ### Added — Rekap Nilai (nilai akhir per TP / mapel)
 - Halaman admin **Rekap Nilai** (`/rekap-nilai`): pilih mata pelajaran → matriks siswa × kode TP (nilai akhir %), filter kelas, rata kelas, export CSV.
