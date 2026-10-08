@@ -58,21 +58,31 @@ export function clearStudentSession(): void {
 }
 
 /**
- * Pastikan sesi siswa tersedia.
- * - Jika sudah ada di localStorage → kembalikan.
- * - Jika Firebase Auth aktif & email terdaftar sebagai siswa → restore dari Firestore.
- * - Jika tidak → null (perlu login ulang).
+ * Pastikan sesi siswa tersedia dan milik user Firebase Auth yang sedang login.
+ * localStorage saja tidak cukup — sisa akun dummy uji tidak boleh mengalihkan login orang lain.
+ * - Auth kosong → null (pemanggil yang sudah tahu logout boleh clearStudentSession).
+ * - Auth email cocok dengan sesi tersimpan → kembalikan.
+ * - Selain itu → pulihkan dari Firestore, atau null.
  */
 export async function ensureStudentSession(): Promise<StudentSession | null> {
-  const existing = getStudentSession()
-  if (existing?.studentId && existing.fullName) return existing
-
   const user = auth.currentUser
   if (!user?.email) return null
 
+  const email = user.email.toLowerCase()
+  const existing = getStudentSession()
+  if (
+    existing?.studentId &&
+    existing.fullName &&
+    (existing.email || '').toLowerCase() === email
+  ) {
+    return existing
+  }
+
+  if (existing) clearStudentSession()
+
   try {
     const snap = await getDocs(
-      query(collection(db, 'students'), where('email', '==', user.email.toLowerCase()))
+      query(collection(db, 'students'), where('email', '==', email))
     )
     if (snap.empty) return null
 
