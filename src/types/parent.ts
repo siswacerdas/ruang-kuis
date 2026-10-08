@@ -42,8 +42,10 @@ export interface Parent {
   studentIds: string[]
   active: boolean
   mustChangePassword?: boolean
-  /** Sudah melihat panduan first-login */
+  /** @deprecated diganti loginCount */
   guideSeenAt?: unknown
+  /** Jumlah sesi login berhasil (untuk lightbox panduan ≤3) */
+  loginCount?: number
   createdAt?: unknown
   updatedAt?: unknown
 }
@@ -80,9 +82,16 @@ export interface ParentSession {
   authUid: string
   mustChangePassword?: boolean
   guideSeenAt?: string | null
+  /** Setelah increment di sesi browser ini */
+  loginCount?: number
 }
 
 export const PARENT_SESSION_KEY = 'rk_parent'
+/** Flag: loginCount sudah dinaikkan di tab/session browser ini */
+export const PARENT_LOGIN_COUNTED_KEY = 'rk_parent_login_counted'
+
+/** Tampilkan lightbox panduan jika loginCount masih di bawah ini */
+export const PARENT_GUIDE_MAX_LOGINS = 3
 
 /** Normalisasi nomor WA Indonesia → digits only, awalan 62 jika 08… */
 export function normalizeWhatsapp(raw: string): string {
