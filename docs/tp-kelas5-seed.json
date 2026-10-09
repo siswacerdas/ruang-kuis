@@ -1,1 +1,19 @@
-SEE_FILE
+{
+  "version": "2026-10-04",
+  "className": "5A",
+  "phase": "C",
+  "note": "Kode TP stabil. Satu TP boleh terkait banyak materi. Soal tanpa kode TP memakai tpCodes materi bank soal yang tertaut. Full seed restore: lihat artifacts/tp-kelas5-seed.RESTORED.json",
+  "subjects": [
+    {"key": "bahasa-indonesia", "name": "Bahasa Indonesia"},
+    {"key": "ipas", "name": "IPAS"},
+    {"key": "matematika", "name": "Matematika"},
+    {"key": "pendidikan-pancasila", "name": "Pendidikan Pancasila"},
+    {"key": "seni-musik", "name": "Seni Musik"},
+    {"key": "seni-rupa", "name": "Seni Rupa"},
+    {"key": "al-islam", "name": "Al-Islam"},
+    {"key": "bahasa-inggris", "name": "Bahasa Inggris"},
+    {"key": "kemuhammadiyahan", "name": "Kemuhammadiyahan"},
+    {"key": "bahasa-sunda", "name": "Bahasa Sunda"}
+  ],
+  "tp": []
+}
