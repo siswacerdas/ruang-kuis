@@ -120,14 +120,14 @@ export default function OrtuGuideLightbox({ parentName, loginCount, onClose }: O
     >
       <button
         type="button"
-        className="absolute inset-0 bg-slate-900/55 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-slate-900/70"
         aria-label="Tutup panduan"
         onClick={onClose}
       />
 
       <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl shadow-indigo-900/20 overflow-hidden animate-[slideUp_0.28s_ease-out]">
         <div className={`relative bg-gradient-to-br ${current.accent} px-6 pt-6 pb-8 text-white`}>
-          <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-white/10 blur-xl" />
+          <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-white/10" />
           <div className="relative flex items-start justify-between gap-3">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-white/80">

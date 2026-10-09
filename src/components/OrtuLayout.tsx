@@ -204,7 +204,7 @@ export default function OrtuLayout({
 
         {/* Bottom nav mobile — pola siswa */}
         <nav
-          className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-gray-100"
+          className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-gray-100"
           aria-label="Menu orang tua"
         >
           <div className="max-w-6xl mx-auto px-1">

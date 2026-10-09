@@ -1,0 +1,7 @@
+export { default as OrtuDaftar } from '../pages/OrtuDaftar'
+export { default as OrtuLupaPassword } from '../pages/OrtuLupaPassword'
+export { default as OrtuHome } from '../pages/OrtuHome'
+export { default as OrtuRiwayat } from '../pages/OrtuRiwayat'
+export { default as OrtuNilai } from '../pages/OrtuNilai'
+export { default as OrtuPeringkat } from '../pages/OrtuPeringkat'
+export { default as OrtuBuatKuis } from '../pages/OrtuBuatKuis'

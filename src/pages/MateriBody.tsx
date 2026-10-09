@@ -1,8 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import AiLessonGenerator from '../components/AiLessonGenerator'
-import HtmlMaterialEditor from '../components/HtmlMaterialEditor'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import LessonViewer from '../components/LessonViewer'
-import PresentationViewer from '../components/PresentationViewer'
 import { SUBJECTS, getSubject, type SubjectKey } from '../types/question'
 import {
   deleteLessonMaterial,
@@ -19,6 +16,18 @@ import {
   viewUrl,
   type LessonPdf,
 } from '../lib/lessonMaterials'
+
+const PresentationViewer = lazy(() => import('../components/PresentationViewer'))
+const AiLessonGenerator = lazy(() => import('../components/AiLessonGenerator'))
+const HtmlMaterialEditor = lazy(() => import('../components/HtmlMaterialEditor'))
+
+function ToolFallback() {
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/50 flex items-center justify-center">
+      <p className="text-sm text-white">Membuka…</p>
+    </div>
+  )
+}
 
 const accent: Record<string, { bar: string; icon: string; badge: string }> = {
   rose: { bar: 'bg-rose-500', icon: 'bg-rose-50 text-rose-600', badge: 'text-rose-700 bg-rose-50' },
@@ -387,14 +396,22 @@ export default function MateriBody({
         {open && isHtmlLesson(open) && open.htmlContent ? (
           <LessonViewer title={open.title} subjectName={subject?.name || open.subjectKey} htmlContent={open.htmlContent} onClose={() => setOpen(null)} showExport />
         ) : open && isPresentation(open) && open.slides && open.slides.length > 0 ? (
-          <PresentationViewer title={open.title} subjectName={subject?.name || open.subjectKey} slides={open.slides} onClose={() => setOpen(null)} showExport />
+          <Suspense fallback={<ToolFallback />}>
+            <PresentationViewer title={open.title} subjectName={subject?.name || open.subjectKey} slides={open.slides} onClose={() => setOpen(null)} showExport />
+          </Suspense>
         ) : open && open.driveFileId ? (
           <PdfViewer pdf={open} onClose={() => setOpen(null)} />
         ) : null}
         {editor && (<MateriEditor editor={editor} setEditor={setEditor} saving={saving} error={formError} onClose={() => setEditor(null)} onSave={handleSave} />)}
-        {showAiGen && (<AiLessonGenerator open={showAiGen} onClose={() => setShowAiGen(false)} defaultSubjectKey={subject.key} onSaved={onRefresh} />)}
+        {showAiGen && (
+          <Suspense fallback={<ToolFallback />}>
+            <AiLessonGenerator open={showAiGen} onClose={() => setShowAiGen(false)} defaultSubjectKey={subject.key} onSaved={onRefresh} />
+          </Suspense>
+        )}
         {showHtmlEditor && (
-          <HtmlMaterialEditor open={showHtmlEditor} onClose={() => { setShowHtmlEditor(false); setHtmlEditTarget(null) }} initial={htmlEditTarget} defaultSubjectKey={subject.key} onSaved={onRefresh} />
+          <Suspense fallback={<ToolFallback />}>
+            <HtmlMaterialEditor open={showHtmlEditor} onClose={() => { setShowHtmlEditor(false); setHtmlEditTarget(null) }} initial={htmlEditTarget} defaultSubjectKey={subject.key} onSaved={onRefresh} />
+          </Suspense>
         )}
       </div>
     )
@@ -456,13 +473,21 @@ export default function MateriBody({
       {open && isHtmlLesson(open) && open.htmlContent ? (
         <LessonViewer title={open.title} subjectName={getSubject(open.subjectKey)?.name || open.subjectKey} htmlContent={open.htmlContent} onClose={() => setOpen(null)} showExport />
       ) : open && isPresentation(open) && open.slides && open.slides.length > 0 ? (
-        <PresentationViewer title={open.title} subjectName={getSubject(open.subjectKey)?.name || open.subjectKey} slides={open.slides} onClose={() => setOpen(null)} showExport />
+        <Suspense fallback={<ToolFallback />}>
+          <PresentationViewer title={open.title} subjectName={getSubject(open.subjectKey)?.name || open.subjectKey} slides={open.slides} onClose={() => setOpen(null)} showExport />
+        </Suspense>
       ) : open && open.driveFileId ? (
         <PdfViewer pdf={open} onClose={() => setOpen(null)} />
       ) : null}
-      {showAiGen && (<AiLessonGenerator open={showAiGen} onClose={() => setShowAiGen(false)} defaultSubjectKey={selectedKey ? (selectedKey as SubjectKey) : undefined} onSaved={onRefresh} />)}
+      {showAiGen && (
+        <Suspense fallback={<ToolFallback />}>
+          <AiLessonGenerator open={showAiGen} onClose={() => setShowAiGen(false)} defaultSubjectKey={selectedKey ? (selectedKey as SubjectKey) : undefined} onSaved={onRefresh} />
+        </Suspense>
+      )}
       {showHtmlEditor && (
-        <HtmlMaterialEditor open={showHtmlEditor} onClose={() => { setShowHtmlEditor(false); setHtmlEditTarget(null) }} initial={htmlEditTarget} defaultSubjectKey={selectedKey ? (selectedKey as SubjectKey) : undefined} onSaved={onRefresh} />
+        <Suspense fallback={<ToolFallback />}>
+          <HtmlMaterialEditor open={showHtmlEditor} onClose={() => { setShowHtmlEditor(false); setHtmlEditTarget(null) }} initial={htmlEditTarget} defaultSubjectKey={selectedKey ? (selectedKey as SubjectKey) : undefined} onSaved={onRefresh} />
+        </Suspense>
       )}
       {editor && (<MateriEditor editor={editor} setEditor={setEditor} saving={saving} error={formError} onClose={() => setEditor(null)} onSave={handleSave} />)}
     </div>
