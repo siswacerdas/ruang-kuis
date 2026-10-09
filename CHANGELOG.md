@@ -8,6 +8,10 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Added — Ekspor tujuan pembelajaran
+- Halaman `/tujuan-pembelajaran`: tombol **Ekspor JSON** (format seed yang bisa diimpor ulang) dan **Ekspor Excel** (lembar TP + materi buku).
+- Cakupan: baris tercentang, atau seluruh baris yang sedang tampil menurut filter mapel/pencarian.
+
 ### Fixed — Tampilan kuis mobile & optimasi biaya Firebase
 - **Navigator nomor soal** di `KerjakanQuiz` / `PracticeQuiz`: scroll horizontal (tidak lagi `flex-wrap` yang membuat header tinggi di smartphone).
 - **Teks soal / opsi / stimulus**: `break-words` agar teks panjang tidak merusak layout.

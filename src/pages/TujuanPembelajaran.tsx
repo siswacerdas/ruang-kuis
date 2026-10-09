@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { collection, doc, getDocs, serverTimestamp, writeBatch } from 'firebase/firestore'
 import Layout from '../components/Layout'
 import { db } from '../lib/firebase'
+import * as XLSX from 'xlsx'
 import { SUBJECTS, getSubject } from '../types/question'
 import type { BookMaterial, LearningObjective, SubjectKey, TpSeedFile } from '../types/tp'
 
@@ -27,6 +28,25 @@ function slug(title: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 48) || 'materi'
+}
+
+
+function downloadBlob(filename: string, blob: Blob) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+function stamp() {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`
 }
 
 function SummaryBlock({ text, className = '' }: { text?: string; className?: string }) {
@@ -455,6 +475,96 @@ export default function TujuanPembelajaran() {
     }
   }
 
+
+  const exportBundle = () => {
+    const tps = tab === 'tp'
+      ? (selectedTpCodes.length ? items.filter((t) => selectedTpCodes.includes(t.code)) : filteredTp)
+      : items.filter((t) => {
+          const mats = selectedMaterialIds.length
+            ? materials.filter((m) => m.id && selectedMaterialIds.includes(m.id))
+            : filteredMaterials
+          const codes = new Set(mats.flatMap((m) => m.suggestedTpCodes || []))
+          return codes.has(t.code)
+        })
+    const mats = tab === 'materi'
+      ? (selectedMaterialIds.length
+          ? materials.filter((m) => m.id && selectedMaterialIds.includes(m.id))
+          : filteredMaterials)
+      : materials.filter((m) => (m.suggestedTpCodes || []).some((c) => tps.some((t) => t.code === c)))
+    return { tps, mats }
+  }
+
+  const exportJson = () => {
+    const { tps, mats } = exportBundle()
+    if (!tps.length && !mats.length) {
+      setError('Tidak ada data untuk diekspor. Ubah filter atau centang baris.')
+      return
+    }
+    setError('')
+    const payload: TpSeedFile = {
+      version: `export-${stamp()}`,
+      className: tps[0]?.className || '5A',
+      phase: tps[0]?.phase || 'C',
+      tp: tps.map((t) => ({
+        code: t.code,
+        subjectKey: t.subjectKey,
+        element: t.element || '',
+        order: Number(t.order) || 0,
+        statement: t.statement,
+        weight: Number(t.weight) || 1,
+        active: t.active !== false,
+        className: t.className || '5A',
+        phase: t.phase || 'C',
+        source: t.source,
+      })),
+      materiBuku: mats.map((m) => ({
+        subjectKey: m.subjectKey,
+        title: m.title,
+        summary: m.summary || '',
+        suggestedTpCodes: m.suggestedTpCodes || [],
+        linkNote: m.linkNote || '',
+      })),
+    }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    downloadBlob(`tujuan-pembelajaran-${stamp()}.json`, blob)
+    setNotice(`Ekspor JSON: ${tps.length} TP dan ${mats.length} materi. File ini bisa diimpor ulang.`)
+  }
+
+  const exportExcel = () => {
+    const { tps, mats } = exportBundle()
+    if (!tps.length && !mats.length) {
+      setError('Tidak ada data untuk diekspor. Ubah filter atau centang baris.')
+      return
+    }
+    setError('')
+    const tpRows = tps.map((t) => ({
+      Kode: t.code,
+      Mapel: getSubject(t.subjectKey)?.name || t.subjectKey,
+      'Kunci mapel': t.subjectKey,
+      Elemen: t.element || '',
+      Urutan: Number(t.order) || 0,
+      Rumusan: t.statement,
+      Bobot: Number(t.weight) || 1,
+      Aktif: t.active === false ? 'tidak' : 'ya',
+      Kelas: t.className || '5A',
+      Fase: t.phase || 'C',
+      'Materi terkait': (t.relatedMaterials || []).join('; '),
+    }))
+    const matRows = mats.map((m) => ({
+      Judul: m.title,
+      Mapel: getSubject(m.subjectKey)?.name || m.subjectKey,
+      'Kunci mapel': m.subjectKey,
+      Ringkasan: m.summary || '',
+      'Kode TP': (m.suggestedTpCodes || []).join(', '),
+      Catatan: m.linkNote || '',
+    }))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tpRows.length ? tpRows : [{ Kode: '' }]), 'Tujuan Pembelajaran')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(matRows.length ? matRows : [{ Judul: '' }]), 'Materi Buku')
+    XLSX.writeFile(wb, `tujuan-pembelajaran-${stamp()}.xlsx`)
+    setNotice(`Ekspor Excel: ${tps.length} TP dan ${mats.length} materi.`)
+  }
+
   const toggleTpCode = (code: string) => {
     if (!materialEditor) return
     const cur = materialEditor.suggestedTpCodes || []
@@ -469,6 +579,10 @@ export default function TujuanPembelajaran() {
         <div className="flex flex-wrap gap-2 justify-end">
           <button type="button" onClick={() => tab === 'tp' ? setEditor(emptyTp()) : setMaterialEditor({ subjectKey: 'ipas', title: '', summary: '', suggestedTpCodes: [] })}
             className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700">Tambah</button>
+          <button type="button" onClick={exportJson} disabled={loading}
+            className="px-4 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 disabled:opacity-60">Ekspor JSON</button>
+          <button type="button" onClick={exportExcel} disabled={loading}
+            className="px-4 py-2 rounded-xl border border-indigo-200 bg-indigo-50 text-sm font-medium text-indigo-700 disabled:opacity-60">Ekspor Excel</button>
           <button type="button" onClick={() => fileRef.current?.click()} disabled={importing}
             className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium disabled:opacity-60">{importing ? 'Mengimpor...' : 'Impor JSON'}</button>
           <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) importJson(f) }} />
