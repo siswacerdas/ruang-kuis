@@ -1,1 +1,5 @@
 @import "tailwindcss";
+
+/* Sembunyikan scrollbar pada strip yang bisa digeser (tab/menu mobile) */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

@@ -203,22 +203,22 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
       </aside>
 
       <div className="flex-1 md:pl-64 min-w-0">
-        <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-100">
+        {/* Mobile: header ikut scroll (tidak sticky) agar layar kecil tidak tertutup header tinggi. */}
+        <header className="md:sticky md:top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-100">
           <div className="px-4 sm:px-6 py-3.5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <Link to="/dashboard" className="md:hidden flex items-center gap-2 shrink-0 mb-1">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-xs">
-                    RK
-                  </div>
-                  <span className="text-sm font-bold text-gray-900">Ruang Kuis</span>
-                </Link>
-                {title && <h1 className="text-lg font-bold text-gray-900 truncate">{title}</h1>}
-                {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
+            {/*
+              Mobile (urutan tampil): logo + lonceng/Keluar -> judul -> tombol aksi (baris sendiri).
+              Desktop: judul di kiri, lonceng + aksi di kanan. Lonceng hanya satu di DOM (tidak ganda).
+            */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-3 md:flex-nowrap">
+              <Link to="/dashboard" className="md:hidden order-1 flex items-center gap-2 shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-xs">
+                  RK
+                </div>
+                <span className="text-sm font-bold text-gray-900">Ruang Kuis</span>
+              </Link>
+              <div className="order-2 ml-auto md:ml-0 md:order-2 flex items-center gap-1 shrink-0">
                 <AdminNotifBell />
-                {actions}
                 <button
                   type="button"
                   onClick={handleLogout}
@@ -227,8 +227,17 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
                   Keluar
                 </button>
               </div>
+              <div className="order-3 basis-full min-w-0 md:order-1 md:basis-0 md:flex-1">
+                {title && <h1 className="text-lg font-bold text-gray-900 md:truncate">{title}</h1>}
+                {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
+              </div>
+              {actions && (
+                <div className="order-4 basis-full md:basis-auto md:order-3 md:shrink-0 [&>div]:flex-wrap">
+                  {actions}
+                </div>
+              )}
             </div>
-            <nav className="md:hidden flex gap-1 mt-3 -mx-1 overflow-x-auto pb-1">
+            <nav className="md:hidden no-scrollbar flex gap-1 mt-3 -mx-1 overflow-x-auto pb-1">
               {navItems.map((item) => {
                 const active =
                   location.pathname === item.path || location.pathname.startsWith(item.path + '/')

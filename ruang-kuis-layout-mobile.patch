@@ -1,0 +1,101 @@
+diff --git a/src/components/Layout.tsx b/src/components/Layout.tsx
+index 2da323e..a933cd7 100644
+--- a/src/components/Layout.tsx
++++ b/src/components/Layout.tsx
+@@ -203,22 +203,22 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
+       </aside>
+ 
+       <div className="flex-1 md:pl-64 min-w-0">
+-        <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-100">
++        {/* Mobile: header ikut scroll (tidak sticky) agar layar kecil tidak tertutup header tinggi. */}
++        <header className="md:sticky md:top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-100">
+           <div className="px-4 sm:px-6 py-3.5">
+-            <div className="flex items-center justify-between gap-3">
+-              <div className="min-w-0">
+-                <Link to="/dashboard" className="md:hidden flex items-center gap-2 shrink-0 mb-1">
+-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-xs">
+-                    RK
+-                  </div>
+-                  <span className="text-sm font-bold text-gray-900">Ruang Kuis</span>
+-                </Link>
+-                {title && <h1 className="text-lg font-bold text-gray-900 truncate">{title}</h1>}
+-                {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
+-              </div>
+-              <div className="flex items-center gap-2 shrink-0">
++            {/*
++              Mobile (urutan tampil): logo + lonceng/Keluar -> judul -> tombol aksi (baris sendiri).
++              Desktop: judul di kiri, lonceng + aksi di kanan. Lonceng hanya satu di DOM (tidak ganda).
++            */}
++            <div className="flex flex-wrap items-center gap-x-3 gap-y-3 md:flex-nowrap">
++              <Link to="/dashboard" className="md:hidden order-1 flex items-center gap-2 shrink-0">
++                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-xs">
++                  RK
++                </div>
++                <span className="text-sm font-bold text-gray-900">Ruang Kuis</span>
++              </Link>
++              <div className="order-2 ml-auto md:ml-0 md:order-2 flex items-center gap-1 shrink-0">
+                 <AdminNotifBell />
+-                {actions}
+                 <button
+                   type="button"
+                   onClick={handleLogout}
+@@ -227,8 +227,17 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
+                   Keluar
+                 </button>
+               </div>
++              <div className="order-3 basis-full min-w-0 md:order-1 md:basis-0 md:flex-1">
++                {title && <h1 className="text-lg font-bold text-gray-900 md:truncate">{title}</h1>}
++                {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
++              </div>
++              {actions && (
++                <div className="order-4 basis-full md:basis-auto md:order-3 md:shrink-0 [&>div]:flex-wrap">
++                  {actions}
++                </div>
++              )}
+             </div>
+-            <nav className="md:hidden flex gap-1 mt-3 -mx-1 overflow-x-auto pb-1">
++            <nav className="md:hidden no-scrollbar flex gap-1 mt-3 -mx-1 overflow-x-auto pb-1">
+               {navItems.map((item) => {
+                 const active =
+                   location.pathname === item.path || location.pathname.startsWith(item.path + '/')
+diff --git a/src/index.css b/src/index.css
+index f1d8c73..b535145 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -1 +1,5 @@
+ @import "tailwindcss";
++
++/* Sembunyikan scrollbar pada strip yang bisa digeser (tab/menu mobile) */
++.no-scrollbar { scrollbar-width: none; }
++.no-scrollbar::-webkit-scrollbar { display: none; }
+diff --git a/src/pages/LatihanSoal.tsx b/src/pages/LatihanSoal.tsx
+index 13cfdfa..dc38eb2 100644
+--- a/src/pages/LatihanSoal.tsx
++++ b/src/pages/LatihanSoal.tsx
+@@ -112,7 +112,7 @@ export default function LatihanSoal() {
+     <div className="flex items-center gap-2">
+       <Link
+         to="/latihan-soal/baru?mode=auto"
+-        className="inline-flex items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-3.5 py-2 rounded-xl text-sm font-medium transition shadow-sm"
++        className="inline-flex flex-1 md:flex-none justify-center items-center gap-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-3.5 py-2 rounded-xl text-sm font-medium transition shadow-sm"
+       >
+         <svg className="w-4 h-4 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+@@ -121,7 +121,7 @@ export default function LatihanSoal() {
+       </Link>
+       <Link
+         to="/latihan-soal/baru?mode=manual"
+-        className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-sm font-medium transition shadow-sm shadow-indigo-200"
++        className="inline-flex flex-1 md:flex-none justify-center items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-sm font-medium transition shadow-sm shadow-indigo-200"
+       >
+         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+@@ -138,7 +138,7 @@ export default function LatihanSoal() {
+       actions={actions}
+     >
+       {/* Tabs */}
+-      <div className="flex gap-1 overflow-x-auto pb-1 mb-5">
++      <div className="no-scrollbar flex gap-1 overflow-x-auto pb-1 mb-5">
+         {TABS.map((t) => {
+           const count =
+             t.key === 'all'
