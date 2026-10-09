@@ -7,8 +7,9 @@ publik, (3) fungsi reset password hanya mengecek "sudah login".
 1. `cd functions && npm ci && npm run build && cd .. && firebase deploy --only functions`
 2. Isi roster: `node scripts/backfill-student-roster.mjs` (dry run) lalu `--apply`.
    Cek di Console: koleksi `studentRoster` jumlahnya sama dengan `students`.
-3. `npm run build && firebase deploy --only hosting` (klien membaca roster; bila roster kosong otomatis
-   jatuh ke `students`, jadi aman bila langkah 2 terlewat — selama rules belum dikunci).
+3. `npm run build && firebase deploy --only hosting`. Klien mencoba `studentRoster` dulu; bila ditolak (rules
+   lama) atau kosong, otomatis memakai `students`. Jadi aman di rules lama maupun bila langkah 2 terlewat.
+   Setelah langkah ini, login siswa/ortu harus tetap normal SEBELUM rules baru dipasang.
 4. Uji (daftar di bawah) dengan rules LAMA.
 5. `firebase deploy --only firestore:rules,storage` — lakukan di luar jam belajar.
 6. Uji ulang daftar yang sama. Bila ada yang gagal → rollback (di bawah).
