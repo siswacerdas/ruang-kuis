@@ -27,6 +27,22 @@
     {
       "key": "seni-rupa",
       "name": "Seni Rupa"
+    },
+    {
+      "key": "al-islam",
+      "name": "Al-Islam"
+    },
+    {
+      "key": "bahasa-inggris",
+      "name": "Bahasa Inggris"
+    },
+    {
+      "key": "kemuhammadiyahan",
+      "name": "Kemuhammadiyahan"
+    },
+    {
+      "key": "bahasa-sunda",
+      "name": "Bahasa Sunda"
     }
   ],
   "tp": [
