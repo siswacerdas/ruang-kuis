@@ -8,6 +8,8 @@ export type SubjectKey =
   | 'matematika'
   | 'al-islam'
   | 'bahasa-inggris'
+  | 'kemuhammadiyahan'
+  | 'bahasa-sunda'
 
 export interface LearningObjective {
   id?: string

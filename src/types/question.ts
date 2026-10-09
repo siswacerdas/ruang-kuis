@@ -8,6 +8,8 @@ export type SubjectKey =
   | 'matematika'
   | 'al-islam'
   | 'bahasa-inggris'
+  | 'kemuhammadiyahan'
+  | 'bahasa-sunda'
 
 export interface Subject {
   key: SubjectKey
@@ -26,6 +28,8 @@ export const SUBJECTS: Subject[] = [
   { key: 'matematika', name: 'Matematika', shortName: 'MTK', color: 'blue', icon: '🔢' },
   { key: 'al-islam', name: 'Al-Islam', shortName: 'AI', color: 'teal', icon: '☪' },
   { key: 'bahasa-inggris', name: 'Bahasa Inggris', shortName: 'ENG', color: 'indigo', icon: '🔤' },
+  { key: 'kemuhammadiyahan', name: 'Kemuhammadiyahan', shortName: 'KM', color: 'green', icon: '🕌' },
+  { key: 'bahasa-sunda', name: 'Bahasa Sunda', shortName: 'BS', color: 'orange', icon: '🗣️' },
 ]
 
 export function getSubject(key: string): Subject | undefined {
