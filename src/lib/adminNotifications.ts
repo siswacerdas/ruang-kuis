@@ -112,29 +112,73 @@ export async function dismissAllNotifications(ids: string[]): Promise<void> {
 }
 
 /**
- * Subscribe jumlah pending parent requests (untuk badge nav).
+ * Satu listener bersama per jenis hitungan (bukan satu per komponen/halaman).
+ *
+ * Sebelumnya Layout + lonceng + Dashboard masing-masing membuka listener ke SELURUH koleksi,
+ * dibuat ulang setiap pindah halaman. Sekarang: query difilter di server, semua komponen berbagi
+ * satu listener, dan listener ditahan 60 detik setelah komponen terakhir lepas supaya pindah
+ * halaman tidak memulai ulang (dan menagih ulang) pembacaan.
  */
-export function subscribePendingParentCount(onCount: (n: number) => void): Unsubscribe {
-  return onSnapshot(
-    collection(db, 'parentRequests'),
-    (snap) => {
-      const n = snap.docs.filter((d) => d.data().status === 'pending').length
-      onCount(n)
-    },
-    () => onCount(0)
-  )
+const HUB_GRACE_MS = 60_000
+
+function createCountHub(start: (emit: (n: number) => void, fail: () => void) => Unsubscribe) {
+  const listeners = new Set<(n: number) => void>()
+  let last: number | null = null
+  let unsub: Unsubscribe | null = null
+  let timer: ReturnType<typeof setTimeout> | null = null
+
+  const stop = () => {
+    if (timer) clearTimeout(timer)
+    timer = null
+    unsub?.()
+    unsub = null
+    last = null
+  }
+
+  return (onCount: (n: number) => void): Unsubscribe => {
+    listeners.add(onCount)
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
+    if (last !== null) onCount(last)
+    if (!unsub) {
+      unsub = start(
+        (n) => {
+          last = n
+          listeners.forEach((l) => l(n))
+        },
+        () => {
+          // listener mati (mis. logout / izin ditolak): kosongkan agar bisa dimulai ulang
+          unsub = null
+          last = null
+          listeners.forEach((l) => l(0))
+        }
+      )
+    }
+    return () => {
+      listeners.delete(onCount)
+      if (listeners.size === 0 && !timer) {
+        timer = setTimeout(stop, HUB_GRACE_MS)
+      }
+    }
+  }
 }
 
-/**
- * Subscribe jumlah notifikasi unread (untuk badge lonceng real-time).
- */
-export function subscribeUnreadNotifCount(onCount: (n: number) => void): Unsubscribe {
-  return onSnapshot(
-    collection(db, 'adminNotifications'),
-    (snap) => {
-      const n = snap.docs.filter((d) => d.data().read === false).length
-      onCount(n)
-    },
-    () => onCount(0)
+/** Jumlah pengajuan ortu berstatus pending (badge nav). */
+export const subscribePendingParentCount = createCountHub((emit, fail) =>
+  onSnapshot(
+    query(collection(db, 'parentRequests'), where('status', '==', 'pending')),
+    (snap) => emit(snap.size),
+    () => fail()
   )
-}
+)
+
+/** Jumlah notifikasi belum dibaca (badge lonceng real-time). */
+export const subscribeUnreadNotifCount = createCountHub((emit, fail) =>
+  onSnapshot(
+    query(collection(db, 'adminNotifications'), where('read', '==', false)),
+    (snap) => emit(snap.size),
+    () => fail()
+  )
+)

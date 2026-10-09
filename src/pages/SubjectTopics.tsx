@@ -17,6 +17,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom'
 import Layout from '../components/Layout'
 import { getSubject, type Topic, type SubjectKey } from '../types/question'
 import type { BookMaterial, LearningObjective } from '../types/tp'
+import { countDocs } from '../lib/serverCounts'
 
 /**
  * Daftar materi bank soal per mapel — layout master–detail.
@@ -93,11 +94,26 @@ export default function SubjectTopics() {
 
       const counts: Record<string, number> = {}
       if (withMissing.length > 0) {
-        const qSnap = await getDocs(query(collection(db, 'questions'), where('subjectKey', '==', subjectKey)))
-        qSnap.docs.forEach((d) => {
-          const tid = d.data().topicId as string
-          counts[tid] = (counts[tid] || 0) + 1
-        })
+        try {
+          // Hitung per materi di server (tanpa mengunduh soal beserta gambarnya)
+          const ids = withMissing.map((t) => t.id).filter((id): id is string => !!id)
+          const results = await Promise.all(
+            ids.map((id) => countDocs('questions', where('topicId', '==', id)))
+          )
+          ids.forEach((id, i) => {
+            counts[id] = results[i]
+          })
+        } catch (err) {
+          // Cadangan: cara lama (baca semua soal mapel ini)
+          console.warn('questionCounts fallback', err)
+          const qSnap = await getDocs(
+            query(collection(db, 'questions'), where('subjectKey', '==', subjectKey))
+          )
+          qSnap.docs.forEach((d) => {
+            const tid = d.data().topicId as string
+            counts[tid] = (counts[tid] || 0) + 1
+          })
+        }
       }
       setQuestionCounts(counts)
 

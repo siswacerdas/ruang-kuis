@@ -1,10 +1,21 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore'
+import {
+  average,
+  collection,
+  count,
+  getAggregateFromServer,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+} from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import Layout from '../components/Layout'
 import type { LatihanAttempt } from '../types/question'
 import { subscribePendingParentCount } from '../lib/adminNotifications'
+import { countDocs } from '../lib/serverCounts'
+import { isDummyStudent, type Student } from '../types/student'
 
 function toMillis(v: unknown): number | null {
   if (!v) return null
@@ -151,48 +162,60 @@ export default function Dashboard() {
     const load = async () => {
       setLoading(true)
       try {
-        const [aSnap, qSnap, lSnap, tSnap] = await Promise.all([
-          getDocs(collection(db, 'attempts')).catch(() => null),
-          getDocs(collection(db, 'questions')).catch(() => null),
-          getDocs(collection(db, 'latihan')).catch(() => null),
-          getDocs(collection(db, 'topics')).catch(() => null),
+        // Hitung di server: tidak mengunduh seluruh attempts/questions (berisi gambar & jawaban).
+        const [aggregate, qCount, lCount, tCount, studentsSnap, orderedSnap] = await Promise.all([
+          getAggregateFromServer(collection(db, 'attempts'), {
+            n: count(),
+            avg: average('percent'),
+          }).catch(() => null),
+          countDocs('questions').catch(() => 0),
+          countDocs('latihan').catch(() => 0),
+          countDocs('topics').catch(() => 0),
+          getDocs(collection(db, 'students')).catch(() => null),
+          getDocs(query(collection(db, 'attempts'), orderBy('finishedAt', 'desc'), limit(8))).catch(
+            () => null
+          ),
         ])
 
-        const attempts = aSnap?.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanAttempt)) || []
-        const n = attempts.length
-        const students = new Set(
-          attempts.map((a) => (a.studentName || '').trim().toLowerCase()).filter(Boolean)
-        ).size
-        const avgPercent = n
-          ? Math.round(attempts.reduce((s, a) => s + (a.percent || 0), 0) / n)
-          : 0
+        let n = aggregate ? aggregate.data().n : 0
+        let avgPercent = aggregate ? Math.round(aggregate.data().avg || 0) : 0
+        let recentList: LatihanAttempt[] = orderedSnap
+          ? orderedSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanAttempt))
+          : []
 
-        let recentList = [...attempts]
-        recentList.sort((a, b) => {
-          const ta = toMillis(a.finishedAt) || 0
-          const tb = toMillis(b.finishedAt) || 0
-          return tb - ta
-        })
-        recentList = recentList.slice(0, 8)
-
-        try {
-          const ordered = await getDocs(
-            query(collection(db, 'attempts'), orderBy('finishedAt', 'desc'), limit(8))
-          )
-          if (!ordered.empty) {
-            recentList = ordered.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanAttempt))
+        // Cadangan: bila agregasi / urutan waktu gagal, pakai cara lama (baca semua attempts).
+        if (!aggregate || (recentList.length === 0 && n !== 0)) {
+          const aSnap = await getDocs(collection(db, 'attempts')).catch(() => null)
+          const attempts =
+            aSnap?.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanAttempt)) || []
+          if (!aggregate) {
+            n = attempts.length
+            avgPercent = n
+              ? Math.round(attempts.reduce((sum, a) => sum + (a.percent || 0), 0) / n)
+              : 0
           }
-        } catch {
-          /* keep client sort */
+          if (recentList.length === 0) {
+            recentList = [...attempts]
+              .sort((a, b) => (toMillis(b.finishedAt) || 0) - (toMillis(a.finishedAt) || 0))
+              .slice(0, 8)
+          }
         }
+
+        // "Siswa" = siswa aktif terdaftar (bukan lagi nama unik dari semua pengerjaan).
+        const students = studentsSnap
+          ? studentsSnap.docs.filter((d) => {
+              const data = d.data()
+              return data.active !== false && !isDummyStudent({ id: d.id, ...data } as Student)
+            }).length
+          : 0
 
         setStats({
           attempts: n,
           students,
           avgPercent,
-          questions: qSnap?.size || 0,
-          latihan: lSnap?.size || 0,
-          topics: tSnap?.size || 0,
+          questions: qCount,
+          latihan: lCount,
+          topics: tCount,
         })
         setRecent(recentList)
       } catch (err) {
@@ -206,7 +229,7 @@ export default function Dashboard() {
 
   const metrics = [
     { label: 'Pengerjaan', value: stats.attempts, to: '/laporan' },
-    { label: 'Siswa unik', value: stats.students, to: '/laporan' },
+    { label: 'Siswa', value: stats.students, to: '/daftar-siswa' },
     {
       label: 'Rata-rata skor',
       value: stats.attempts ? `${stats.avgPercent}%` : '—',

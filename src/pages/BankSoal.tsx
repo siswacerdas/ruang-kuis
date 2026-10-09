@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { collection, getDocs } from 'firebase/firestore'
-import { db } from '../lib/firebase'
+import { where } from 'firebase/firestore'
 import { Link } from 'react-router-dom'
+import { countDocs } from '../lib/serverCounts'
 import Layout from '../components/Layout'
-import { SUBJECTS, type SubjectKey } from '../types/question'
+import { SUBJECTS } from '../types/question'
 
 interface SubjectStats {
   topicCount: number
@@ -28,21 +28,19 @@ export default function BankSoal() {
   useEffect(() => {
     const load = async () => {
       try {
-        const topicSnap = await getDocs(collection(db, 'topics'))
-        const questionSnap = await getDocs(collection(db, 'questions'))
-
+        // Hitung per mapel di server — tidak mengunduh semua soal (berisi gambar & kunci jawaban).
+        const entries = await Promise.all(
+          SUBJECTS.map(async (s) => {
+            const [topicCount, questionCount] = await Promise.all([
+              countDocs('topics', where('subjectKey', '==', s.key)),
+              countDocs('questions', where('subjectKey', '==', s.key)),
+            ])
+            return [s.key, { topicCount, questionCount }] as const
+          })
+        )
         const next: Record<string, SubjectStats> = {}
-        SUBJECTS.forEach((s) => {
-          next[s.key] = { topicCount: 0, questionCount: 0 }
-        })
-
-        topicSnap.docs.forEach((d) => {
-          const key = d.data().subjectKey as SubjectKey
-          if (next[key]) next[key].topicCount += 1
-        })
-        questionSnap.docs.forEach((d) => {
-          const key = d.data().subjectKey as SubjectKey
-          if (next[key]) next[key].questionCount += 1
+        entries.forEach(([key, value]) => {
+          next[key] = value
         })
 
         setStats(next)

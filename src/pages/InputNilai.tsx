@@ -4,8 +4,10 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  query,
   serverTimestamp,
   setDoc,
+  where,
   writeBatch,
 } from 'firebase/firestore'
 import Layout from '../components/Layout'
@@ -208,11 +210,38 @@ export default function InputNilai() {
     setScoresLoading(true)
     setError('')
     try {
-      const snap = await getDocs(collection(db, 'assessmentScores'))
-      const all = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as Omit<AssessmentScore, 'id'>),
-      }))
+      // Hanya nilai penilaian ini + penilaian lain dengan mapel yang sama (dipakai catatan AI).
+      // Sebelumnya membaca SELURUH assessmentScores lalu menyaring di browser.
+      const subjectSet = new Set(act.subjectKeys || [])
+      const ids = [
+        act.id,
+        ...activities
+          .filter(
+            (o) =>
+              o.id && o.id !== act.id && (o.subjectKeys || []).some((k) => subjectSet.has(k))
+          )
+          .map((o) => o.id as string),
+      ]
+      let all: AssessmentScore[]
+      try {
+        const chunks: string[][] = []
+        for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30))
+        const snaps = await Promise.all(
+          chunks.map((c) =>
+            getDocs(query(collection(db, 'assessmentScores'), where('activityId', 'in', c)))
+          )
+        )
+        all = snaps.flatMap((sn) =>
+          sn.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AssessmentScore, 'id'>) }))
+        )
+      } catch (err) {
+        console.warn('openScores fallback', err)
+        const snap = await getDocs(collection(db, 'assessmentScores'))
+        all = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<AssessmentScore, 'id'>),
+        }))
+      }
       setAllScores(all)
       const rows = all.filter((s) => s.activityId === act.id)
       const map: Record<string, Record<string, number>> = {}
@@ -379,8 +408,10 @@ export default function InputNilai() {
     if (!confirm(`Hapus penilaian "${act.title}" beserta nilai terkait?`)) return
     setError('')
     try {
-      const snap = await getDocs(collection(db, 'assessmentScores'))
-      const related = snap.docs.filter((d) => (d.data() as AssessmentScore).activityId === act.id)
+      const snap = await getDocs(
+        query(collection(db, 'assessmentScores'), where('activityId', '==', act.id))
+      )
+      const related = snap.docs
       for (let i = 0; i < related.length; i += 400) {
         const batch = writeBatch(db)
         related.slice(i, i + 400).forEach((d) => batch.delete(d.ref))
