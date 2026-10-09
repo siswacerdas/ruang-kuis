@@ -69,7 +69,7 @@ export default function StudentNav() {
 
   return (
     <nav
-      className="fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-gray-100 safe-area-pb"
+      className="fixed bottom-0 inset-x-0 z-30 bg-white border-t border-gray-100 safe-area-pb"
       aria-label="Menu siswa"
     >
       <div className="max-w-6xl mx-auto px-2 sm:px-4">

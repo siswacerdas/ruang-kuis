@@ -366,10 +366,13 @@ export default function KerjakanEntry() {
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-24 space-y-6">
         <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700 text-white p-6 sm:p-8 shadow-sm">
-          <div className="absolute inset-0 opacity-20 pointer-events-none">
-            <div className="absolute -top-10 -right-10 w-48 h-48 bg-white rounded-full blur-3xl" />
-            <div className="absolute bottom-0 left-10 w-40 h-40 bg-indigo-300 rounded-full blur-3xl" />
-          </div>
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                'radial-gradient(circle at 100% 0%, rgba(255,255,255,0.28), transparent 42%), radial-gradient(circle at 8% 120%, rgba(199,210,254,0.4), transparent 42%)',
+            }}
+          />
           <div className="relative z-10 max-w-xl">
             <p className="text-indigo-100 text-xs font-semibold uppercase tracking-wide mb-1">
               Beranda siswa

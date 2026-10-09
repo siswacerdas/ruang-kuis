@@ -203,7 +203,7 @@ export default function Layout({ children, title, subtitle, actions }: LayoutPro
       </aside>
 
       <div className="flex-1 md:pl-64 min-w-0">
-        <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-100">
+        <header className="sticky top-0 z-20 bg-white border-b border-gray-100">
           <div className="px-4 sm:px-6 py-3.5">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">

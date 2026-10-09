@@ -448,12 +448,10 @@ export default function Login() {
         />
         <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/75 via-teal-800/65 to-amber-900/55" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10" />
-        <div className="absolute -bottom-8 -left-8 w-48 h-48 rounded-full bg-emerald-400/10 blur-3xl" />
-        <div className="absolute top-20 right-10 w-32 h-32 rounded-full bg-amber-300/15 blur-2xl" />
 
         <div className="relative z-10 flex flex-col min-h-[320px] lg:min-h-screen px-6 py-8 sm:px-10 lg:px-12 lg:py-12">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center font-bold text-sm shadow-lg">
+            <div className="w-12 h-12 rounded-2xl bg-white/25 border border-white/30 flex items-center justify-center font-bold text-sm shadow-lg">
               RK
             </div>
             <div>
@@ -487,7 +485,7 @@ export default function Login() {
               ].map((item) => (
                 <li
                   key={item.t}
-                  className="rounded-xl bg-white/12 border border-white/20 px-3 py-2.5 backdrop-blur-sm"
+                  className="rounded-xl bg-white/15 border border-white/20 px-3 py-2.5"
                 >
                   <p className="text-xs font-semibold text-white">{item.t}</p>
                   <p className="text-[11px] text-emerald-100/85 mt-0.5">{item.d}</p>
@@ -497,7 +495,7 @@ export default function Login() {
           </div>
 
           <div className="mt-auto pt-4 pb-2">
-            <div className="rounded-2xl bg-black/25 backdrop-blur-md border border-white/15 px-4 py-3.5 max-w-lg">
+            <div className="rounded-2xl bg-black/45 border border-white/15 px-4 py-3.5 max-w-lg">
               <p className="text-[13px] sm:text-sm leading-relaxed text-white/95">
                 “Barangsiapa menempuh jalan untuk mencari ilmu, maka Allah akan mudahkan baginya jalan menuju surga.”
               </p>

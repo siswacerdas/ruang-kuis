@@ -323,8 +323,13 @@ export default function OrtuHome() {
         )}
 
         <section className="relative overflow-hidden rounded-2xl md:rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 text-white shadow-lg shadow-indigo-200/40">
-          <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-white/10 blur-2xl" />
-          <div className="absolute -left-6 bottom-0 w-32 h-32 rounded-full bg-fuchsia-400/20 blur-2xl" />
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background:
+                'radial-gradient(circle at 100% 0%, rgba(255,255,255,0.2), transparent 38%), radial-gradient(circle at 0% 100%, rgba(232,121,249,0.28), transparent 42%)',
+            }}
+          />
           <div className="relative px-5 pt-5 pb-6 sm:px-6 md:px-8 md:py-7">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">

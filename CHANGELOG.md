@@ -8,6 +8,15 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Fixed — HP jadul terasa lambat
+- **Satu berkas JS ~2,2 MB** (xlsx, jsPDF, editor AI, semua halaman) ikut terunduh saat siswa membuka situs. Halaman sekarang dibagi: inti + area siswa, orang tua, atau admin. Materi/AI/PDF baru diunduh saat dibuka.
+- **Cache Hosting salah urut:** aturan `**` menimpa cache aset, jadi JS/CSS (`no-cache`) dicek ulang ke server setiap kali dibuka. File di `/assets/` (nama ber-hash) sekarang `immutable` 1 tahun. `index.html` tetap tidak di-cache. Jangan pindahkan aturan `/assets/**` ke atas aturan `**` — di Firebase header terakhir yang menang.
+- **Kuis:** hitungan waktu tidak lagi menggambar ulang seluruh soal dan menulis `localStorage` setiap detik.
+- **GPU lemah:** `backdrop-filter` di menu bawah / header, dan blur besar di kartu pembuka, diganti warna solid / gradien ringan. Tampilan tetap rapat, scroll lebih ringan.
+- Cek peran login: query siswa dan ortu berjalan bersamaan (bukan antre), hasilnya sama. Pembaruan token Firebase tidak lagi mengosongkan seluruh layar.
+- Foto latar login diperkecil (sekitar 117 KB → 59 KB) tanpa mengganti gambar.
+- Gambar stimulus tetap di Storage. `firebase.ts` tidak lagi mengekspor `storage`; SDK Storage baru diunduh lewat `getAppStorage()` saat guru mengunggah.
+
 ### Fixed — Tampilan kuis mobile & optimasi biaya Firebase
 - **Navigator nomor soal** di `KerjakanQuiz` / `PracticeQuiz`: scroll horizontal (tidak lagi `flex-wrap` yang membuat header tinggi di smartphone).
 - **Teks soal / opsi / stimulus**: `break-words` agar teks panjang tidak merusak layout.

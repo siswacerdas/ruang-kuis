@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import StudentNav from '../components/StudentNav'
 import Layout from '../components/Layout'
@@ -8,7 +8,12 @@ import {
   seedLessonMaterialsFromStatic,
   type LessonPdf,
 } from '../lib/lessonMaterials'
-import MateriBody from './MateriBody'
+
+const MateriBody = lazy(() => import('./MateriBody'))
+
+function MateriBodyFallback() {
+  return <p className="text-sm text-slate-500 py-8 text-center">Memuat materi…</p>
+}
 
 export default function Materi({ audience = 'student' }: { audience?: 'admin' | 'student' }) {
   const [params, setParams] = useSearchParams()
@@ -61,18 +66,20 @@ export default function Materi({ audience = 'student' }: { audience?: 'admin' | 
     const subject = selectedKey ? getSubject(selectedKey as SubjectKey) : undefined
     return (
       <Layout title="Materi" subtitle={subject ? subject.name : 'Materi belajar & PDF per mata pelajaran'}>
-        <MateriBody
-          selectedKey={selectedKey}
-          onSelect={onSelect}
-          audience="admin"
-          materials={materials}
-          loading={loading}
-          notice={notice}
-          error={error}
-          onRefresh={load}
-          onSeed={onSeed}
-          seeding={seeding}
-        />
+        <Suspense fallback={<MateriBodyFallback />}>
+          <MateriBody
+            selectedKey={selectedKey}
+            onSelect={onSelect}
+            audience="admin"
+            materials={materials}
+            loading={loading}
+            notice={notice}
+            error={error}
+            onRefresh={load}
+            onSeed={onSeed}
+            seeding={seeding}
+          />
+        </Suspense>
       </Layout>
     )
   }
@@ -88,18 +95,20 @@ export default function Materi({ audience = 'student' }: { audience?: 'admin' | 
         </div>
       </header>
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-24">
-        <MateriBody
-          selectedKey={selectedKey}
-          onSelect={onSelect}
-          audience="student"
-          materials={materials}
-          loading={loading}
-          notice=""
-          error={error}
-          onRefresh={load}
-          onSeed={() => {}}
-          seeding={false}
-        />
+        <Suspense fallback={<MateriBodyFallback />}>
+          <MateriBody
+            selectedKey={selectedKey}
+            onSelect={onSelect}
+            audience="student"
+            materials={materials}
+            loading={loading}
+            notice=""
+            error={error}
+            onRefresh={load}
+            onSeed={() => {}}
+            seeding={false}
+          />
+        </Suspense>
       </main>
       <StudentNav />
     </div>

@@ -9,8 +9,7 @@
  * (renderer di KerjakanQuiz/PracticeQuiz sudah menerima keduanya).
  */
 
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
-import { storage } from './firebase'
+import { getAppStorage } from './firebase'
 import { compressImageSrc } from './imageCompress'
 
 function randomId(): string {
@@ -56,6 +55,8 @@ export async function ensureStimulusImageStored(
     // lanjut dengan original jika kompres gagal
   }
 
+  const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage')
+  const storage = await getAppStorage()
   const blob = dataUrlToBlob(dataUrl)
   const prefix = (opts?.pathPrefix || 'stimulus').replace(/\/+$/, '')
   const path = `${prefix}/${randomId()}.jpg`
