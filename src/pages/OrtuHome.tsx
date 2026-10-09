@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   collection,
-  doc,
-  getDoc,
   getDocs,
   query,
   where,
@@ -16,6 +14,7 @@ import type { LatihanAttempt } from '../types/question'
 import OrtuLayout from '../components/OrtuLayout'
 import OrtuGuideLightbox from '../components/OrtuGuideLightbox'
 import { PARENT_GUIDE_MAX_LOGINS } from '../types/parent'
+import { getRosterDoc } from '../lib/studentRoster'
 
 type ChildInfo = {
   id: string
@@ -142,7 +141,7 @@ export default function OrtuHome() {
       const kids: ChildInfo[] = []
       for (const id of s.studentIds || []) {
         try {
-          const snap = await getDoc(doc(db, 'students', id))
+          const snap = await getRosterDoc(id)
           if (snap.exists()) {
             const d = snap.data()
             kids.push({

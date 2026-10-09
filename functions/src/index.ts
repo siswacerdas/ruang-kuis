@@ -1,8 +1,8 @@
 import { initializeApp } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getAuth } from 'firebase-admin/auth'
-import { onDocumentCreated } from 'firebase-functions/v2/firestore'
-import { onCall, HttpsError } from 'firebase-functions/v2/https'
+import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore'
+import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https'
 import { defineSecret } from 'firebase-functions/params'
 import { Resend } from 'resend'
 import { logger } from 'firebase-functions'
@@ -12,6 +12,38 @@ const db = getFirestore()
 
 const resendApiKey = defineSecret('RESEND_API_KEY')
 const FROM_EMAIL = process.env.FROM_EMAIL || 'Ruang Kuis <onboarding@resend.dev>'
+
+/**
+ * Daftar email admin/guru. Samakan dengan STAFF_ACCOUNTS (src/lib/loginAccounts.ts)
+ * dan firestore.rules / storage.rules. Bisa ditambah lewat env ADMIN_EMAILS (pisah koma).
+ */
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'arif.azwar79@gmail.com')
+  .split(',')
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean)
+
+/**
+ * Pastikan pemanggil adalah guru/admin — bukan sekadar "sudah login".
+ * Siswa dan orang tua juga punya akun Firebase Auth, jadi cek login saja tidak cukup.
+ * Lolos jika: custom claim admin=true, email ada di ADMIN_EMAILS, atau ada dokumen
+ * aktif di koleksi `staff` dengan email yang sama.
+ */
+async function assertAdmin(request: CallableRequest): Promise<void> {
+  const auth = request.auth
+  if (!auth?.uid) {
+    throw new HttpsError('unauthenticated', 'Harus login sebagai guru/admin')
+  }
+  const token = auth.token as { admin?: boolean; email?: string }
+  if (token.admin === true) return
+  const email = String(token.email || '').trim().toLowerCase()
+  if (email && ADMIN_EMAILS.includes(email)) return
+  if (email) {
+    const snap = await db.collection('staff').where('email', '==', email).limit(5).get()
+    if (snap.docs.some((d) => d.data().active !== false)) return
+  }
+  logger.warn('assertAdmin ditolak', { uid: auth.uid, email })
+  throw new HttpsError('permission-denied', 'Hanya guru/admin yang boleh melakukan ini')
+}
 
 /** Batas karakter deskripsi TP di email (agar tidak terlalu panjang). */
 const TP_LABEL_MAX = 90
@@ -334,9 +366,7 @@ export const syncStudentPasswordsToNisn = onCall(
     ],
   },
   async (request) => {
-    if (!request.auth?.uid) {
-      throw new HttpsError('unauthenticated', 'Harus login sebagai guru/admin')
-    }
+    await assertAdmin(request)
 
     const authAdmin = getAuth()
     // Ambil semua siswa; filter active di kode (field active bisa absen di dokumen lama)
@@ -414,9 +444,7 @@ export const resetParentPassword = onCall(
     ],
   },
   async (request) => {
-    if (!request.auth?.uid) {
-      throw new HttpsError('unauthenticated', 'Harus login sebagai guru/admin')
-    }
+    await assertAdmin(request)
 
     const email = String(request.data?.email || '')
       .trim()
@@ -461,5 +489,92 @@ export const resetParentPassword = onCall(
 
     logger.info('resetParentPassword ok', { email, uid })
     return { ok: true }
+  }
+)
+
+
+/* ========== Roster siswa (data publik minimal) ==========
+ * Koleksi `students` berisi NISN (= password login) dan email orang tua, jadi TIDAK
+ * boleh dibaca publik. Halaman login & pendaftaran ortu hanya butuh nama/kelas/email login,
+ * yang disalin otomatis ke `studentRoster` (aman dibaca publik). Salinan ini dibuat oleh
+ * fungsi di bawah (Admin SDK), klien tidak boleh menulisnya.
+ */
+type RosterDoc = {
+  fullName: string
+  nickname: string
+  email: string
+  className: string
+  active: boolean
+  isDummy: boolean
+}
+
+function toRoster(data: FirebaseFirestore.DocumentData): RosterDoc {
+  return {
+    fullName: String(data.fullName || ''),
+    nickname: String(data.nickname || ''),
+    email: String(data.email || '').trim().toLowerCase(),
+    className: String(data.className || '5A'),
+    active: data.active !== false,
+    isDummy: data.isDummy === true,
+  }
+}
+
+export const syncStudentRoster = onDocumentWritten(
+  { document: 'students/{studentId}', region: 'asia-southeast2' },
+  async (event) => {
+    const ref = db.collection('studentRoster').doc(event.params.studentId)
+    const after = event.data?.after
+    if (!after?.exists) {
+      await ref.delete().catch(() => undefined)
+      return
+    }
+    await ref.set(toRoster(after.data() || {}))
+  }
+)
+
+/** Salin ulang semua siswa ke roster (jalankan sekali setelah deploy, dari Daftar Siswa / console). */
+export const backfillStudentRoster = onCall(
+  {
+    region: 'asia-southeast2',
+    invoker: 'public',
+    cors: [
+      'https://ruang-kuis.web.app',
+      'https://ruang-kuis.firebaseapp.com',
+      'http://localhost:5173',
+      'http://localhost:4173',
+      'http://127.0.0.1:5173',
+    ],
+  },
+  async (request) => {
+    await assertAdmin(request)
+    const [students, roster] = await Promise.all([
+      db.collection('students').get(),
+      db.collection('studentRoster').get(),
+    ])
+    const live = new Set(students.docs.map((d) => d.id))
+    let written = 0
+    let removed = 0
+    let batch = db.batch()
+    let n = 0
+    const flush = async () => {
+      if (n > 0) await batch.commit()
+      batch = db.batch()
+      n = 0
+    }
+    for (const d of students.docs) {
+      batch.set(db.collection('studentRoster').doc(d.id), toRoster(d.data()))
+      written++
+      if (++n >= 400) await flush()
+    }
+    for (const d of roster.docs) {
+      if (!live.has(d.id)) {
+        batch.delete(d.ref)
+        removed++
+        if (++n >= 400) await flush()
+      }
+    }
+    await flush()
+    logger.info('backfillStudentRoster', { written, removed })
+    return { written, removed }
   }
 )

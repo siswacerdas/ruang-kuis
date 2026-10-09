@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   collection,
-  doc,
-  getDoc,
   getDocs,
   addDoc,
   query,
@@ -22,6 +20,7 @@ import {
 } from '../types/question'
 import { PRACTICE_COUNTS, type PracticeCount } from '../types/practice'
 import OrtuLayout from '../components/OrtuLayout'
+import { getRosterDoc } from '../lib/studentRoster'
 
 type ChildInfo = { id: string; fullName: string; className?: string }
 
@@ -77,7 +76,7 @@ export default function OrtuBuatKuis() {
       const kids: ChildInfo[] = []
       for (const id of s.studentIds || []) {
         try {
-          const snap = await getDoc(doc(db, 'students', id))
+          const snap = await getRosterDoc(id)
           if (snap.exists()) {
             const d = snap.data()
             kids.push({

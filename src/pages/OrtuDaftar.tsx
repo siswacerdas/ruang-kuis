@@ -3,9 +3,6 @@ import { Link } from 'react-router-dom'
 import {
   addDoc,
   collection,
-  getDocs,
-  query,
-  orderBy,
   serverTimestamp,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
@@ -16,6 +13,7 @@ import {
   type ParentRequest,
 } from '../types/parent'
 import { isConfiguredStaffEmail } from '../lib/loginAccounts'
+import { getRosterSnapshot } from '../lib/studentRoster'
 
 /**
  * Form pengajuan akun orang tua (publik, tanpa login).
@@ -47,12 +45,7 @@ export default function OrtuDaftar() {
     ;(async () => {
       setLoadingStudents(true)
       try {
-        let snap
-        try {
-          snap = await getDocs(query(collection(db, 'students'), orderBy('fullName', 'asc')))
-        } catch {
-          snap = await getDocs(collection(db, 'students'))
-        }
+        const snap = await getRosterSnapshot()
         if (cancelled) return
         const list = snap.docs
           .map((d) => ({ id: d.id, ...d.data() } as Student))

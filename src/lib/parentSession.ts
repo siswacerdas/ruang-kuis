@@ -35,6 +35,20 @@ export function clearParentSession(): void {
 }
 
 /**
+ * Cari dokumen orang tua milik akun yang sedang login.
+ * Utama: authUid (sesuai firestore.rules); cadangan: email (data lama tanpa authUid).
+ */
+export async function queryParentDocs(uid: string, email: string) {
+  try {
+    const byUid = await getDocs(query(collection(db, 'parents'), where('authUid', '==', uid)))
+    if (!byUid.empty) return byUid
+  } catch {
+    /* lanjut ke email */
+  }
+  return getDocs(query(collection(db, 'parents'), where('email', '==', email)))
+}
+
+/**
  * Naikkan loginCount di Firestore sekali per sesi browser (bukan tiap navigasi).
  * Dipakai untuk lightbox panduan (tampil sampai 3 login).
  */
@@ -118,9 +132,7 @@ export async function ensureParentSession(): Promise<ParentSession | null> {
       /* private mode */
     }
     try {
-      const snap = await getDocs(
-        query(collection(db, 'parents'), where('email', '==', email))
-      )
+      const snap = await queryParentDocs(user.uid, email)
       if (!snap.empty) {
         const d = snap.docs[0]
         const data = d.data() as Parent
@@ -147,9 +159,7 @@ export async function ensureParentSession(): Promise<ParentSession | null> {
   if (existing) clearParentSession()
 
   try {
-    const snap = await getDocs(
-      query(collection(db, 'parents'), where('email', '==', email))
-    )
+    const snap = await queryParentDocs(user.uid, email)
     if (snap.empty) return null
 
     const d = snap.docs[0]

@@ -2,27 +2,44 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isAdmin() {
+    // ---------------------------------------------------------------
+    // Peran
+    //   admin     : guru/admin sekolah (custom claim `admin` ATAU email di daftar bawah)
+    //   signedIn  : akun Firebase Auth apa pun (siswa, orang tua, guru)
+    //   publik    : tanpa login
+    //
+    // PENTING: siswa & orang tua juga punya akun Auth, jadi "sudah login" BUKAN admin.
+    // Daftar email di bawah harus sama dengan STAFF_ACCOUNTS (src/lib/loginAccounts.ts),
+    // ADMIN_EMAILS (functions/src/index.ts) dan storage.rules.
+    // ---------------------------------------------------------------
+    function isSignedIn() {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return request.auth != null
+        && (request.auth.token.admin == true
+            || request.auth.token.email in ['arif.azwar79@gmail.com']);
+    }
+
+    // --- Konten kuis ---
     match /topics/{topicId} {
-      allow read: if true;
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
     match /questions/{questionId} {
-      allow read: if true;
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
     match /latihan/{latihanId} {
-      allow read: if true;
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
     match /attempts/{attemptId} {
-      allow create: if true
+      allow create: if isSignedIn()
         && request.resource.data.keys().hasAll([
              'latihanId', 'studentName', 'answers', 'score', 'total', 'percent'
            ])
@@ -30,14 +47,21 @@ service cloud.firestore {
         && request.resource.data.studentName.size() > 0
         && request.resource.data.studentName.size() < 120
         && request.resource.data.score is number
-        && request.resource.data.total is number;
-      allow read: if isAdmin();
+        && request.resource.data.total is number
+        && request.resource.data.percent is number
+        && request.resource.data.percent >= 0
+        && request.resource.data.percent <= 100
+        && request.resource.data.score >= 0
+        && request.resource.data.score <= request.resource.data.total
+        && request.resource.data.total <= 300;
+      // siswa & ortu membaca riwayat / peringkat (dibatasi ketat di tahap berikutnya)
+      allow read: if isSignedIn();
       allow update, delete: if isAdmin();
     }
 
     match /practiceSessions/{sessionId} {
-      allow read: if isAdmin();
-      allow create: if isAdmin()
+      allow read: if isSignedIn();
+      allow create: if isSignedIn()
         && request.resource.data.keys().hasAll([
              'studentId', 'studentName', 'subjectKey', 'questionIds', 'status'
            ])
@@ -45,26 +69,36 @@ service cloud.firestore {
         && request.resource.data.questionIds is list
         && request.resource.data.questionIds.size() >= 1
         && request.resource.data.questionIds.size() <= 20;
-      allow update, delete: if isAdmin();
+      allow update, delete: if isSignedIn();
     }
 
     match /practiceAttempts/{attemptId} {
-      allow create: if isAdmin()
+      allow create: if isSignedIn()
         && request.resource.data.keys().hasAll([
              'studentId', 'studentName', 'subjectKey', 'answers', 'score', 'total', 'percent', 'title'
            ])
         && request.resource.data.studentName is string
         && request.resource.data.score is number
         && request.resource.data.total is number;
-      allow read: if isAdmin();
+      allow read: if isSignedIn();
       allow update, delete: if isAdmin();
     }
 
+    // --- Data siswa ---
+    // Berisi NISN (= password login) & email ortu: HANYA admin.
+    // Halaman login / portal ortu memakai salinan minimal `studentRoster`.
     match /students/{studentId} {
-      allow read: if true;
-      allow write: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
+    // Salinan publik minimal (nama, kelas, email login). Ditulis oleh Cloud Function
+    // `syncStudentRoster` (Admin SDK, tidak terkena rules) — klien tidak boleh menulis.
+    match /studentRoster/{studentId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // --- Kurikulum / materi ---
     match /learningObjectives/{tpId} {
       allow read: if true;
       allow write: if isAdmin();
@@ -88,8 +122,9 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // --- Orang tua (Fase A) ---
+    // --- Orang tua ---
     match /parentRequests/{requestId} {
+      // Formulir publik (belum punya akun)
       allow create: if request.resource.data.keys().hasAll([
              'fullName', 'whatsapp', 'email', 'studentIds', 'studentNames', 'status'
            ])
@@ -105,19 +140,36 @@ service cloud.firestore {
     }
 
     match /parents/{parentId} {
+      // Admin, atau orang tua yang membaca dokumennya sendiri
+      // (query where authUid == uid, atau where email == email login).
       allow read: if isAdmin()
-        || (request.auth != null
-            && resource.data.authUid == request.auth.uid);
-      allow create, update, delete: if isAdmin();
+        || (isSignedIn()
+            && (resource.data.authUid == request.auth.uid
+                || resource.data.email == request.auth.token.email));
+      allow create, delete: if isAdmin();
+      // Orang tua hanya boleh memperbarui penghitung login miliknya sendiri
+      allow update: if isAdmin()
+        || (isSignedIn()
+            && resource.data.authUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['loginCount', 'lastLoginAt', 'updatedAt']));
     }
 
     match /adminNotifications/{notifId} {
-      allow create: if true;
+      // Dibuat siswa (selesai kuis) & formulir publik ortu; dibaca/dihapus hanya admin
+      allow create: if request.resource.data.type is string
+        && request.resource.data.title is string
+        && request.resource.data.title.size() < 300
+        && request.resource.data.body is string
+        && request.resource.data.body.size() < 1000
+        && request.resource.data.read == false;
       allow read, update, delete: if isAdmin();
     }
 
     match /parentPasswordResets/{resetId} {
-      allow create: if true;
+      allow create: if request.resource.data.status == 'pending'
+        && request.resource.data.email is string
+        && request.resource.data.email.size() < 150;
       allow read, update, delete: if isAdmin();
     }
 

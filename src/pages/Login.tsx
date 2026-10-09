@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore'
+import { collection, getDocs, query, where } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 import { clearStudentSession, setStudentSession } from '../lib/studentSession'
 import { clearParentSession, ensureParentSession, setParentSession } from '../lib/parentSession'
 import { STAFF_ACCOUNTS, roleLabel, type NamedAccount } from '../lib/loginAccounts'
 import { isDummyStudent, type Student } from '../types/student'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
+import { getRosterSnapshot } from '../lib/studentRoster'
 
 type TabKey = 'siswa' | 'guru' | 'ortu' | 'tes'
 
@@ -172,12 +173,7 @@ export default function Login() {
       setLoadingStudents(true)
       setError('')
       try {
-        let snap
-        try {
-          snap = await getDocs(query(collection(db, 'students'), orderBy('fullName', 'asc')))
-        } catch {
-          snap = await getDocs(collection(db, 'students'))
-        }
+        const snap = await getRosterSnapshot()
         if (cancelled) return
         const all = snap.docs
           .map((d) => ({ id: d.id, ...d.data() } as Student))

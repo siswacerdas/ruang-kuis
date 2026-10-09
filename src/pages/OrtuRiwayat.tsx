@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore'
+import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { ensureParentSession } from '../lib/parentSession'
 import type { ParentSession } from '../types/parent'
 import type { LatihanAttempt } from '../types/question'
 import OrtuLayout from '../components/OrtuLayout'
+import { getRosterDoc } from '../lib/studentRoster'
 
 type ChildInfo = { id: string; fullName: string; className?: string }
 
@@ -195,7 +196,7 @@ export default function OrtuRiwayat() {
       const kids: ChildInfo[] = []
       for (const id of s.studentIds || []) {
         try {
-          const snap = await getDoc(doc(db, 'students', id))
+          const snap = await getRosterDoc(id)
           if (snap.exists()) {
             const d = snap.data()
             kids.push({

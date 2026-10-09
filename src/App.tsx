@@ -1,9 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
-import { collection, getDocs, query, where } from 'firebase/firestore'
-import { auth, db } from './lib/firebase'
+import { auth } from './lib/firebase'
 import { isStaffEmail } from './lib/loginAccounts'
+import { getRosterByEmail } from './lib/studentRoster'
+import { queryParentDocs } from './lib/parentSession'
 import Login from './pages/Login'
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const BankSoal = lazy(() => import('./pages/BankSoal'))
@@ -48,6 +49,7 @@ function PageFallback() {
 
 function App() {
   const [user, setUser] = useState<any>(null)
+  const [isStaff, setIsStaff] = useState(false)
   const [isStudent, setIsStudent] = useState(false)
   const [isParent, setIsParent] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -60,22 +62,25 @@ function App() {
         const email = currentUser.email.toLowerCase()
         try {
           const staff = await isStaffEmail(email)
+          setIsStaff(staff)
           if (staff) {
             setIsStudent(false)
             setIsParent(false)
           } else {
             const [studentSnap, parentSnap] = await Promise.all([
-              getDocs(query(collection(db, 'students'), where('email', '==', email))),
-              getDocs(query(collection(db, 'parents'), where('email', '==', email))),
+              getRosterByEmail(email),
+              queryParentDocs(currentUser.uid, email),
             ])
             setIsStudent(!studentSnap.empty)
             setIsParent(!parentSnap.empty)
           }
         } catch {
+          setIsStaff(false)
           setIsStudent(false)
           setIsParent(false)
         }
       } else {
+        setIsStaff(false)
         setIsStudent(false)
         setIsParent(false)
       }
@@ -92,7 +97,8 @@ function App() {
     )
   }
 
-  const isAdmin = !!user && !isStudent && !isParent
+  // Admin hanya jika terdaftar sebagai staff — bukan sekadar "bukan siswa/ortu" (gagal baca ≠ admin).
+  const isAdmin = !!user && isStaff && !isStudent && !isParent
 
   const loginRedirect = isAdmin ? <Navigate to="/dashboard" replace /> : <Login />
 

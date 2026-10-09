@@ -1,14 +1,18 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Stimulus images for questions — public read (siswa perlu melihat saat kuis)
-    // Write hanya user yang sudah login (guru/admin)
+    // Gambar stimulus soal — baca publik (siswa perlu melihat saat kuis).
+    // Tulis/hapus hanya admin (daftar email sama dengan firestore.rules).
     match /stimulus/{allPaths=**} {
       allow read: if true;
       allow write: if request.auth != null
+        && (request.auth.token.admin == true
+            || request.auth.token.email in ['arif.azwar79@gmail.com'])
         && request.resource.size < 2 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
-      allow delete: if request.auth != null;
+      allow delete: if request.auth != null
+        && (request.auth.token.admin == true
+            || request.auth.token.email in ['arif.azwar79@gmail.com']);
     }
 
     match /{allPaths=**} {

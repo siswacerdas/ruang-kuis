@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth'
-import { collection, getDocs, query, orderBy } from 'firebase/firestore'
-import { auth, db } from '../lib/firebase'
+import { auth } from '../lib/firebase'
 import { clearStudentSession, setStudentSession } from '../lib/studentSession'
 import { clearParentSession } from '../lib/parentSession'
 import { useNavigate, Link } from 'react-router-dom'
 import { isDummyStudent, type Student } from '../types/student'
+import { getRosterSnapshot } from '../lib/studentRoster'
 
 export default function SiswaLogin() {
   const navigate = useNavigate()
@@ -44,12 +44,7 @@ export default function SiswaLogin() {
     setLoadingList(true)
     setError('')
     try {
-      let snap
-      try {
-        snap = await getDocs(query(collection(db, 'students'), orderBy('fullName', 'asc')))
-      } catch {
-        snap = await getDocs(collection(db, 'students'))
-      }
+      const snap = await getRosterSnapshot()
       const list = snap.docs
         .map((d) => ({ id: d.id, ...d.data() } as Student))
         .filter((s) => s.active !== false && !isDummyStudent(s))

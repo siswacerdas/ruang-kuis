@@ -1,5 +1,5 @@
-import { collection, getDocs, query, where } from 'firebase/firestore'
-import { auth, db } from './firebase'
+import { auth } from './firebase'
+import { getRosterByEmail } from './studentRoster'
 
 export interface StudentSession {
   studentId: string
@@ -81,9 +81,7 @@ export async function ensureStudentSession(): Promise<StudentSession | null> {
   if (existing) clearStudentSession()
 
   try {
-    const snap = await getDocs(
-      query(collection(db, 'students'), where('email', '==', email))
-    )
+    const snap = await getRosterByEmail(email)
     if (snap.empty) return null
 
     const d = snap.docs[0]
