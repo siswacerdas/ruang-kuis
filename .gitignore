@@ -30,3 +30,6 @@ dist-ssr
 
 # Firebase CLI cache (hosting.*.cache grows on every deploy)
 .firebase/
+
+# cadangan migrasi gambar
+scripts/backup-stimulus-*.json

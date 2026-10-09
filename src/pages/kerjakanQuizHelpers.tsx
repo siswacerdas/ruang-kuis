@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef } from 'react'
 
 export function sanitizeStimulusHtml(html: string): string {
   if (!html) return ''
@@ -30,8 +30,9 @@ export function sanitizeStimulusHtml(html: string): string {
   }
 }
 
-export function StimulusBlock({ html }: { html: string }) {
+export const StimulusBlock = memo(function StimulusBlock({ html }: { html: string }) {
   const ref = useRef<HTMLDivElement>(null)
+  const safeHtml = useMemo(() => sanitizeStimulusHtml(html), [html])
   useEffect(() => {
     const root = ref.current
     if (!root) return
@@ -62,10 +63,10 @@ export function StimulusBlock({ html }: { html: string }) {
     <div
       ref={ref}
       className="px-4 py-3 text-sm text-gray-700 leading-relaxed break-words"
-      dangerouslySetInnerHTML={{ __html: sanitizeStimulusHtml(html) }}
+      dangerouslySetInnerHTML={{ __html: safeHtml }}
     />
   )
-}
+})
 
 export interface Session {
   latihanId: string

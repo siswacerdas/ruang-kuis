@@ -1,42 +1,50 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { auth, db } from './lib/firebase'
 import { isStaffEmail } from './lib/loginAccounts'
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import BankSoal from './pages/BankSoal'
-import SubjectTopics from './pages/SubjectTopics'
-import TopicQuestions from './pages/TopicQuestions'
-import LatihanSoal from './pages/LatihanSoal'
-import LatihanForm from './pages/LatihanForm'
-import LatihanHasil from './pages/LatihanHasil'
-import Laporan from './pages/Laporan'
-import SiswaList from './pages/SiswaList'
-import TujuanPembelajaran from './pages/TujuanPembelajaran'
-import InputNilai from './pages/InputNilai'
-import RekapNilai from './pages/RekapNilai'
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const BankSoal = lazy(() => import('./pages/BankSoal'))
+const SubjectTopics = lazy(() => import('./pages/SubjectTopics'))
+const TopicQuestions = lazy(() => import('./pages/TopicQuestions'))
+const LatihanSoal = lazy(() => import('./pages/LatihanSoal'))
+const LatihanForm = lazy(() => import('./pages/LatihanForm'))
+const LatihanHasil = lazy(() => import('./pages/LatihanHasil'))
+const Laporan = lazy(() => import('./pages/Laporan'))
+const SiswaList = lazy(() => import('./pages/SiswaList'))
+const TujuanPembelajaran = lazy(() => import('./pages/TujuanPembelajaran'))
+const InputNilai = lazy(() => import('./pages/InputNilai'))
+const RekapNilai = lazy(() => import('./pages/RekapNilai'))
 import SiswaLogin from './pages/SiswaLogin'
 import KerjakanEntry from './pages/KerjakanEntry'
-import KerjakanQuiz from './pages/KerjakanQuiz'
-import KerjakanResult from './pages/KerjakanResult'
-import KerjakanRiwayat from './pages/KerjakanRiwayat'
-import Peringkat from './pages/Peringkat'
-import SiswaPeringkat from './pages/SiswaPeringkat'
-import Materi from './pages/Materi'
-import PracticeSetup from './pages/PracticeSetup'
-import PracticeQuiz from './pages/PracticeQuiz'
-import PracticeResult from './pages/PracticeResult'
-import OrtuDaftar from './pages/OrtuDaftar'
-import AdminPengajuanOrtu from './pages/AdminPengajuanOrtu'
-import AdminParents from './pages/AdminParents'
-import OrtuLupaPassword from './pages/OrtuLupaPassword'
-import OrtuHome from './pages/OrtuHome'
-import OrtuRiwayat from './pages/OrtuRiwayat'
-import OrtuNilai from './pages/OrtuNilai'
-import OrtuPeringkat from './pages/OrtuPeringkat'
-import OrtuBuatKuis from './pages/OrtuBuatKuis'
+const KerjakanQuiz = lazy(() => import('./pages/KerjakanQuiz'))
+const KerjakanResult = lazy(() => import('./pages/KerjakanResult'))
+const KerjakanRiwayat = lazy(() => import('./pages/KerjakanRiwayat'))
+const Peringkat = lazy(() => import('./pages/Peringkat'))
+const SiswaPeringkat = lazy(() => import('./pages/SiswaPeringkat'))
+const Materi = lazy(() => import('./pages/Materi'))
+const PracticeSetup = lazy(() => import('./pages/PracticeSetup'))
+const PracticeQuiz = lazy(() => import('./pages/PracticeQuiz'))
+const PracticeResult = lazy(() => import('./pages/PracticeResult'))
+const OrtuDaftar = lazy(() => import('./pages/OrtuDaftar'))
+const AdminPengajuanOrtu = lazy(() => import('./pages/AdminPengajuanOrtu'))
+const AdminParents = lazy(() => import('./pages/AdminParents'))
+const OrtuLupaPassword = lazy(() => import('./pages/OrtuLupaPassword'))
+const OrtuHome = lazy(() => import('./pages/OrtuHome'))
+const OrtuRiwayat = lazy(() => import('./pages/OrtuRiwayat'))
+const OrtuNilai = lazy(() => import('./pages/OrtuNilai'))
+const OrtuPeringkat = lazy(() => import('./pages/OrtuPeringkat'))
+const OrtuBuatKuis = lazy(() => import('./pages/OrtuBuatKuis'))
+
+function PageFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#F5F6FA]">
+      <p className="text-gray-500 text-sm">Memuat...</p>
+    </div>
+  )
+}
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -56,12 +64,10 @@ function App() {
             setIsStudent(false)
             setIsParent(false)
           } else {
-            const studentSnap = await getDocs(
-              query(collection(db, 'students'), where('email', '==', email))
-            )
-            const parentSnap = await getDocs(
-              query(collection(db, 'parents'), where('email', '==', email))
-            )
+            const [studentSnap, parentSnap] = await Promise.all([
+              getDocs(query(collection(db, 'students'), where('email', '==', email))),
+              getDocs(query(collection(db, 'parents'), where('email', '==', email))),
+            ])
             setIsStudent(!studentSnap.empty)
             setIsParent(!parentSnap.empty)
           }
@@ -102,6 +108,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <Suspense fallback={<PageFallback />}>
       <Routes>
         <Route path="/kerjakan" element={<SiswaLogin />} />
         <Route path="/siswa" element={<KerjakanEntry />} />
@@ -173,6 +180,7 @@ function App() {
         <Route path="/questions" element={<Navigate to="/bank-soal" replace />} />
         <Route path="/" element={homeRedirect} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }

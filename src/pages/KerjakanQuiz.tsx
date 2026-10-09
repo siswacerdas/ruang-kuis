@@ -30,6 +30,54 @@ import {
 import { notifyAdminStudentAttempt } from '../lib/notifyAdmin'
 import { StimulusBlock, optionOrder, type Session } from './kerjakanQuizHelpers'
 
+function formatTime(sec: number) {
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+/**
+ * Hitung mundur berbasis tenggat absolut (Date.now), bukan "kurangi 1 tiap detik":
+ * tetap akurat walau layar HP mati / tab di latar belakang (timer browser ditahan).
+ * State detik hanya ada di sini, jadi hanya angka timer yang render ulang tiap detik.
+ */
+function QuizTimer({ deadlineAt, onExpire }: { deadlineAt: number; onExpire: () => void }) {
+  const calc = () => Math.max(0, Math.ceil((deadlineAt - Date.now()) / 1000))
+  const [left, setLeft] = useState(calc)
+  const expiredRef = useRef(false)
+  const onExpireRef = useRef(onExpire)
+  onExpireRef.current = onExpire
+
+  useEffect(() => {
+    expiredRef.current = false
+    const tick = () => {
+      const v = calc()
+      setLeft((prev) => (prev === v ? prev : v))
+      if (v <= 0 && !expiredRef.current) {
+        expiredRef.current = true
+        // jeda singkat: pastikan submitQuizRef sudah terisi (mis. tenggat sudah lewat saat resume)
+        setTimeout(() => onExpireRef.current(), 300)
+      }
+    }
+    tick()
+    const t = setInterval(tick, 1000)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') tick()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(t)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [deadlineAt])
+
+  return (
+    <span className={`text-sm font-mono font-semibold ${left < 60 ? 'text-red-600' : 'text-gray-700'}`}>
+      {formatTime(left)}
+    </span>
+  )
+}
+
 export default function KerjakanQuiz() {
   const { latihanId } = useParams<{ latihanId: string }>()
   const navigate = useNavigate()
@@ -46,7 +94,8 @@ export default function KerjakanQuiz() {
   const startedAt = useRef(Date.now())
   const questionStarted = useRef(Date.now())
   const timePerQ = useRef<Record<string, number>>({})
-  const [timeLeft, setTimeLeft] = useState<number | null>(null)
+  // Batas waktu absolut (ms). Hitungan mundur ada di <QuizTimer> agar halaman kuis tidak render ulang tiap detik.
+  const [deadlineAt, setDeadlineAt] = useState<number | null>(null)
   const [lightbox, setLightbox] = useState<{ img?: string; text?: string } | null>(null)
   const [lbScale, setLbScale] = useState(1)
   const submitQuizRef = useRef<((auto?: boolean) => Promise<void>) | null>(null)
@@ -117,12 +166,15 @@ export default function KerjakanQuiz() {
       const chunks: string[][] = []
       for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30))
       const all: Question[] = []
-      for (const chunk of chunks) {
-        const qSnap = await getDocs(
-          query(collection(db, 'questions'), where(documentId(), 'in', chunk))
+      // paralel: tidak menunggu satu potongan selesai baru minta potongan berikutnya
+      const qSnaps = await Promise.all(
+        chunks.map((chunk) =>
+          getDocs(query(collection(db, 'questions'), where(documentId(), 'in', chunk)))
         )
+      )
+      qSnaps.forEach((qSnap) =>
         qSnap.docs.forEach((d) => all.push({ id: d.id, ...d.data() } as Question))
-      }
+      )
 
       const byId = new Map(all.map((q) => [q.id!, q]))
       const seed = `${id}:${st?.studentId || st?.studentName || 'x'}`
@@ -154,18 +206,14 @@ export default function KerjakanQuiz() {
         timePerQ.current = saved.timePerQ || {}
         startedAt.current = saved.startedAt || Date.now()
         if (saved.deadlineAt) {
-          const left = Math.max(0, Math.floor((saved.deadlineAt - Date.now()) / 1000))
-          setTimeLeft(left)
-          if (left <= 0) {
-            setTimeout(() => submitQuizRef.current?.(true), 300)
-          }
+          setDeadlineAt(saved.deadlineAt)
         } else if (p.timeLimitMinutes && p.timeLimitMinutes > 0) {
-          setTimeLeft(p.timeLimitMinutes * 60)
+          setDeadlineAt(Date.now() + p.timeLimitMinutes * 60_000)
         }
       } else {
         startedAt.current = Date.now()
         if (p.timeLimitMinutes && p.timeLimitMinutes > 0) {
-          setTimeLeft(p.timeLimitMinutes * 60)
+          setDeadlineAt(Date.now() + p.timeLimitMinutes * 60_000)
         }
       }
       questionStarted.current = Date.now()
@@ -178,16 +226,6 @@ export default function KerjakanQuiz() {
   }
 
   useEffect(() => {
-    if (timeLeft === null) return
-    if (timeLeft <= 0) {
-      submitQuizRef.current?.(true)
-      return
-    }
-    const t = setInterval(() => setTimeLeft((s) => (s === null ? null : s - 1)), 1000)
-    return () => clearInterval(t)
-  }, [timeLeft])
-
-  useEffect(() => {
     if (!lightbox) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setLightbox(null)
@@ -198,7 +236,6 @@ export default function KerjakanQuiz() {
 
   useEffect(() => {
     if (!session || !latihanId || questions.length === 0 || loading) return
-    const deadlineAt = timeLeft === null ? null : Date.now() + timeLeft * 1000
     saveProgress(latihanId, session, {
       questionIds: questions.map((q) => q.id!).filter(Boolean),
       answers,
@@ -207,7 +244,7 @@ export default function KerjakanQuiz() {
       deadlineAt,
       timePerQ: { ...timePerQ.current },
     })
-  }, [answers, current, timeLeft, session, latihanId, questions, loading])
+  }, [answers, current, deadlineAt, session, latihanId, questions, loading])
 
   const recordTime = (qid: string) => {
     const elapsed = Date.now() - questionStarted.current
@@ -382,12 +419,6 @@ export default function KerjakanQuiz() {
     return true
   }).length
 
-  const formatTime = (sec: number) => {
-    const m = Math.floor(sec / 60)
-    const s = sec % 60
-    return `${m}:${String(s).padStart(2, '0')}`
-  }
-
   return (
     <div className="min-h-screen bg-[#F5F6FA] flex flex-col">
       <header className="bg-white border-b border-gray-100 px-4 py-3 sticky top-0 z-10">
@@ -400,14 +431,11 @@ export default function KerjakanQuiz() {
             </p>
           </div>
           <div className="flex items-center gap-3 shrink-0">
-            {timeLeft !== null && (
-              <span
-                className={`text-sm font-mono font-semibold ${
-                  timeLeft < 60 ? 'text-red-600' : 'text-gray-700'
-                }`}
-              >
-                {formatTime(timeLeft)}
-              </span>
+            {deadlineAt !== null && (
+              <QuizTimer
+                deadlineAt={deadlineAt}
+                onExpire={() => submitQuizRef.current?.(true)}
+              />
             )}
             <span className="text-xs text-gray-500">
               {answeredCount}/{questions.length}
