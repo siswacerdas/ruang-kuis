@@ -33,3 +33,7 @@ dist-ssr
 
 # cadangan migrasi gambar
 scripts/backup-stimulus-*.json
+
+# kunci akses Firebase Admin & cadangan migrasi (JANGAN di-commit)
+serviceAccount*.json
+*-firebase-adminsdk-*.json

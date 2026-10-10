@@ -1,0 +1,175 @@
+diff --git a/.gitignore b/.gitignore
+index b3e05e2..1b61d9a 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -33,3 +33,7 @@ dist-ssr
+ 
+ # cadangan migrasi gambar
+ scripts/backup-stimulus-*.json
++
++# kunci akses Firebase Admin & cadangan migrasi (JANGAN di-commit)
++serviceAccount*.json
++*-firebase-adminsdk-*.json
+diff --git a/docs/MIGRASI-GAMBAR-SOAL.md b/docs/MIGRASI-GAMBAR-SOAL.md
+new file mode 100644
+index 0000000..8bab899
+--- /dev/null
++++ b/docs/MIGRASI-GAMBAR-SOAL.md
+@@ -0,0 +1,31 @@
++# Migrasi gambar soal lama (base64 → Firebase Storage)
++
++Tujuan: soal lama yang `stimulusImage`-nya masih `data:image...` (ratusan KB per soal, ikut terunduh tiap
++kuis dibuka) dipindah ke Storage sebagai JPEG kecil (maks. 800 px). Soal baru sudah otomatis ke Storage.
++
++## Persiapan (sekali)
++1. Di folder repo: `npm i --no-save firebase-admin sharp`
++2. Firebase Console → Project settings → Service accounts → **Generate new private key**.
++   Simpan file JSON di luar folder repo (atau pastikan namanya `serviceAccount*.json`, sudah di-gitignore).
++   File ini = kunci penuh ke proyek: jangan dibagikan; hapus dari komputer & cabut di Console setelah selesai.
++3. Arahkan script ke kunci itu:
++   - macOS/Linux: `export GOOGLE_APPLICATION_CREDENTIALS=/jalur/serviceAccount.json`
++   - Windows PowerShell: `$env:GOOGLE_APPLICATION_CREDENTIALS="C:\jalur\serviceAccount.json"`
++
++## Langkah
++1. **Laporan saja** (tidak mengubah apa pun): `node scripts/migrate-stimulus-images.mjs`
++   Menampilkan jumlah soal bergambar base64, perkiraan penghematan, dan juga ukuran gambar base64 di
++   `lessonMaterials`, `bookMaterials`, `topics` (hanya dilaporkan, tidak diubah).
++2. **Coba 3 soal**: `node scripts/migrate-stimulus-images.mjs --apply --limit=3`
++   Buka soal-soal itu di aplikasi (sebagai guru dan siswa): gambar harus tampil jelas.
++3. **Semua**: `node scripts/migrate-stimulus-images.mjs --apply` (sebaiknya di luar jam belajar).
++4. Cek kembali dengan langkah 1: "masih base64" harus 0 (atau tinggal yang dilewati).
++
++## Pengaman
++- Cadangan gambar asli per soal: `scripts/backup-stimulus-<id>.json` (dibuat SEBELUM dokumen diubah). Simpan sampai
++  yakin semua gambar tampil normal.
++- Soal yang sedang diedit guru saat migrasi otomatis dilewati (tidak ditimpa); jalankan ulang nanti.
++- Aman diulang: soal yang sudah berupa URL tidak disentuh.
++- Pemulihan: `node scripts/restore-stimulus-images.mjs` (laporan) lalu `--apply`. Hanya soal yang masih memakai
++  gambar hasil migrasi yang dikembalikan.
++- Tidak perlu deploy ulang aplikasi — ini perubahan data; aplikasi sudah bisa menampilkan gambar berupa URL.
+diff --git a/scripts/migrate-stimulus-images.mjs b/scripts/migrate-stimulus-images.mjs
+index 09eb7e2..5e6066f 100644
+--- a/scripts/migrate-stimulus-images.mjs
++++ b/scripts/migrate-stimulus-images.mjs
+@@ -10,10 +10,13 @@
+  *   export GOOGLE_APPLICATION_CREDENTIALS=/jalur/ke/serviceAccount.json
+  *
+  * Pakai:
+- *   node scripts/migrate-stimulus-images.mjs            # laporan saja
+- *   node scripts/migrate-stimulus-images.mjs --apply    # lakukan migrasi
++ *   node scripts/migrate-stimulus-images.mjs                     # laporan saja (aman, tidak mengubah apa pun)
++ *   node scripts/migrate-stimulus-images.mjs --apply --limit=3   # coba 3 soal dulu
++ *   node scripts/migrate-stimulus-images.mjs --apply             # semuanya
+  *   opsi: --max-side=800 --quality=72 --limit=20
+  *
++ * Pemulihan bila perlu: node scripts/restore-stimulus-images.mjs --apply
++ *
+  * Aman: cadangan data asli ditulis ke scripts/backup-stimulus-<waktu>.json SEBELUM ada perubahan;
+  * dokumen yang gagal diproses dilewati; bisa dijalankan ulang (yang sudah URL tidak disentuh).
+  */
+@@ -55,6 +58,8 @@ console.log(`Total soal: ${snap.size} | masih base64: ${targets.length} | mode:
+ 
+ let before = 0
+ let after = 0
++let migrated = 0
++let skipped = 0
+ const work = targets.slice(0, LIMIT)
+ 
+ for (const d of work) {
+@@ -78,12 +83,18 @@ for (const d of work) {
+     })
+     const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`
+     // cadangan ditulis dulu ke disk, baru dokumen diubah
+-    fs.writeFileSync(
+-      new URL(`./backup-stimulus-${d.id}.json`, import.meta.url),
+-      JSON.stringify({ id: d.id, stimulusImage: raw })
+-    )
+-    await d.ref.update({ stimulusImage: url })
++    const backupFile = new URL(`./backup-stimulus-${d.id}.json`, import.meta.url)
++    fs.writeFileSync(backupFile, JSON.stringify({ id: d.id, stimulusImage: raw }))
++    try {
++      // Hanya menimpa bila dokumen belum diubah sejak dibaca (mis. guru sedang mengedit soal ini)
++      await d.ref.update({ stimulusImage: url }, { lastUpdateTime: d.updateTime })
++    } catch (e) {
++      fs.rmSync(backupFile, { force: true }) // tidak jadi diubah -> cadangan tidak diperlukan
++      throw e
++    }
++    migrated++
+   } catch (e) {
++    skipped++
+     console.warn(`LEWAT ${d.id}:`, e.message)
+   }
+ }
+@@ -92,4 +103,24 @@ console.log(
+   `\nRingkasan: ${work.length} soal | base64 ${kb(before)} -> JPEG ${kb(after)} ` +
+     `(hemat ${before ? Math.round((1 - after / before) * 100) : 0}%)`
+ )
++if (APPLY) console.log(`Berhasil dimigrasi: ${migrated} | dilewati: ${skipped}`)
+ if (!APPLY) console.log('Dry run selesai. Tambahkan --apply untuk menjalankan.')
++
++/* ---- Laporan baca-saja: gambar base64 di koleksi lain (tidak diubah oleh script ini) ---- */
++const DATA_URL = /data:image\/[a-z+.-]+;base64,[A-Za-z0-9+/=]+/g
++function dataUrlBytes(value) {
++  if (typeof value === 'string') return (value.match(DATA_URL) || []).reduce((n, m) => n + m.length, 0)
++  if (Array.isArray(value)) return value.reduce((n, v) => n + dataUrlBytes(v), 0)
++  if (value && typeof value === 'object') return Object.values(value).reduce((n, v) => n + dataUrlBytes(v), 0)
++  return 0
++}
++for (const name of ['lessonMaterials', 'bookMaterials', 'topics']) {
++  const snapOther = await db.collection(name).get()
++  const rows = snapOther.docs
++    .map((d) => ({ id: d.id, title: d.data().title || d.data().name || '', bytes: dataUrlBytes(d.data()) }))
++    .filter((r) => r.bytes > 0)
++    .sort((a, b) => b.bytes - a.bytes)
++  const total = rows.reduce((n, r) => n + r.bytes, 0)
++  console.log(`\n[${name}] dokumen: ${snapOther.size} | berisi gambar base64: ${rows.length} | total ${kb(total)}`)
++  rows.slice(0, 5).forEach((r) => console.log(`   ${r.id} ${String(r.title).slice(0, 40)} — ${kb(r.bytes)}`))
++}
+diff --git a/scripts/restore-stimulus-images.mjs b/scripts/restore-stimulus-images.mjs
+new file mode 100644
+index 0000000..50d1179
+--- /dev/null
++++ b/scripts/restore-stimulus-images.mjs
+@@ -0,0 +1,42 @@
++/**
++ * Mengembalikan gambar soal ke kondisi sebelum migrasi memakai cadangan
++ * scripts/backup-stimulus-<idSoal>.json (dibuat otomatis oleh migrate-stimulus-images.mjs --apply).
++ *
++ *   export GOOGLE_APPLICATION_CREDENTIALS=/jalur/ke/serviceAccount.json
++ *   node scripts/restore-stimulus-images.mjs            # laporan saja
++ *   node scripts/restore-stimulus-images.mjs --apply    # kembalikan
++ */
++import fs from 'node:fs'
++import path from 'node:path'
++import { fileURLToPath } from 'node:url'
++import admin from 'firebase-admin'
++
++const APPLY = process.argv.includes('--apply')
++const dir = path.dirname(fileURLToPath(import.meta.url))
++const files = fs.readdirSync(dir).filter((f) => /^backup-stimulus-.+\.json$/.test(f))
++
++admin.initializeApp({ credential: admin.credential.applicationDefault() })
++const db = admin.firestore()
++
++console.log(`Cadangan ditemukan: ${files.length} | mode: ${APPLY ? 'APPLY' : 'DRY RUN'}`)
++let restored = 0
++for (const f of files) {
++  const { id, stimulusImage } = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))
++  if (!id || !String(stimulusImage || '').startsWith('data:image')) continue
++  try {
++    // Hanya kembalikan bila soal masih memakai gambar hasil migrasi (jangan menimpa suntingan guru)
++    const ref = db.collection('questions').doc(id)
++    const cur = await ref.get()
++    const now = String(cur.exists ? cur.data().stimulusImage || '' : '')
++    if (!now.includes(`stimulus%2Fmigrated%2F${id}`)) {
++      console.log(`lewat ${id}: gambar sudah berubah / bukan hasil migrasi`)
++      continue
++    }
++    if (!APPLY) { console.log(`akan dikembalikan: ${id}`); continue }
++    await ref.update({ stimulusImage })
++    restored++
++  } catch (e) {
++    console.warn(`LEWAT ${id}:`, e.message)
++  }
++}
++console.log(APPLY ? `Dikembalikan: ${restored}` : 'Dry run selesai. Tambahkan --apply untuk mengembalikan.')
