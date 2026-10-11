@@ -27,6 +27,7 @@ export default function SiswaList() {
   const [importing, setImporting] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncingPw, setSyncingPw] = useState(false)
+  const [syncingRoster, setSyncingRoster] = useState(false)
   const [syncingParent, setSyncingParent] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -447,6 +448,49 @@ export default function SiswaList() {
     }
   }
 
+  /**
+   * Salin ulang semua siswa ke `studentRoster` (data publik minimal untuk halaman login).
+   * Dipakai bila daftar nama di halaman login kosong padahal Daftar Siswa terisi.
+   */
+  const syncRoster = async () => {
+    if (
+      !confirm(
+        'Sinkronkan daftar nama untuk halaman login?\n' +
+          'Nama, kelas, dan email login semua siswa disalin ke data publik minimal (tanpa NISN).'
+      )
+    )
+      return
+    setSyncingRoster(true)
+    setError('')
+    setMessage('')
+    try {
+      const fn = httpsCallable<unknown, { written?: number; removed?: number }>(
+        getFunctions(app, 'asia-southeast2'),
+        'backfillStudentRoster'
+      )
+      const res = await fn({})
+      const data = res.data || {}
+      setMessage(
+        `Daftar login disinkronkan: ${data.written ?? 0} siswa ditulis, ${data.removed ?? 0} entri usang dihapus.`
+      )
+    } catch (err: any) {
+      console.error(err)
+      const code = String(err?.code || '')
+      const msg = String(err?.message || err)
+      if (code.includes('not-found') || msg.includes('not-found')) {
+        setError(
+          'Cloud Function belum di-deploy. Jalankan: firebase deploy --only functions:backfillStudentRoster'
+        )
+      } else if (code.includes('permission-denied')) {
+        setError('Ditolak: hanya akun guru/admin yang boleh menyinkronkan daftar login.')
+      } else {
+        setError(`Gagal menyinkronkan daftar login: ${msg.slice(0, 160)}`)
+      }
+    } finally {
+      setSyncingRoster(false)
+    }
+  }
+
   const withAuth = students.filter((s) => s.authUid).length
   const withParent = students.filter((s) => isValidEmail(s.parentEmail)).length
 
@@ -503,6 +547,15 @@ export default function SiswaList() {
             className="inline-flex items-center gap-1.5 bg-white border border-amber-200 hover:bg-amber-50 text-amber-900 px-3.5 py-2 rounded-xl text-sm font-medium transition disabled:opacity-50"
           >
             {syncingPw ? 'Menyamakan password...' : 'Samakan password = NISN'}
+          </button>
+          <button
+            type="button"
+            onClick={syncRoster}
+            disabled={syncingRoster}
+            title="Salin nama, kelas, dan email login ke data publik untuk halaman login"
+            className="inline-flex items-center gap-1.5 bg-white border border-sky-200 hover:bg-sky-50 text-sky-800 px-3.5 py-2 rounded-xl text-sm font-medium transition disabled:opacity-50"
+          >
+            {syncingRoster ? 'Menyinkronkan...' : 'Sinkron daftar login'}
           </button>
           <button
             type="button"
