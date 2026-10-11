@@ -4,6 +4,7 @@ import { db } from '../lib/firebase'
 import { ensureStudentSession, type StudentSession } from '../lib/studentSession'
 import { Link, useNavigate } from 'react-router-dom'
 import StudentNav from '../components/StudentNav'
+import { getDocsByIds } from '../lib/historyQueries'
 import {
   getSubject,
   type LatihanAttempt,
@@ -60,6 +61,9 @@ function gradientFor(id?: string) {
   return CARD_GRADIENTS[h]
 }
 
+/** Jumlah kartu riwayat yang dirender sekaligus (HP lama lag bila ratusan kartu sekaligus). */
+const HISTORY_PAGE = 20
+
 type SortKey = 'newest' | 'oldest' | 'score-high' | 'score-low'
 type TabKey = 'all' | 'official' | 'practice'
 
@@ -87,6 +91,7 @@ export default function KerjakanRiwayat() {
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortKey>('newest')
   const [tab, setTab] = useState<TabKey>('all')
+  const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE)
 
   useEffect(() => {
     let cancelled = false
@@ -146,11 +151,22 @@ export default function KerjakanRiwayat() {
       })
       setOfficial([...map.values()])
 
+      // Paket hanya dipakai untuk label mapel: ambil yang muncul di riwayat siswa ini saja
+      // (bukan seluruh koleksi latihan yang terus bertambah). Cadangan: baca semua.
       try {
-        const pSnap = await getDocs(collection(db, 'latihan'))
-        setPakets(pSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanPaket)))
+        const docs = await getDocsByIds(
+          'latihan',
+          [...map.values()].map((a) => a.latihanId)
+        )
+        setPakets(docs.map((d) => ({ id: d.id, ...d.data() } as LatihanPaket)))
       } catch (err) {
-        console.warn('load latihan', err)
+        console.warn('load latihan terarah gagal, baca semua', err)
+        try {
+          const pSnap = await getDocs(collection(db, 'latihan'))
+          setPakets(pSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanPaket)))
+        } catch (err2) {
+          console.warn('load latihan', err2)
+        }
       }
     } catch (err) {
       console.error(err)
@@ -219,6 +235,11 @@ export default function KerjakanRiwayat() {
     })
     return list
   }, [rows, search, sort, tab])
+
+  // Setiap ganti tab / urutan / pencarian, mulai lagi dari halaman pertama.
+  useEffect(() => {
+    setVisibleCount(HISTORY_PAGE)
+  }, [tab, sort, search])
 
   if (!student) {
     return (
@@ -379,7 +400,7 @@ export default function KerjakanRiwayat() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filtered.map((a) => {
+              {filtered.slice(0, visibleCount).map((a) => {
                 const fin = toMillis(a.finishedAt)
                 const pct = a.percent
                 const grad =
@@ -432,6 +453,18 @@ export default function KerjakanRiwayat() {
                   </article>
                 )
               })}
+            </div>
+          )}
+
+          {!loading && filtered.length > visibleCount && (
+            <div className="text-center mt-5">
+              <button
+                type="button"
+                onClick={() => setVisibleCount((n) => n + HISTORY_PAGE)}
+                className="text-sm font-medium text-indigo-600 bg-white border border-indigo-100 hover:border-indigo-300 px-5 py-2.5 rounded-xl transition"
+              >
+                Tampilkan lebih banyak ({filtered.length - visibleCount} lagi)
+              </button>
             </div>
           )}
         </section>

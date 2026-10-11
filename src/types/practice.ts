@@ -11,7 +11,7 @@ export interface PracticeSession {
   topicNames?: string[]
   questionIds: string[]
   questionCount: number
-  status: 'in_progress'
+  status: 'in_progress' | 'completed'
   /** Judul tampilan (opsional, diisi ortu / sistem) */
   title?: string
   /** true jika dibuat dari portal orang tua */

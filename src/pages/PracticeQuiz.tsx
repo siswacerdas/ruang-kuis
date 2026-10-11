@@ -6,6 +6,7 @@ import {
   getDocs,
   addDoc,
   deleteDoc,
+  updateDoc,
   query,
   where,
   documentId,
@@ -230,6 +231,12 @@ export default function PracticeQuiz() {
         await deleteDoc(doc(db, 'practiceSessions', session.id!))
       } catch (err) {
         console.warn('hapus session', err)
+        // Bila gagal dihapus, tandai selesai agar kuis tidak muncul lagi di dashboard siswa.
+        try {
+          await updateDoc(doc(db, 'practiceSessions', session.id!), { status: 'completed' })
+        } catch (err2) {
+          console.warn('tandai session selesai', err2)
+        }
       }
 
       sessionStorage.setItem(

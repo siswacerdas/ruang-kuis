@@ -62,3 +62,29 @@ export function buildAllMine(
 export function visiblePakets(all: PaketRow[]): PaketRow[] {
   return all.filter((r) => !r.blocked)
 }
+
+/** Jumlah paket "Berakhir" yang ditampilkan di tampilan Semua (sisanya lewat tombol). */
+export const FINISHED_CAP = 6
+
+/**
+ * Batasi paket berakhir yang belum diarsip guru agar daftar tidak memanjang seiring waktu.
+ * Yang ditampilkan: FINISHED_CAP paket berakhir paling baru; urutan tampil tidak berubah.
+ */
+export function capFinished(
+  rows: PaketRow[],
+  cap = FINISHED_CAP
+): { rows: PaketRow[]; hidden: number } {
+  const fin = rows.filter((r) => r.resolved === 'finished')
+  if (fin.length <= cap) return { rows, hidden: 0 }
+  const keep = new Set(
+    fin
+      .slice()
+      .sort((a, b) => b.start - a.start)
+      .slice(0, cap)
+      .map((r) => r.paket.id)
+  )
+  return {
+    rows: rows.filter((r) => r.resolved !== 'finished' || keep.has(r.paket.id)),
+    hidden: fin.length - cap,
+  }
+}

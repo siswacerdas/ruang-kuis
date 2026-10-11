@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { collection, getDocs, query, where } from 'firebase/firestore'
+import {
+  average,
+  collection,
+  count,
+  getAggregateFromServer,
+  getDocs,
+  query,
+  where,
+  type QueryDocumentSnapshot,
+} from 'firebase/firestore'
 import { signOut } from 'firebase/auth'
 import { auth, db } from '../lib/firebase'
 import {
@@ -9,7 +18,8 @@ import {
 } from '../lib/studentSession'
 import { useNavigate } from 'react-router-dom'
 import type { PracticeSession } from '../types/practice'
-import { buildAllMine, visiblePakets } from '../lib/studentDashboard'
+import { buildAllMine, capFinished, visiblePakets, FINISHED_CAP } from '../lib/studentDashboard'
+import { dedupeDocs, getAttemptsForPakets } from '../lib/historyQueries'
 import StudentNav, { StudentQuickLinks } from '../components/StudentNav'
 import {
   SUBJECTS,
@@ -92,6 +102,20 @@ function gradientFor(id?: string) {
   return CARD_GRADIENTS[h]
 }
 
+/** Paket yang mungkin tampil (bukan draft/arsip) — difilter di server; cadangan: baca semua. */
+async function fetchVisibleLatihan(): Promise<QueryDocumentSnapshot[]> {
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'latihan'), where('status', 'in', ['active', 'scheduled', 'finished']))
+    )
+    if (!snap.empty) return snap.docs
+  } catch (err) {
+    console.warn('latihan terfilter gagal, baca semua', err)
+  }
+  const all = await getDocs(collection(db, 'latihan')).catch(() => null)
+  return all?.docs || []
+}
+
 export default function KerjakanEntry() {
   const navigate = useNavigate()
   const tokenRef = useRef<HTMLInputElement>(null)
@@ -105,6 +129,8 @@ export default function KerjakanEntry() {
   const [doneIds, setDoneIds] = useState<Set<string>>(new Set())
   const [bestByLatihan, setBestByLatihan] = useState<Record<string, number>>({})
   const [parentQuizzes, setParentQuizzes] = useState<ParentQuizCard[]>([])
+  const [overall, setOverall] = useState<{ n: number; avg: number } | null>(null)
+  const [showAllFinished, setShowAllFinished] = useState(false)
   const [loadingList, setLoadingList] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [showTokenModal, setShowTokenModal] = useState(false)
@@ -132,16 +158,10 @@ export default function KerjakanEntry() {
   const loadData = async (s: StudentSession) => {
     setLoadingList(true)
     try {
-      const [pSnap, aById, aByName, parentSnap] = await Promise.all([
-        getDocs(collection(db, 'latihan')).catch(() => null),
-        s.studentId
-          ? getDocs(query(collection(db, 'attempts'), where('studentId', '==', s.studentId))).catch(
-              () => null
-            )
-          : Promise.resolve(null),
-        getDocs(query(collection(db, 'attempts'), where('studentName', '==', s.fullName))).catch(
-          () => null
-        ),
+      // 1) Paket + kuis mandiri ortu, paralel. Paket diurai di server (tanpa draft/arsip) agar
+      //    biaya dashboard mengikuti jumlah paket AKTIF, bukan seluruh paket yang pernah dibuat.
+      const [pDocs, parentSnap] = await Promise.all([
+        fetchVisibleLatihan(),
         // Kuis mandiri buatan orang tua yang belum dikerjakan (sesi dihapus setelah selesai)
         s.studentId
           ? getDocs(
@@ -154,16 +174,41 @@ export default function KerjakanEntry() {
           : Promise.resolve(null),
       ])
 
-      const list = (pSnap?.docs || [])
+      const list = pDocs
         .map((d) => ({ id: d.id, ...d.data() } as LatihanPaket))
         .filter((p) => p.status !== 'draft' && p.status !== 'archived')
 
+      // 2) Hasil siswa HANYA untuk paket yang ditampilkan (bukan seluruh riwayat).
+      //    Cadangan: cara lama (semua hasil siswa) bila query terarah gagal.
+      const ids = list.map((p) => p.id).filter((x): x is string => !!x)
+      let attDocs: QueryDocumentSnapshot[] = []
+      try {
+        const jobs = [getAttemptsForPakets('studentName', s.fullName, ids)]
+        if (s.studentId) jobs.push(getAttemptsForPakets('studentId', s.studentId, ids))
+        attDocs = (await Promise.all(jobs)).flat()
+      } catch (err) {
+        console.warn('attempts terarah gagal, pakai cara lama', err)
+        const [aById, aByName] = await Promise.all([
+          s.studentId
+            ? getDocs(
+                query(collection(db, 'attempts'), where('studentId', '==', s.studentId))
+              ).catch(() => null)
+            : Promise.resolve(null),
+          getDocs(query(collection(db, 'attempts'), where('studentName', '==', s.fullName))).catch(
+            () => null
+          ),
+        ])
+        attDocs = [...(aById?.docs || []), ...(aByName?.docs || [])]
+      }
+
       const done = new Set<string>()
       const best: Record<string, number> = {}
-      const attList: LatihanAttempt[] = []
-      ;[...(aById?.docs || []), ...(aByName?.docs || [])].forEach((d) => {
-        const a = { id: d.id, ...d.data() } as LatihanAttempt
-        attList.push(a)
+      const attList = dedupeDocs(
+        attDocs.map((d) => ({ ...(d.data() as LatihanAttempt), id: d.id }) as LatihanAttempt & {
+          id: string
+        })
+      )
+      attList.forEach((a) => {
         if (a.latihanId) {
           done.add(a.latihanId)
           const pct = a.percent ?? 0
@@ -191,6 +236,23 @@ export default function KerjakanEntry() {
       setDoneIds(done)
       setBestByLatihan(best)
       setAttempts(attList)
+      setLoadingList(false)
+
+      // 3) Ringkasan keseluruhan (jumlah & rata-rata) dihitung di server — tidak mengunduh riwayat.
+      try {
+        const agg = async (field: 'studentId' | 'studentName', value: string) => {
+          const r = await getAggregateFromServer(
+            query(collection(db, 'attempts'), where(field, '==', value)),
+            { n: count(), avg: average('percent') }
+          )
+          return { n: r.data().n, avg: Math.round(r.data().avg || 0) }
+        }
+        let overall = s.studentId ? await agg('studentId', s.studentId) : { n: 0, avg: 0 }
+        if (overall.n === 0) overall = await agg('studentName', s.fullName)
+        setOverall(overall)
+      } catch (err) {
+        console.warn('ringkasan server gagal, pakai data terunduh', err)
+      }
     } catch (err) {
       console.error(err)
     } finally {
@@ -216,9 +278,9 @@ export default function KerjakanEntry() {
     return SUBJECTS.filter((s) => keys.has(s.key))
   }, [myPakets])
 
-  const filtered = useMemo(() => {
+  const { filtered, hiddenFinished } = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return myPakets.filter((r) => {
+    const list = myPakets.filter((r) => {
       if (filter === 'active' && r.resolved !== 'active') return false
       if (filter === 'scheduled' && r.resolved !== 'scheduled') return false
       if (filter === 'finished' && r.resolved !== 'finished') return false
@@ -230,15 +292,25 @@ export default function KerjakanEntry() {
       }
       return true
     })
-  }, [myPakets, filter, subjectFilter, search])
+    // Tampilan "Semua" tanpa pencarian: batasi paket berakhir agar daftar tidak makin panjang.
+    if (filter === 'all' && !q && !showAllFinished) {
+      const capped = capFinished(list, FINISHED_CAP)
+      return { filtered: capped.rows, hiddenFinished: capped.hidden }
+    }
+    return { filtered: list, hiddenFinished: 0 }
+  }, [myPakets, filter, subjectFilter, search, showAllFinished])
 
   const stats = useMemo(() => {
-    const n = attempts.length
-    const avg = n ? Math.round(attempts.reduce((s, a) => s + (a.percent || 0), 0) / n) : 0
+    const local = attempts.length
+    const localAvg = local
+      ? Math.round(attempts.reduce((sum, a) => sum + (a.percent || 0), 0) / local)
+      : 0
+    const n = overall && overall.n > 0 ? overall.n : local
+    const avg = overall && overall.n > 0 ? overall.avg : localAvg
     const active = myPakets.filter((r) => r.resolved === 'active' && !r.blocked).length
     const doneCount = allMine.filter((r) => r.done).length
     return { n, avg, active, doneCount, total: myPakets.length + parentQuizzes.length }
-  }, [attempts, myPakets, allMine, parentQuizzes])
+  }, [attempts, overall, myPakets, allMine, parentQuizzes])
 
   const urgentPakets = useMemo(() => {
     return myPakets.filter((r) => {
@@ -619,6 +691,18 @@ export default function KerjakanEntry() {
                   </button>
                 )
               })}
+            </div>
+          )}
+
+          {!loadingList && hiddenFinished > 0 && (
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => setShowAllFinished(true)}
+                className="text-xs font-medium text-indigo-600 bg-white border border-indigo-100 hover:border-indigo-300 px-4 py-2 rounded-xl transition"
+              >
+                Tampilkan {hiddenFinished} kuis berakhir lainnya
+              </button>
             </div>
           )}
         </section>
