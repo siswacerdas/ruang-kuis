@@ -1,0 +1,453 @@
+diff --git a/src/lib/historyQueries.ts b/src/lib/historyQueries.ts
+new file mode 100644
+index 0000000..921fede
+--- /dev/null
++++ b/src/lib/historyQueries.ts
+@@ -0,0 +1,66 @@
++/**
++ * Query riwayat yang tumbuh sebanding dengan "paket yang relevan", bukan seluruh sejarah.
++ *
++ * - Dokumen dicari berdasarkan daftar id (potongan ≤30, batas operator `in` Firestore).
++ * - Hasil kuis siswa dicari hanya untuk paket yang sedang ditampilkan (bukan semua riwayat).
++ */
++import {
++  collection,
++  documentId,
++  getDocs,
++  query,
++  where,
++  type QueryDocumentSnapshot,
++} from 'firebase/firestore'
++import { db } from './firebase'
++
++export const IN_LIMIT = 30
++
++export function chunk<T>(items: T[], size = IN_LIMIT): T[][] {
++  const out: T[][] = []
++  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
++  return out
++}
++
++const uniq = (ids: (string | undefined | null)[]) =>
++  [...new Set(ids.filter((x): x is string => !!x))]
++
++/** Ambil dokumen berdasarkan id (mis. hanya paket yang muncul di riwayat siswa). */
++export async function getDocsByIds(
++  collectionName: string,
++  ids: (string | undefined | null)[]
++): Promise<QueryDocumentSnapshot[]> {
++  const list = uniq(ids)
++  if (list.length === 0) return []
++  const snaps = await Promise.all(
++    chunk(list).map((c) =>
++      getDocs(query(collection(db, collectionName), where(documentId(), 'in', c)))
++    )
++  )
++  return snaps.flatMap((s) => s.docs)
++}
++
++/** Hasil kuis guru milik satu siswa, terbatas pada paket tertentu. */
++export async function getAttemptsForPakets(
++  field: 'studentId' | 'studentName',
++  value: string,
++  latihanIds: (string | undefined | null)[]
++): Promise<QueryDocumentSnapshot[]> {
++  const list = uniq(latihanIds)
++  if (list.length === 0 || !value) return []
++  const snaps = await Promise.all(
++    chunk(list).map((c) =>
++      getDocs(
++        query(collection(db, 'attempts'), where(field, '==', value), where('latihanId', 'in', c))
++      )
++    )
++  )
++  return snaps.flatMap((s) => s.docs)
++}
++
++/** Gabungkan dokumen dari beberapa query tanpa duplikat (id yang sama dihitung sekali). */
++export function dedupeDocs<T extends { id: string }>(...lists: T[][]): T[] {
++  const map = new Map<string, T>()
++  lists.flat().forEach((d) => map.set(d.id, d))
++  return [...map.values()]
++}
+diff --git a/src/lib/studentDashboard.ts b/src/lib/studentDashboard.ts
+index 96a86d2..470d55a 100644
+--- a/src/lib/studentDashboard.ts
++++ b/src/lib/studentDashboard.ts
+@@ -62,3 +62,29 @@ export function buildAllMine(
+ export function visiblePakets(all: PaketRow[]): PaketRow[] {
+   return all.filter((r) => !r.blocked)
+ }
++
++/** Jumlah paket "Berakhir" yang ditampilkan di tampilan Semua (sisanya lewat tombol). */
++export const FINISHED_CAP = 6
++
++/**
++ * Batasi paket berakhir yang belum diarsip guru agar daftar tidak memanjang seiring waktu.
++ * Yang ditampilkan: FINISHED_CAP paket berakhir paling baru; urutan tampil tidak berubah.
++ */
++export function capFinished(
++  rows: PaketRow[],
++  cap = FINISHED_CAP
++): { rows: PaketRow[]; hidden: number } {
++  const fin = rows.filter((r) => r.resolved === 'finished')
++  if (fin.length <= cap) return { rows, hidden: 0 }
++  const keep = new Set(
++    fin
++      .slice()
++      .sort((a, b) => b.start - a.start)
++      .slice(0, cap)
++      .map((r) => r.paket.id)
++  )
++  return {
++    rows: rows.filter((r) => r.resolved !== 'finished' || keep.has(r.paket.id)),
++    hidden: fin.length - cap,
++  }
++}
+diff --git a/src/pages/KerjakanEntry.tsx b/src/pages/KerjakanEntry.tsx
+index 1eb827e..2353b5f 100644
+--- a/src/pages/KerjakanEntry.tsx
++++ b/src/pages/KerjakanEntry.tsx
+@@ -1,5 +1,14 @@
+ import { useEffect, useMemo, useRef, useState } from 'react'
+-import { collection, getDocs, query, where } from 'firebase/firestore'
++import {
++  average,
++  collection,
++  count,
++  getAggregateFromServer,
++  getDocs,
++  query,
++  where,
++  type QueryDocumentSnapshot,
++} from 'firebase/firestore'
+ import { signOut } from 'firebase/auth'
+ import { auth, db } from '../lib/firebase'
+ import {
+@@ -9,7 +18,8 @@ import {
+ } from '../lib/studentSession'
+ import { useNavigate } from 'react-router-dom'
+ import type { PracticeSession } from '../types/practice'
+-import { buildAllMine, visiblePakets } from '../lib/studentDashboard'
++import { buildAllMine, capFinished, visiblePakets, FINISHED_CAP } from '../lib/studentDashboard'
++import { dedupeDocs, getAttemptsForPakets } from '../lib/historyQueries'
+ import StudentNav, { StudentQuickLinks } from '../components/StudentNav'
+ import {
+   SUBJECTS,
+@@ -92,6 +102,20 @@ function gradientFor(id?: string) {
+   return CARD_GRADIENTS[h]
+ }
+ 
++/** Paket yang mungkin tampil (bukan draft/arsip) — difilter di server; cadangan: baca semua. */
++async function fetchVisibleLatihan(): Promise<QueryDocumentSnapshot[]> {
++  try {
++    const snap = await getDocs(
++      query(collection(db, 'latihan'), where('status', 'in', ['active', 'scheduled', 'finished']))
++    )
++    if (!snap.empty) return snap.docs
++  } catch (err) {
++    console.warn('latihan terfilter gagal, baca semua', err)
++  }
++  const all = await getDocs(collection(db, 'latihan')).catch(() => null)
++  return all?.docs || []
++}
++
+ export default function KerjakanEntry() {
+   const navigate = useNavigate()
+   const tokenRef = useRef<HTMLInputElement>(null)
+@@ -105,6 +129,8 @@ export default function KerjakanEntry() {
+   const [doneIds, setDoneIds] = useState<Set<string>>(new Set())
+   const [bestByLatihan, setBestByLatihan] = useState<Record<string, number>>({})
+   const [parentQuizzes, setParentQuizzes] = useState<ParentQuizCard[]>([])
++  const [overall, setOverall] = useState<{ n: number; avg: number } | null>(null)
++  const [showAllFinished, setShowAllFinished] = useState(false)
+   const [loadingList, setLoadingList] = useState(true)
+   const [selectedId, setSelectedId] = useState<string | null>(null)
+   const [showTokenModal, setShowTokenModal] = useState(false)
+@@ -132,16 +158,10 @@ export default function KerjakanEntry() {
+   const loadData = async (s: StudentSession) => {
+     setLoadingList(true)
+     try {
+-      const [pSnap, aById, aByName, parentSnap] = await Promise.all([
+-        getDocs(collection(db, 'latihan')).catch(() => null),
+-        s.studentId
+-          ? getDocs(query(collection(db, 'attempts'), where('studentId', '==', s.studentId))).catch(
+-              () => null
+-            )
+-          : Promise.resolve(null),
+-        getDocs(query(collection(db, 'attempts'), where('studentName', '==', s.fullName))).catch(
+-          () => null
+-        ),
++      // 1) Paket + kuis mandiri ortu, paralel. Paket diurai di server (tanpa draft/arsip) agar
++      //    biaya dashboard mengikuti jumlah paket AKTIF, bukan seluruh paket yang pernah dibuat.
++      const [pDocs, parentSnap] = await Promise.all([
++        fetchVisibleLatihan(),
+         // Kuis mandiri buatan orang tua yang belum dikerjakan (sesi dihapus setelah selesai)
+         s.studentId
+           ? getDocs(
+@@ -154,16 +174,41 @@ export default function KerjakanEntry() {
+           : Promise.resolve(null),
+       ])
+ 
+-      const list = (pSnap?.docs || [])
++      const list = pDocs
+         .map((d) => ({ id: d.id, ...d.data() } as LatihanPaket))
+         .filter((p) => p.status !== 'draft' && p.status !== 'archived')
+ 
++      // 2) Hasil siswa HANYA untuk paket yang ditampilkan (bukan seluruh riwayat).
++      //    Cadangan: cara lama (semua hasil siswa) bila query terarah gagal.
++      const ids = list.map((p) => p.id).filter((x): x is string => !!x)
++      let attDocs: QueryDocumentSnapshot[] = []
++      try {
++        const jobs = [getAttemptsForPakets('studentName', s.fullName, ids)]
++        if (s.studentId) jobs.push(getAttemptsForPakets('studentId', s.studentId, ids))
++        attDocs = (await Promise.all(jobs)).flat()
++      } catch (err) {
++        console.warn('attempts terarah gagal, pakai cara lama', err)
++        const [aById, aByName] = await Promise.all([
++          s.studentId
++            ? getDocs(
++                query(collection(db, 'attempts'), where('studentId', '==', s.studentId))
++              ).catch(() => null)
++            : Promise.resolve(null),
++          getDocs(query(collection(db, 'attempts'), where('studentName', '==', s.fullName))).catch(
++            () => null
++          ),
++        ])
++        attDocs = [...(aById?.docs || []), ...(aByName?.docs || [])]
++      }
++
+       const done = new Set<string>()
+       const best: Record<string, number> = {}
+-      const attList: LatihanAttempt[] = []
+-      ;[...(aById?.docs || []), ...(aByName?.docs || [])].forEach((d) => {
+-        const a = { id: d.id, ...d.data() } as LatihanAttempt
+-        attList.push(a)
++      const attList = dedupeDocs(
++        attDocs.map((d) => ({ ...(d.data() as LatihanAttempt), id: d.id }) as LatihanAttempt & {
++          id: string
++        })
++      )
++      attList.forEach((a) => {
+         if (a.latihanId) {
+           done.add(a.latihanId)
+           const pct = a.percent ?? 0
+@@ -191,6 +236,23 @@ export default function KerjakanEntry() {
+       setDoneIds(done)
+       setBestByLatihan(best)
+       setAttempts(attList)
++      setLoadingList(false)
++
++      // 3) Ringkasan keseluruhan (jumlah & rata-rata) dihitung di server — tidak mengunduh riwayat.
++      try {
++        const agg = async (field: 'studentId' | 'studentName', value: string) => {
++          const r = await getAggregateFromServer(
++            query(collection(db, 'attempts'), where(field, '==', value)),
++            { n: count(), avg: average('percent') }
++          )
++          return { n: r.data().n, avg: Math.round(r.data().avg || 0) }
++        }
++        let overall = s.studentId ? await agg('studentId', s.studentId) : { n: 0, avg: 0 }
++        if (overall.n === 0) overall = await agg('studentName', s.fullName)
++        setOverall(overall)
++      } catch (err) {
++        console.warn('ringkasan server gagal, pakai data terunduh', err)
++      }
+     } catch (err) {
+       console.error(err)
+     } finally {
+@@ -216,9 +278,9 @@ export default function KerjakanEntry() {
+     return SUBJECTS.filter((s) => keys.has(s.key))
+   }, [myPakets])
+ 
+-  const filtered = useMemo(() => {
++  const { filtered, hiddenFinished } = useMemo(() => {
+     const q = search.trim().toLowerCase()
+-    return myPakets.filter((r) => {
++    const list = myPakets.filter((r) => {
+       if (filter === 'active' && r.resolved !== 'active') return false
+       if (filter === 'scheduled' && r.resolved !== 'scheduled') return false
+       if (filter === 'finished' && r.resolved !== 'finished') return false
+@@ -230,15 +292,25 @@ export default function KerjakanEntry() {
+       }
+       return true
+     })
+-  }, [myPakets, filter, subjectFilter, search])
++    // Tampilan "Semua" tanpa pencarian: batasi paket berakhir agar daftar tidak makin panjang.
++    if (filter === 'all' && !q && !showAllFinished) {
++      const capped = capFinished(list, FINISHED_CAP)
++      return { filtered: capped.rows, hiddenFinished: capped.hidden }
++    }
++    return { filtered: list, hiddenFinished: 0 }
++  }, [myPakets, filter, subjectFilter, search, showAllFinished])
+ 
+   const stats = useMemo(() => {
+-    const n = attempts.length
+-    const avg = n ? Math.round(attempts.reduce((s, a) => s + (a.percent || 0), 0) / n) : 0
++    const local = attempts.length
++    const localAvg = local
++      ? Math.round(attempts.reduce((sum, a) => sum + (a.percent || 0), 0) / local)
++      : 0
++    const n = overall && overall.n > 0 ? overall.n : local
++    const avg = overall && overall.n > 0 ? overall.avg : localAvg
+     const active = myPakets.filter((r) => r.resolved === 'active' && !r.blocked).length
+     const doneCount = allMine.filter((r) => r.done).length
+     return { n, avg, active, doneCount, total: myPakets.length + parentQuizzes.length }
+-  }, [attempts, myPakets, allMine, parentQuizzes])
++  }, [attempts, overall, myPakets, allMine, parentQuizzes])
+ 
+   const urgentPakets = useMemo(() => {
+     return myPakets.filter((r) => {
+@@ -621,6 +693,18 @@ export default function KerjakanEntry() {
+               })}
+             </div>
+           )}
++
++          {!loadingList && hiddenFinished > 0 && (
++            <div className="text-center">
++              <button
++                type="button"
++                onClick={() => setShowAllFinished(true)}
++                className="text-xs font-medium text-indigo-600 bg-white border border-indigo-100 hover:border-indigo-300 px-4 py-2 rounded-xl transition"
++              >
++                Tampilkan {hiddenFinished} kuis berakhir lainnya
++              </button>
++            </div>
++          )}
+         </section>
+ 
+         {!loadingList && parentQuizzes.length > 0 && (
+diff --git a/src/pages/KerjakanRiwayat.tsx b/src/pages/KerjakanRiwayat.tsx
+index 99724f1..c7e21cf 100644
+--- a/src/pages/KerjakanRiwayat.tsx
++++ b/src/pages/KerjakanRiwayat.tsx
+@@ -4,6 +4,7 @@ import { db } from '../lib/firebase'
+ import { ensureStudentSession, type StudentSession } from '../lib/studentSession'
+ import { Link, useNavigate } from 'react-router-dom'
+ import StudentNav from '../components/StudentNav'
++import { getDocsByIds } from '../lib/historyQueries'
+ import {
+   getSubject,
+   type LatihanAttempt,
+@@ -60,6 +61,9 @@ function gradientFor(id?: string) {
+   return CARD_GRADIENTS[h]
+ }
+ 
++/** Jumlah kartu riwayat yang dirender sekaligus (HP lama lag bila ratusan kartu sekaligus). */
++const HISTORY_PAGE = 20
++
+ type SortKey = 'newest' | 'oldest' | 'score-high' | 'score-low'
+ type TabKey = 'all' | 'official' | 'practice'
+ 
+@@ -87,6 +91,7 @@ export default function KerjakanRiwayat() {
+   const [search, setSearch] = useState('')
+   const [sort, setSort] = useState<SortKey>('newest')
+   const [tab, setTab] = useState<TabKey>('all')
++  const [visibleCount, setVisibleCount] = useState(HISTORY_PAGE)
+ 
+   useEffect(() => {
+     let cancelled = false
+@@ -146,11 +151,22 @@ export default function KerjakanRiwayat() {
+       })
+       setOfficial([...map.values()])
+ 
++      // Paket hanya dipakai untuk label mapel: ambil yang muncul di riwayat siswa ini saja
++      // (bukan seluruh koleksi latihan yang terus bertambah). Cadangan: baca semua.
+       try {
+-        const pSnap = await getDocs(collection(db, 'latihan'))
+-        setPakets(pSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanPaket)))
++        const docs = await getDocsByIds(
++          'latihan',
++          [...map.values()].map((a) => a.latihanId)
++        )
++        setPakets(docs.map((d) => ({ id: d.id, ...d.data() } as LatihanPaket)))
+       } catch (err) {
+-        console.warn('load latihan', err)
++        console.warn('load latihan terarah gagal, baca semua', err)
++        try {
++          const pSnap = await getDocs(collection(db, 'latihan'))
++          setPakets(pSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanPaket)))
++        } catch (err2) {
++          console.warn('load latihan', err2)
++        }
+       }
+     } catch (err) {
+       console.error(err)
+@@ -220,6 +236,11 @@ export default function KerjakanRiwayat() {
+     return list
+   }, [rows, search, sort, tab])
+ 
++  // Setiap ganti tab / urutan / pencarian, mulai lagi dari halaman pertama.
++  useEffect(() => {
++    setVisibleCount(HISTORY_PAGE)
++  }, [tab, sort, search])
++
+   if (!student) {
+     return (
+       <div className="min-h-screen flex items-center justify-center bg-[#F5F6FA]">
+@@ -379,7 +400,7 @@ export default function KerjakanRiwayat() {
+             </div>
+           ) : (
+             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+-              {filtered.map((a) => {
++              {filtered.slice(0, visibleCount).map((a) => {
+                 const fin = toMillis(a.finishedAt)
+                 const pct = a.percent
+                 const grad =
+@@ -434,6 +455,18 @@ export default function KerjakanRiwayat() {
+               })}
+             </div>
+           )}
++
++          {!loading && filtered.length > visibleCount && (
++            <div className="text-center mt-5">
++              <button
++                type="button"
++                onClick={() => setVisibleCount((n) => n + HISTORY_PAGE)}
++                className="text-sm font-medium text-indigo-600 bg-white border border-indigo-100 hover:border-indigo-300 px-5 py-2.5 rounded-xl transition"
++              >
++                Tampilkan lebih banyak ({filtered.length - visibleCount} lagi)
++              </button>
++            </div>
++          )}
+         </section>
+       </main>
+ 
+diff --git a/src/pages/PracticeQuiz.tsx b/src/pages/PracticeQuiz.tsx
+index ec8c288..e1dc28e 100644
+--- a/src/pages/PracticeQuiz.tsx
++++ b/src/pages/PracticeQuiz.tsx
+@@ -6,6 +6,7 @@ import {
+   getDocs,
+   addDoc,
+   deleteDoc,
++  updateDoc,
+   query,
+   where,
+   documentId,
+@@ -230,6 +231,12 @@ export default function PracticeQuiz() {
+         await deleteDoc(doc(db, 'practiceSessions', session.id!))
+       } catch (err) {
+         console.warn('hapus session', err)
++        // Bila gagal dihapus, tandai selesai agar kuis tidak muncul lagi di dashboard siswa.
++        try {
++          await updateDoc(doc(db, 'practiceSessions', session.id!), { status: 'completed' })
++        } catch (err2) {
++          console.warn('tandai session selesai', err2)
++        }
+       }
+ 
+       sessionStorage.setItem(
+diff --git a/src/types/practice.ts b/src/types/practice.ts
+index 2b6bf49..b376135 100644
+--- a/src/types/practice.ts
++++ b/src/types/practice.ts
+@@ -11,7 +11,7 @@ export interface PracticeSession {
+   topicNames?: string[]
+   questionIds: string[]
+   questionCount: number
+-  status: 'in_progress'
++  status: 'in_progress' | 'completed'
+   /** Judul tampilan (opsional, diisi ortu / sistem) */
+   title?: string
+   /** true jika dibuat dari portal orang tua */
