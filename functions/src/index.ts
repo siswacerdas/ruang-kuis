@@ -5,6 +5,8 @@ import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/fire
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https'
 import { defineSecret } from 'firebase-functions/params'
 import { Resend } from 'resend'
+import { statsKey, type AttemptLike } from './studentStats'
+import { recomputeStudentStats } from './rebuildStats'
 import { logger } from 'firebase-functions'
 
 initializeApp()
@@ -576,5 +578,35 @@ export const backfillStudentRoster = onCall(
     await flush()
     logger.info('backfillStudentRoster', { written, removed })
     return { written, removed }
+  }
+)
+
+
+/* ========== Ringkasan peringkat per siswa ==========
+ * Setiap hasil kuis dibuat / diubah / dihapus (termasuk Reset oleh guru), ringkasan siswa itu
+ * dihitung ulang dari hasil kuisnya (idempoten: aman bila pemicu berjalan ganda atau terlambat).
+ * Halaman Peringkat membaca ±1 dokumen per siswa, bukan seluruh `attempts`.
+ */
+export const syncStudentStats = onDocumentWritten(
+  { document: 'attempts/{attemptId}', region: 'asia-southeast2' },
+  async (event) => {
+    const targets = new Map<string, AttemptLike>()
+    for (const snap of [event.data?.before, event.data?.after]) {
+      if (snap?.exists) {
+        const d = snap.data() as AttemptLike
+        targets.set(statsKey(d), d)
+      }
+    }
+    for (const t of targets.values()) {
+      try {
+        await recomputeStudentStats(db, t)
+      } catch (err) {
+        logger.error('syncStudentStats gagal', {
+          attemptId: event.params.attemptId,
+          error: String(err),
+        })
+        throw err
+      }
+    }
   }
 )

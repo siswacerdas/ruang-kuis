@@ -1,0 +1,1026 @@
+diff --git a/docs/PERINGKAT-RINGKASAN.md b/docs/PERINGKAT-RINGKASAN.md
+new file mode 100644
+index 0000000..8e031c9
+--- /dev/null
++++ b/docs/PERINGKAT-RINGKASAN.md
+@@ -0,0 +1,35 @@
++# Peringkat berbasis ringkasan (`studentStats`)
++
++Masalah: halaman Peringkat (siswa, orang tua, admin) membaca SEMUA hasil kuis semua siswa setiap dibuka —
++makin banyak kuis, makin berat (bacaan Firestore & lag di HP lama).
++
++Sekarang: tiap siswa punya satu dokumen ringkasan `studentStats` (jumlah & total skor per kelas × mapel).
++Cloud Function `syncStudentStats` menghitung ulang ringkasan siswa terkait setiap hasil kuis dibuat/diubah/dihapus
++(termasuk Reset oleh guru). Halaman peringkat membaca ±25 dokumen saja. Angka peringkat tetap SAMA
++(diuji otomatis: ringkasan vs data mentah, semua kombinasi filter kelas × mapel).
++
++## Pengaman (halaman tetap benar walau ringkasan bermasalah)
++- Ringkasan kosong / ditolak rules / error → otomatis memakai cara lama (baca semua `attempts`).
++- Jumlah hasil di ringkasan dibandingkan dengan jumlah dokumen `attempts` (dihitung di server).
++  Bila beda (ringkasan belum sinkron), peringkat dihitung dari data asli.
++- Peringkat per paket (Orang Tua) membaca hasil paket itu saja, bukan seluruh hasil.
++
++## Urutan deploy (JANGAN dibalik)
++1. `cd functions && npm ci && npm run build && cd ..` lalu `firebase deploy --only functions`
++2. Isi ringkasan: `node scripts/backfill-student-stats.mjs` (laporan) lalu `--apply`.
++   Cek di Console: koleksi `studentStats` ada, jumlah dokumen ≈ jumlah siswa yang pernah mengerjakan.
++3. `npm run build && firebase deploy --only hosting`
++   (dengan rules lama, halaman otomatis memakai cara lama — aman)
++4. `firebase deploy --only firestore:rules` (menambah izin baca `studentStats`)
++5. Uji: peringkat siswa/orang tua/admin menampilkan urutan & angka yang sama seperti sebelumnya;
++   kerjakan 1 kuis uji → ringkasan siswa itu berubah (cek dokumennya di Console); Reset hasil → berubah lagi.
++
++Indikator berjalan di ringkasan: buka Console browser (F12). Pesan "ringkasan peringkat belum sinkron" atau
++"tidak bisa dipakai" berarti halaman memakai cara lama (lebih lambat tetapi benar) — jalankan ulang langkah 2.
++
++## Rollback
++`git revert` commit ini lalu deploy hosting. Fungsi & koleksi `studentStats` boleh dibiarkan (tidak mengganggu).
++
++## Catatan
++- Data lama tanpa `studentId` dikelompokkan per nama (huruf kecil), persis seperti peringkat lama.
++- Bila ada koreksi data massal langsung di Firestore (tanpa lewat aplikasi), jalankan ulang langkah 2.
+diff --git a/firestore.rules b/firestore.rules
+index 39a2996..9d6aa8f 100644
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -84,6 +84,13 @@ service cloud.firestore {
+       allow update, delete: if isAdmin();
+     }
+ 
++    // Ringkasan peringkat per siswa (nama, kelas, jumlah & total skor per mapel).
++    // Ditulis HANYA oleh Cloud Function `syncStudentStats` (Admin SDK); klien hanya membaca.
++    match /studentStats/{statId} {
++      allow read: if isSignedIn();
++      allow write: if false;
++    }
++
+     // --- Data siswa ---
+     // Berisi NISN (= password login) & email ortu: HANYA admin.
+     // Halaman login / portal ortu memakai salinan minimal `studentRoster`.
+diff --git a/functions/src/index.ts b/functions/src/index.ts
+index 21c7fce..341bbf7 100644
+--- a/functions/src/index.ts
++++ b/functions/src/index.ts
+@@ -5,6 +5,8 @@ import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/fire
+ import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https'
+ import { defineSecret } from 'firebase-functions/params'
+ import { Resend } from 'resend'
++import { statsKey, type AttemptLike } from './studentStats'
++import { recomputeStudentStats } from './rebuildStats'
+ import { logger } from 'firebase-functions'
+ 
+ initializeApp()
+@@ -578,3 +580,33 @@ export const backfillStudentRoster = onCall(
+     return { written, removed }
+   }
+ )
++
++
++/* ========== Ringkasan peringkat per siswa ==========
++ * Setiap hasil kuis dibuat / diubah / dihapus (termasuk Reset oleh guru), ringkasan siswa itu
++ * dihitung ulang dari hasil kuisnya (idempoten: aman bila pemicu berjalan ganda atau terlambat).
++ * Halaman Peringkat membaca ±1 dokumen per siswa, bukan seluruh `attempts`.
++ */
++export const syncStudentStats = onDocumentWritten(
++  { document: 'attempts/{attemptId}', region: 'asia-southeast2' },
++  async (event) => {
++    const targets = new Map<string, AttemptLike>()
++    for (const snap of [event.data?.before, event.data?.after]) {
++      if (snap?.exists) {
++        const d = snap.data() as AttemptLike
++        targets.set(statsKey(d), d)
++      }
++    }
++    for (const t of targets.values()) {
++      try {
++        await recomputeStudentStats(db, t)
++      } catch (err) {
++        logger.error('syncStudentStats gagal', {
++          attemptId: event.params.attemptId,
++          error: String(err),
++        })
++        throw err
++      }
++    }
++  }
++)
+diff --git a/functions/src/rebuildStats.ts b/functions/src/rebuildStats.ts
+new file mode 100644
+index 0000000..0ac831e
+--- /dev/null
++++ b/functions/src/rebuildStats.ts
+@@ -0,0 +1,89 @@
++import type { Firestore } from 'firebase-admin/firestore'
++import { buildStudentStats, statsDocId, statsKey, type AttemptLike } from './studentStats'
++
++/**
++ * Hitung ulang SEMUA ringkasan peringkat dari seluruh `attempts` (idempoten, aman diulang).
++ * Dipakai skrip scripts/backfill-student-stats.mjs setelah deploy fungsi, dan bila ringkasan
++ * perlu disegarkan penuh (mis. setelah koreksi data massal).
++ */
++export async function rebuildAll(db: Firestore, apply: boolean) {
++  const [attSnap, latSnap, oldSnap] = await Promise.all([
++    db.collection('attempts').get(),
++    db.collection('latihan').get(),
++    db.collection('studentStats').get(),
++  ])
++  const subj = new Map<string, string>()
++  latSnap.docs.forEach((d) => {
++    const s = d.data().subjectKey
++    if (s) subj.set(d.id, String(s))
++  })
++  const docs = buildStudentStats(
++    attSnap.docs.map((d) => d.data() as AttemptLike),
++    (id) => (id ? subj.get(id) : undefined)
++  )
++  const keep = new Set(docs.map((d) => statsDocId(d.key)))
++  const stale = oldSnap.docs.filter((d) => !keep.has(d.id))
++  const result = { attempts: attSnap.size, students: docs.length, staleRemoved: stale.length }
++  if (!apply) return { ...result, written: 0 }
++
++  const now = Date.now()
++  let batch = db.batch()
++  let n = 0
++  const flush = async () => {
++    if (n > 0) await batch.commit()
++    batch = db.batch()
++    n = 0
++  }
++  for (const d of docs) {
++    batch.set(db.collection('studentStats').doc(statsDocId(d.key)), {
++      ...d,
++      computedAtMs: now,
++      updatedAt: new Date(),
++    })
++    if (++n >= 400) await flush()
++  }
++  for (const d of stale) {
++    batch.delete(d.ref)
++    if (++n >= 400) await flush()
++  }
++  await flush()
++  return { ...result, written: docs.length }
++}
++
++/**
++ * Hitung ulang ringkasan SATU siswa dari hasil kuisnya (idempoten).
++ * Perhitungan yang MULAI lebih belakangan menang, sehingga pemicu yang datang terlambat / ganda
++ * tidak menimpa hasil yang lebih baru.
++ */
++export async function recomputeStudentStats(db: Firestore, target: AttemptLike): Promise<void> {
++  const startedMs = Date.now()
++  const key = statsKey(target)
++  const col = db.collection('attempts')
++  const snap = target.studentId
++    ? await col.where('studentId', '==', String(target.studentId).trim()).get()
++    : await col.where('studentName', '==', String(target.studentName || '')).get()
++  const attempts = snap.docs.map((d) => d.data() as AttemptLike).filter((a) => statsKey(a) === key)
++
++  const ref = db.collection('studentStats').doc(statsDocId(key))
++  let payload: Record<string, unknown> | null = null
++  if (attempts.length > 0) {
++    const ids = [...new Set(attempts.map((a) => a.latihanId).filter((x): x is string => !!x))]
++    const subj = new Map<string, string>()
++    if (ids.length > 0) {
++      const docs = await db.getAll(...ids.map((id) => db.collection('latihan').doc(id)))
++      docs.forEach((d) => {
++        const s = d.exists ? d.data()?.subjectKey : undefined
++        if (s) subj.set(d.id, String(s))
++      })
++    }
++    const [doc] = buildStudentStats(attempts, (id) => (id ? subj.get(id) : undefined))
++    payload = { ...doc, computedAtMs: startedMs, updatedAt: new Date() }
++  }
++
++  await db.runTransaction(async (tx) => {
++    const cur = await tx.get(ref)
++    if (cur.exists && Number(cur.data()?.computedAtMs || 0) > startedMs) return
++    if (payload) tx.set(ref, payload)
++    else if (cur.exists) tx.delete(ref)
++  })
++}
+diff --git a/functions/src/studentStats.ts b/functions/src/studentStats.ts
+new file mode 100644
+index 0000000..34ed2b1
+--- /dev/null
++++ b/functions/src/studentStats.ts
+@@ -0,0 +1,111 @@
++/**
++ * Ringkasan peringkat per siswa (murni, tanpa Firestore) — dipakai fungsi `syncStudentStats`
++ * dan skrip backfill. Bentuk dokumen `studentStats/{docId}`:
++ *   { key, name, studentId?, className?, buckets: [{ c: kelas, s: mapel, sum, n, best }] }
++ *
++ * Bucket = (kelas, mapel). Halaman peringkat menjumlahkan bucket sesuai filter kelas/mapel,
++ * sehingga hasilnya sama persis dengan menghitung dari seluruh dokumen `attempts`.
++ */
++import { createHash } from 'crypto'
++
++export interface AttemptLike {
++  studentId?: string | null
++  studentName?: string
++  studentClass?: string
++  percent?: number
++  latihanId?: string
++  finishedAt?: unknown
++}
++
++export interface StatsBucket {
++  c: string
++  s: string
++  sum: number
++  n: number
++  best: number
++}
++
++export interface StudentStatsDoc {
++  key: string
++  name: string
++  studentId?: string
++  className?: string
++  buckets: StatsBucket[]
++}
++
++/** Identitas siswa: studentId bila ada, jika tidak nama (huruf kecil). */
++export function statsKey(a: AttemptLike): string {
++  const id = String(a.studentId || '').trim()
++  if (id) return `id:${id}`
++  return `name:${String(a.studentName || '').trim().toLowerCase()}`
++}
++
++export function statsDocId(key: string): string {
++  const slug = key.replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 60)
++  const hash = createHash('sha1').update(key).digest('hex').slice(0, 10)
++  return `${slug}_${hash}`
++}
++
++function toMs(v: unknown): number {
++  if (!v) return 0
++  if (typeof v === 'number') return v
++  if (typeof v === 'string') {
++    const t = Date.parse(v)
++    return isNaN(t) ? 0 : t
++  }
++  const x = v as { toDate?: () => Date; seconds?: number }
++  if (typeof x.toDate === 'function') return x.toDate().getTime()
++  if (typeof x.seconds === 'number') return x.seconds * 1000
++  return 0
++}
++
++export function buildStudentStats(
++  attempts: AttemptLike[],
++  subjectOf: (latihanId?: string) => string | undefined
++): StudentStatsDoc[] {
++  const groups = new Map<
++    string,
++    {
++      doc: StudentStatsDoc
++      buckets: Map<string, StatsBucket>
++      latestMs: number
++    }
++  >()
++
++  attempts.forEach((a, idx) => {
++    const key = statsKey(a)
++    let g = groups.get(key)
++    if (!g) {
++      g = {
++        doc: { key, name: '', buckets: [] },
++        buckets: new Map(),
++        latestMs: -1,
++      }
++      groups.set(key, g)
++    }
++    const c = String(a.studentClass || '').trim()
++    const s = subjectOf(a.latihanId) || ''
++    const bk = `${c}\u0000${s}`
++    const b = g.buckets.get(bk) || { c, s, sum: 0, n: 0, best: 0 }
++    const pct = typeof a.percent === 'number' ? a.percent : 0
++    b.sum += pct
++    b.n += 1
++    if (pct > b.best) b.best = pct
++    g.buckets.set(bk, b)
++
++    // nama / kelas / id terbaru (berdasarkan waktu selesai; urutan data sebagai pemutus)
++    const ms = toMs(a.finishedAt) * 1000 + Math.min(idx, 999)
++    if (ms >= g.latestMs) {
++      g.latestMs = ms
++      if (a.studentName) g.doc.name = String(a.studentName)
++      if (a.studentClass) g.doc.className = String(a.studentClass)
++      if (a.studentId) g.doc.studentId = String(a.studentId)
++    }
++  })
++
++  return [...groups.values()].map((g) => ({
++    ...g.doc,
++    name: g.doc.name || '—',
++    buckets: [...g.buckets.values()],
++  }))
++}
+diff --git a/scripts/backfill-student-stats.mjs b/scripts/backfill-student-stats.mjs
+new file mode 100644
+index 0000000..dc7c925
+--- /dev/null
++++ b/scripts/backfill-student-stats.mjs
+@@ -0,0 +1,31 @@
++/**
++ * Isi / segarkan SEMUA ringkasan peringkat (`studentStats`) dari seluruh hasil kuis (`attempts`).
++ * Jalankan SEKALI setelah deploy Cloud Functions, SEBELUM deploy hosting. Setelah itu fungsi
++ * `syncStudentStats` menjaganya otomatis. Aman diulang kapan saja (mis. setelah koreksi data massal).
++ *
++ *   cd functions && npm run build && cd ..        # fungsi hitung dipakai ulang dari hasil build
++ *   npm i --no-save firebase-admin
++ *   export GOOGLE_APPLICATION_CREDENTIALS=/jalur/ke/serviceAccount.json
++ *   node scripts/backfill-student-stats.mjs            # laporan saja (tidak menulis)
++ *   node scripts/backfill-student-stats.mjs --apply    # tulis
++ */
++import { createRequire } from 'node:module'
++import admin from 'firebase-admin'
++
++const require = createRequire(import.meta.url)
++let rebuildAll
++try {
++  ;({ rebuildAll } = require('../functions/lib/rebuildStats.js'))
++} catch {
++  console.error('Belum ada hasil build fungsi. Jalankan dulu: cd functions && npm run build')
++  process.exit(1)
++}
++
++const APPLY = process.argv.includes('--apply')
++admin.initializeApp({ credential: admin.credential.applicationDefault() })
++const result = await rebuildAll(admin.firestore(), APPLY)
++console.log(
++  `Hasil kuis: ${result.attempts} | siswa dengan ringkasan: ${result.students} | ` +
++    `ringkasan usang dihapus: ${result.staleRemoved} | ditulis: ${result.written} | mode: ${APPLY ? 'APPLY' : 'DRY RUN'}`
++)
++if (!APPLY) console.log('Dry run selesai. Tambahkan --apply untuk menulis.')
+diff --git a/src/lib/ranking.ts b/src/lib/ranking.ts
+new file mode 100644
+index 0000000..00e596e
+--- /dev/null
++++ b/src/lib/ranking.ts
+@@ -0,0 +1,138 @@
++/**
++ * Hitung peringkat dari (a) data mentah `attempts` atau (b) ringkasan `studentStats`.
++ * Keduanya HARUS memberi hasil identik — diuji otomatis (lihat docs/PERINGKAT-RINGKASAN.md).
++ */
++import type { LatihanAttempt } from '../types/question'
++
++export interface StatsBucket {
++  c: string
++  s: string
++  sum: number
++  n: number
++  best: number
++}
++
++export interface StudentStats {
++  id?: string
++  key: string
++  name: string
++  studentId?: string
++  className?: string
++  buckets: StatsBucket[]
++}
++
++export interface RankFilters {
++  /** Kosong / undefined = semua kelas */
++  className?: string
++  /** 'all' / undefined = semua mapel */
++  subjectKey?: string
++  /** Hanya untuk mode data mentah: peringkat satu paket. 'all' / undefined = semua */
++  latihanId?: string
++}
++
++export interface BaseRankRow {
++  key: string
++  name: string
++  studentId?: string
++  className?: string
++  attempts: number
++  avg: number
++  best: number
++}
++
++/** Identitas siswa: id bila ada, jika tidak nama (huruf kecil) — sama dengan statsKey di server. */
++export function rowKey(s: { studentId?: string | null; studentName?: string }) {
++  const id = String(s.studentId || '').trim()
++  if (id) return `id:${id}`
++  return `name:${String(s.studentName || '').trim().toLowerCase()}`
++}
++
++const all = (v?: string) => !v || v === 'all'
++
++export function rankFromAttempts(
++  attempts: LatihanAttempt[],
++  subjectOf: (latihanId: string) => string | undefined,
++  f: RankFilters
++): BaseRankRow[] {
++  const cls = (f.className || '').trim()
++  const filtered = attempts.filter((a) => {
++    if (cls && (a.studentClass || '').trim() !== cls) return false
++    if (!all(f.latihanId)) {
++      if (a.latihanId !== f.latihanId) return false
++    } else if (!all(f.subjectKey)) {
++      if (subjectOf(a.latihanId) !== f.subjectKey) return false
++    }
++    return true
++  })
++
++  const map = new Map<
++    string,
++    { name: string; studentId?: string; className?: string; sum: number; n: number; best: number }
++  >()
++  filtered.forEach((a) => {
++    const key = rowKey(a)
++    const cur = map.get(key) || {
++      name: a.studentName || '—',
++      studentId: a.studentId || undefined,
++      className: a.studentClass || undefined,
++      sum: 0,
++      n: 0,
++      best: 0,
++    }
++    const pct = a.percent ?? 0
++    cur.sum += pct
++    cur.n += 1
++    if (pct > cur.best) cur.best = pct
++    if (a.studentName) cur.name = a.studentName
++    if (a.studentClass) cur.className = a.studentClass
++    if (a.studentId) cur.studentId = a.studentId
++    map.set(key, cur)
++  })
++
++  return [...map.entries()].map(([key, v]) => ({
++    key,
++    name: v.name,
++    studentId: v.studentId,
++    className: v.className,
++    attempts: v.n,
++    avg: v.n ? Math.round(v.sum / v.n) : 0,
++    best: Math.round(v.best),
++  }))
++}
++
++export function rankFromStats(stats: StudentStats[], f: RankFilters): BaseRankRow[] {
++  const cls = (f.className || '').trim()
++  const rows: BaseRankRow[] = []
++  stats.forEach((st) => {
++    let sum = 0
++    let n = 0
++    let best = 0
++    let className = st.className
++    st.buckets.forEach((b) => {
++      if (cls && b.c !== cls) return
++      if (!all(f.subjectKey) && b.s !== f.subjectKey) return
++      sum += b.sum
++      n += b.n
++      if (b.best > best) best = b.best
++      if (cls) className = b.c
++    })
++    if (n === 0) return
++    rows.push({
++      key: rowKey({ studentId: st.studentId, studentName: st.name }),
++      name: st.name,
++      studentId: st.studentId,
++      className,
++      attempts: n,
++      avg: Math.round(sum / n),
++      best: Math.round(best),
++    })
++  })
++  return rows
++}
++
++/** Daftar kelas yang muncul di ringkasan (untuk dropdown admin). */
++export function classesFromStats(stats: StudentStats[]): string[] {
++  const s = new Set<string>()
++  stats.forEach((st) => st.buckets.forEach((b) => b.c && s.add(b.c)))
++  return [...s].sort((a, b) => a.localeCompare(b, 'id'))
++}
+diff --git a/src/lib/rankingData.ts b/src/lib/rankingData.ts
+new file mode 100644
+index 0000000..a64abd3
+--- /dev/null
++++ b/src/lib/rankingData.ts
+@@ -0,0 +1,66 @@
++/**
++ * Sumber data halaman Peringkat.
++ *
++ * Utama  : koleksi `studentStats` (±1 dokumen per siswa, dijaga Cloud Function `syncStudentStats`).
++ * Cadangan: seluruh `attempts` + `latihan` (cara lama) — dipakai bila ringkasan belum terisi,
++ *           ditolak rules (belum dideploy), error, atau jumlahnya tidak cocok dengan data asli.
++ *
++ * Pemeriksaan jumlah: total hasil di ringkasan harus sama dengan jumlah dokumen `attempts`
++ * (dihitung di server, ±1 bacaan per 1.000 dokumen). Bila beda, ringkasan dianggap belum sinkron
++ * dan peringkat dihitung dari data asli supaya angkanya selalu benar.
++ */
++import { collection, getCountFromServer, getDocs, query, where } from 'firebase/firestore'
++import { db } from './firebase'
++import type { LatihanAttempt, LatihanPaket } from '../types/question'
++import type { StudentStats } from './ranking'
++
++export type RankingSource =
++  | { mode: 'stats'; stats: StudentStats[] }
++  | { mode: 'attempts'; attempts: LatihanAttempt[]; pakets: LatihanPaket[] }
++
++export async function loadRankingSource(): Promise<RankingSource> {
++  try {
++    const snap = await getDocs(collection(db, 'studentStats'))
++    if (!snap.empty) {
++      const stats = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as StudentStats)
++      const inStats = stats.reduce((s, st) => s + st.buckets.reduce((x, b) => x + b.n, 0), 0)
++      const real = (await getCountFromServer(collection(db, 'attempts'))).data().count
++      if (inStats === real) return { mode: 'stats', stats }
++      console.warn(`ringkasan peringkat belum sinkron (${inStats} ≠ ${real}), pakai data asli`)
++    }
++  } catch (err) {
++    console.warn('ringkasan peringkat tidak bisa dipakai, pakai data asli', err)
++  }
++  const [aSnap, pSnap] = await Promise.all([
++    getDocs(collection(db, 'attempts')),
++    getDocs(collection(db, 'latihan')),
++  ])
++  return {
++    mode: 'attempts',
++    attempts: aSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as LatihanAttempt),
++    pakets: pSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as LatihanPaket),
++  }
++}
++
++/** Daftar paket untuk dropdown (tanpa draft). Cadangan: baca semua. */
++export async function loadPaketsLite(): Promise<LatihanPaket[]> {
++  try {
++    const snap = await getDocs(
++      query(
++        collection(db, 'latihan'),
++        where('status', 'in', ['active', 'scheduled', 'finished', 'archived'])
++      )
++    )
++    if (!snap.empty) return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LatihanPaket)
++  } catch (err) {
++    console.warn('latihan terfilter gagal, baca semua', err)
++  }
++  const all = await getDocs(collection(db, 'latihan'))
++  return all.docs.map((d) => ({ id: d.id, ...d.data() }) as LatihanPaket)
++}
++
++/** Hasil kuis untuk satu paket (peringkat per paket) — dibaca saat dibutuhkan saja. */
++export async function loadAttemptsForPaket(latihanId: string): Promise<LatihanAttempt[]> {
++  const snap = await getDocs(query(collection(db, 'attempts'), where('latihanId', '==', latihanId)))
++  return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LatihanAttempt)
++}
+diff --git a/src/pages/OrtuPeringkat.tsx b/src/pages/OrtuPeringkat.tsx
+index 59ef85e..9dc59cb 100644
+--- a/src/pages/OrtuPeringkat.tsx
++++ b/src/pages/OrtuPeringkat.tsx
+@@ -1,7 +1,5 @@
+ import { useEffect, useMemo, useState } from 'react'
+ import { useNavigate } from 'react-router-dom'
+-import { collection, getDocs } from 'firebase/firestore'
+-import { db } from '../lib/firebase'
+ import { ensureParentSession } from '../lib/parentSession'
+ import type { ParentSession } from '../types/parent'
+ import {
+@@ -11,6 +9,13 @@ import {
+ } from '../types/question'
+ import OrtuLayout from '../components/OrtuLayout'
+ import { getRosterDoc } from '../lib/studentRoster'
++import {
++  loadAttemptsForPaket,
++  loadPaketsLite,
++  loadRankingSource,
++  type RankingSource,
++} from '../lib/rankingData'
++import { rankFromAttempts, rankFromStats, type BaseRankRow } from '../lib/ranking'
+ 
+ type ChildInfo = { id: string; fullName: string; className?: string }
+ 
+@@ -45,8 +50,10 @@ export default function OrtuPeringkat() {
+   const [session, setSession] = useState<ParentSession | null>(null)
+   const [children, setChildren] = useState<ChildInfo[]>([])
+   const [selectedChildId, setSelectedChildId] = useState('')
+-  const [attempts, setAttempts] = useState<LatihanAttempt[]>([])
++  const [source, setSource] = useState<RankingSource | null>(null)
+   const [pakets, setPakets] = useState<LatihanPaket[]>([])
++  // Hasil kuis satu paket — hanya dibaca saat orang tua memilih peringkat per paket
++  const [paketAttempts, setPaketAttempts] = useState<LatihanAttempt[] | null>(null)
+   const [loading, setLoading] = useState(true)
+   const [filterSubject, setFilterSubject] = useState<string>('all')
+   const [filterLatihan, setFilterLatihan] = useState<string>('all')
+@@ -82,13 +89,11 @@ export default function OrtuPeringkat() {
+       }
+ 
+       try {
+-        const [aSnap, pSnap] = await Promise.all([
+-          getDocs(collection(db, 'attempts')),
+-          getDocs(collection(db, 'latihan')),
+-        ])
++        const src = await loadRankingSource()
++        const pk = src.mode === 'attempts' ? src.pakets : await loadPaketsLite()
+         if (!cancelled) {
+-          setAttempts(aSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanAttempt)))
+-          setPakets(pSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanPaket)))
++          setSource(src)
++          setPakets(pk)
+         }
+       } catch (err) {
+         console.error(err)
+@@ -105,6 +110,27 @@ export default function OrtuPeringkat() {
+     }
+   }, [navigate])
+ 
++  // Peringkat per paket: baca hasil paket itu saja (bukan seluruh hasil semua paket).
++  useEffect(() => {
++    if (filterLatihan === 'all') {
++      setPaketAttempts(null)
++      return
++    }
++    let cancelled = false
++    setPaketAttempts(null)
++    loadAttemptsForPaket(filterLatihan)
++      .then((list) => {
++        if (!cancelled) setPaketAttempts(list)
++      })
++      .catch((err) => {
++        console.error(err)
++        if (!cancelled) setPaketAttempts([])
++      })
++    return () => {
++      cancelled = true
++    }
++  }, [filterLatihan])
++
+   const selectedChild = children.find((c) => c.id === selectedChildId) || children[0]
+ 
+   const paketMap = useMemo(() => {
+@@ -130,52 +156,31 @@ export default function OrtuPeringkat() {
+     if (!selectedChild) return []
+     const myClass = (selectedChild.className || '').trim()
+ 
+-    const filtered = attempts.filter((a) => {
+-      if (scope === 'class' && myClass) {
+-        if ((a.studentClass || '').trim() !== myClass) return false
+-      }
+-      if (filterLatihan !== 'all') {
+-        if (a.latihanId !== filterLatihan) return false
+-      } else if (filterSubject !== 'all') {
+-        const p = paketMap.get(a.latihanId)
+-        if (!p || p.subjectKey !== filterSubject) return false
+-      }
+-      return true
+-    })
+-
+-    const map = new Map<
+-      string,
+-      { name: string; className?: string; sum: number; n: number; best: number }
+-    >()
+-
+-    filtered.forEach((a) => {
+-      const key = studentKey(a)
+-      const cur = map.get(key) || {
+-        name: a.studentName || '—',
+-        className: a.studentClass || undefined,
+-        sum: 0,
+-        n: 0,
+-        best: 0,
+-      }
+-      const pct = a.percent ?? 0
+-      cur.sum += pct
+-      cur.n += 1
+-      cur.best = Math.max(cur.best, pct)
+-      if (a.studentName) cur.name = a.studentName
+-      if (a.studentClass) cur.className = a.studentClass
+-      map.set(key, cur)
+-    })
++    const filters = {
++      className: scope === 'class' ? myClass : '',
++      subjectKey: filterSubject,
++      latihanId: filterLatihan,
++    }
++    const subjectOf = (id: string) => paketMap.get(id)?.subjectKey
++    let base: BaseRankRow[] = []
++    if (filterLatihan !== 'all') {
++      base = paketAttempts ? rankFromAttempts(paketAttempts, subjectOf, filters) : []
++    } else if (source?.mode === 'stats') {
++      base = rankFromStats(source.stats, filters)
++    } else if (source?.mode === 'attempts') {
++      base = rankFromAttempts(source.attempts, subjectOf, filters)
++    }
+ 
+     const useBest = filterLatihan !== 'all'
+ 
+-    const rows: RankRow[] = [...map.entries()].map(([key, v]) => ({
+-      key,
+-      name: v.name,
+-      className: v.className,
+-      attempts: v.n,
+-      avg: useBest ? v.best : v.n ? Math.round(v.sum / v.n) : 0,
++    const rows: RankRow[] = base.map((r) => ({
++      key: r.key,
++      name: r.name,
++      className: r.className,
++      attempts: r.attempts,
++      avg: useBest ? r.best : r.avg,
+       rank: 0,
+-      isChild: key === childKey,
++      isChild: studentKey({ studentId: r.studentId, studentName: r.name }) === childKey,
+     }))
+ 
+     rows.sort(
+@@ -185,7 +190,7 @@ export default function OrtuPeringkat() {
+       r.rank = i + 1
+     })
+     return rows
+-  }, [attempts, paketMap, filterSubject, filterLatihan, scope, selectedChild, childKey])
++  }, [source, paketAttempts, paketMap, filterSubject, filterLatihan, scope, selectedChild, childKey])
+ 
+   const me = ranks.find((r) => r.isChild)
+ 
+diff --git a/src/pages/Peringkat.tsx b/src/pages/Peringkat.tsx
+index 8966777..96e2aa1 100644
+--- a/src/pages/Peringkat.tsx
++++ b/src/pages/Peringkat.tsx
+@@ -1,21 +1,14 @@
+ import { useEffect, useMemo, useState } from 'react'
+-import { collection, getDocs } from 'firebase/firestore'
+-import { db } from '../lib/firebase'
+ import Layout from '../components/Layout'
++import { loadRankingSource, type RankingSource } from '../lib/rankingData'
++import { classesFromStats, rankFromAttempts, rankFromStats } from '../lib/ranking'
+ import {
+   SUBJECTS,
+   getSubject,
+-  type LatihanAttempt,
+   type LatihanPaket,
+   type SubjectKey,
+ } from '../types/question'
+ 
+-function studentKey(a: { studentId?: string | null; studentName: string }) {
+-  const id = (a.studentId || '').trim()
+-  if (id) return `id:${id}`
+-  return `name:${(a.studentName || '').trim().toLowerCase()}`
+-}
+-
+ interface RankRow {
+   key: string
+   name: string
+@@ -28,8 +21,7 @@ interface RankRow {
+ }
+ 
+ export default function Peringkat() {
+-  const [attempts, setAttempts] = useState<LatihanAttempt[]>([])
+-  const [pakets, setPakets] = useState<LatihanPaket[]>([])
++  const [source, setSource] = useState<RankingSource | null>(null)
+   const [loading, setLoading] = useState(true)
+   const [filterSubject, setFilterSubject] = useState<string>('all')
+   const [filterClass, setFilterClass] = useState<string>('all')
+@@ -39,12 +31,7 @@ export default function Peringkat() {
+     ;(async () => {
+       setLoading(true)
+       try {
+-        const [aSnap, pSnap] = await Promise.all([
+-          getDocs(collection(db, 'attempts')),
+-          getDocs(collection(db, 'latihan')),
+-        ])
+-        setAttempts(aSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanAttempt)))
+-        setPakets(pSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanPaket)))
++        setSource(await loadRankingSource())
+       } catch (err) {
+         console.error(err)
+       } finally {
+@@ -55,65 +42,45 @@ export default function Peringkat() {
+ 
+   const paketMap = useMemo(() => {
+     const m = new Map<string, LatihanPaket>()
+-    pakets.forEach((p) => {
+-      if (p.id) m.set(p.id, p)
+-    })
++    if (source?.mode === 'attempts') {
++      source.pakets.forEach((p) => {
++        if (p.id) m.set(p.id, p)
++      })
++    }
+     return m
+-  }, [pakets])
++  }, [source])
+ 
+   const classes = useMemo(() => {
+-    const s = new Set<string>()
+-    attempts.forEach((a) => {
++    if (!source) return []
++    if (source.mode === 'stats') return classesFromStats(source.stats)
++    const set = new Set<string>()
++    source.attempts.forEach((a) => {
+       const c = (a.studentClass || '').trim()
+-      if (c) s.add(c)
++      if (c) set.add(c)
+     })
+-    return [...s].sort((a, b) => a.localeCompare(b, 'id'))
+-  }, [attempts])
++    return [...set].sort((a, b) => a.localeCompare(b, 'id'))
++  }, [source])
+ 
+   const ranks: RankRow[] = useMemo(() => {
+-    const filtered = attempts.filter((a) => {
+-      if (filterClass !== 'all' && (a.studentClass || '').trim() !== filterClass) return false
+-      if (filterSubject !== 'all') {
+-        const p = paketMap.get(a.latihanId)
+-        if (!p || p.subjectKey !== filterSubject) return false
+-      }
+-      return true
+-    })
+-
+-    const map = new Map<
+-      string,
+-      { name: string; studentId?: string; className?: string; sum: number; n: number; best: number }
+-    >()
+-
+-    filtered.forEach((a) => {
+-      const key = studentKey(a)
+-      const cur = map.get(key) || {
+-        name: a.studentName || '—',
+-        studentId: a.studentId || undefined,
+-        className: a.studentClass || undefined,
+-        sum: 0,
+-        n: 0,
+-        best: 0,
+-      }
+-      const pct = a.percent ?? 0
+-      cur.sum += pct
+-      cur.n += 1
+-      if (pct > cur.best) cur.best = pct
+-      if (a.studentClass) cur.className = a.studentClass
+-      if (a.studentName) cur.name = a.studentName
+-      if (a.studentId) cur.studentId = a.studentId
+-      map.set(key, cur)
+-    })
++    if (!source) return []
++    const filters = {
++      className: filterClass === 'all' ? '' : filterClass,
++      subjectKey: filterSubject,
++    }
++    const base =
++      source.mode === 'stats'
++        ? rankFromStats(source.stats, filters)
++        : rankFromAttempts(source.attempts, (id) => paketMap.get(id)?.subjectKey, filters)
+ 
+     const q = search.trim().toLowerCase()
+-    let rows = [...map.entries()].map(([key, v]) => ({
+-      key,
+-      name: v.name,
+-      studentId: v.studentId,
+-      className: v.className,
+-      attempts: v.n,
+-      avg: v.n ? Math.round(v.sum / v.n) : 0,
+-      best: Math.round(v.best),
++    let rows = base.map((r) => ({
++      key: r.key,
++      name: r.name,
++      studentId: r.studentId,
++      className: r.className,
++      attempts: r.attempts,
++      avg: r.avg,
++      best: r.best,
+       rank: 0,
+     }))
+ 
+@@ -130,7 +97,7 @@ export default function Peringkat() {
+       r.rank = i + 1
+     })
+     return rows
+-  }, [attempts, paketMap, filterSubject, filterClass, search])
++  }, [source, paketMap, filterSubject, filterClass, search])
+ 
+   const medal = (rank: number) => {
+     if (rank === 1) return '🥇'
+diff --git a/src/pages/SiswaPeringkat.tsx b/src/pages/SiswaPeringkat.tsx
+index c65cc63..f77c3c0 100644
+--- a/src/pages/SiswaPeringkat.tsx
++++ b/src/pages/SiswaPeringkat.tsx
+@@ -1,13 +1,12 @@
+ import { useEffect, useMemo, useState } from 'react'
+-import { collection, getDocs } from 'firebase/firestore'
+-import { db } from '../lib/firebase'
+ import { ensureStudentSession, type StudentSession } from '../lib/studentSession'
+ import { Link, useNavigate } from 'react-router-dom'
+ import StudentNav from '../components/StudentNav'
++import { loadRankingSource, type RankingSource } from '../lib/rankingData'
++import { rankFromAttempts, rankFromStats } from '../lib/ranking'
+ import {
+   SUBJECTS,
+   getSubject,
+-  type LatihanAttempt,
+   type LatihanPaket,
+   type SubjectKey,
+ } from '../types/question'
+@@ -31,8 +30,7 @@ interface RankRow {
+ export default function SiswaPeringkat() {
+   const navigate = useNavigate()
+   const [student, setStudent] = useState<StudentSession | null>(null)
+-  const [attempts, setAttempts] = useState<LatihanAttempt[]>([])
+-  const [pakets, setPakets] = useState<LatihanPaket[]>([])
++  const [source, setSource] = useState<RankingSource | null>(null)
+   const [loading, setLoading] = useState(true)
+   const [filterSubject, setFilterSubject] = useState<string>('all')
+   const [scope, setScope] = useState<'class' | 'all'>('class')
+@@ -48,13 +46,9 @@ export default function SiswaPeringkat() {
+       }
+       setStudent(s)
+       try {
+-        const [aSnap, pSnap] = await Promise.all([
+-          getDocs(collection(db, 'attempts')),
+-          getDocs(collection(db, 'latihan')),
+-        ])
++        const src = await loadRankingSource()
+         if (cancelled) return
+-        setAttempts(aSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanAttempt)))
+-        setPakets(pSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanPaket)))
++        setSource(src)
+       } catch (err) {
+         console.error(err)
+       } finally {
+@@ -68,11 +62,13 @@ export default function SiswaPeringkat() {
+ 
+   const paketMap = useMemo(() => {
+     const m = new Map<string, LatihanPaket>()
+-    pakets.forEach((p) => {
+-      if (p.id) m.set(p.id, p)
+-    })
++    if (source?.mode === 'attempts') {
++      source.pakets.forEach((p) => {
++        if (p.id) m.set(p.id, p)
++      })
++    }
+     return m
+-  }, [pakets])
++  }, [source])
+ 
+   const myKey = useMemo(() => {
+     if (!student) return ''
+@@ -83,41 +79,24 @@ export default function SiswaPeringkat() {
+     if (!student) return []
+     const myClass = (student.className || '').trim()
+ 
+-    const filtered = attempts.filter((a) => {
+-      if (scope === 'class' && myClass) {
+-        if ((a.studentClass || '').trim() !== myClass) return false
+-      }
+-      if (filterSubject !== 'all') {
+-        const p = paketMap.get(a.latihanId)
+-        if (!p || p.subjectKey !== filterSubject) return false
+-      }
+-      return true
+-    })
+-
+-    const map = new Map<string, { name: string; className?: string; sum: number; n: number }>()
+-    filtered.forEach((a) => {
+-      const key = studentKey(a)
+-      const cur = map.get(key) || {
+-        name: a.studentName || '—',
+-        className: a.studentClass || undefined,
+-        sum: 0,
+-        n: 0,
+-      }
+-      cur.sum += a.percent ?? 0
+-      cur.n += 1
+-      if (a.studentName) cur.name = a.studentName
+-      if (a.studentClass) cur.className = a.studentClass
+-      map.set(key, cur)
+-    })
++    if (!source) return []
++    const filters = {
++      className: scope === 'class' ? myClass : '',
++      subjectKey: filterSubject,
++    }
++    const base =
++      source.mode === 'stats'
++        ? rankFromStats(source.stats, filters)
++        : rankFromAttempts(source.attempts, (id) => paketMap.get(id)?.subjectKey, filters)
+ 
+-    const rows = [...map.entries()].map(([key, v]) => ({
+-      key,
+-      name: v.name,
+-      className: v.className,
+-      attempts: v.n,
+-      avg: v.n ? Math.round(v.sum / v.n) : 0,
++    const rows = base.map((r) => ({
++      key: r.key,
++      name: r.name,
++      className: r.className,
++      attempts: r.attempts,
++      avg: r.avg,
+       rank: 0,
+-      isMe: key === myKey,
++      isMe: studentKey({ studentId: r.studentId, studentName: r.name }) === myKey,
+     }))
+ 
+     rows.sort((a, b) => b.avg - a.avg || b.attempts - a.attempts || a.name.localeCompare(b.name, 'id'))
+@@ -125,7 +104,7 @@ export default function SiswaPeringkat() {
+       r.rank = i + 1
+     })
+     return rows
+-  }, [attempts, paketMap, filterSubject, scope, student, myKey])
++  }, [source, paketMap, filterSubject, scope, student, myKey])
+ 
+   const me = ranks.find((r) => r.isMe)
+ 

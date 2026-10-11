@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { collection, getDocs } from 'firebase/firestore'
-import { db } from '../lib/firebase'
 import { ensureParentSession } from '../lib/parentSession'
 import type { ParentSession } from '../types/parent'
 import {
@@ -11,6 +9,13 @@ import {
 } from '../types/question'
 import OrtuLayout from '../components/OrtuLayout'
 import { getRosterDoc } from '../lib/studentRoster'
+import {
+  loadAttemptsForPaket,
+  loadPaketsLite,
+  loadRankingSource,
+  type RankingSource,
+} from '../lib/rankingData'
+import { rankFromAttempts, rankFromStats, type BaseRankRow } from '../lib/ranking'
 
 type ChildInfo = { id: string; fullName: string; className?: string }
 
@@ -45,8 +50,10 @@ export default function OrtuPeringkat() {
   const [session, setSession] = useState<ParentSession | null>(null)
   const [children, setChildren] = useState<ChildInfo[]>([])
   const [selectedChildId, setSelectedChildId] = useState('')
-  const [attempts, setAttempts] = useState<LatihanAttempt[]>([])
+  const [source, setSource] = useState<RankingSource | null>(null)
   const [pakets, setPakets] = useState<LatihanPaket[]>([])
+  // Hasil kuis satu paket — hanya dibaca saat orang tua memilih peringkat per paket
+  const [paketAttempts, setPaketAttempts] = useState<LatihanAttempt[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [filterSubject, setFilterSubject] = useState<string>('all')
   const [filterLatihan, setFilterLatihan] = useState<string>('all')
@@ -82,13 +89,11 @@ export default function OrtuPeringkat() {
       }
 
       try {
-        const [aSnap, pSnap] = await Promise.all([
-          getDocs(collection(db, 'attempts')),
-          getDocs(collection(db, 'latihan')),
-        ])
+        const src = await loadRankingSource()
+        const pk = src.mode === 'attempts' ? src.pakets : await loadPaketsLite()
         if (!cancelled) {
-          setAttempts(aSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanAttempt)))
-          setPakets(pSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanPaket)))
+          setSource(src)
+          setPakets(pk)
         }
       } catch (err) {
         console.error(err)
@@ -104,6 +109,27 @@ export default function OrtuPeringkat() {
       cancelled = true
     }
   }, [navigate])
+
+  // Peringkat per paket: baca hasil paket itu saja (bukan seluruh hasil semua paket).
+  useEffect(() => {
+    if (filterLatihan === 'all') {
+      setPaketAttempts(null)
+      return
+    }
+    let cancelled = false
+    setPaketAttempts(null)
+    loadAttemptsForPaket(filterLatihan)
+      .then((list) => {
+        if (!cancelled) setPaketAttempts(list)
+      })
+      .catch((err) => {
+        console.error(err)
+        if (!cancelled) setPaketAttempts([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [filterLatihan])
 
   const selectedChild = children.find((c) => c.id === selectedChildId) || children[0]
 
@@ -130,52 +156,31 @@ export default function OrtuPeringkat() {
     if (!selectedChild) return []
     const myClass = (selectedChild.className || '').trim()
 
-    const filtered = attempts.filter((a) => {
-      if (scope === 'class' && myClass) {
-        if ((a.studentClass || '').trim() !== myClass) return false
-      }
-      if (filterLatihan !== 'all') {
-        if (a.latihanId !== filterLatihan) return false
-      } else if (filterSubject !== 'all') {
-        const p = paketMap.get(a.latihanId)
-        if (!p || p.subjectKey !== filterSubject) return false
-      }
-      return true
-    })
-
-    const map = new Map<
-      string,
-      { name: string; className?: string; sum: number; n: number; best: number }
-    >()
-
-    filtered.forEach((a) => {
-      const key = studentKey(a)
-      const cur = map.get(key) || {
-        name: a.studentName || '—',
-        className: a.studentClass || undefined,
-        sum: 0,
-        n: 0,
-        best: 0,
-      }
-      const pct = a.percent ?? 0
-      cur.sum += pct
-      cur.n += 1
-      cur.best = Math.max(cur.best, pct)
-      if (a.studentName) cur.name = a.studentName
-      if (a.studentClass) cur.className = a.studentClass
-      map.set(key, cur)
-    })
+    const filters = {
+      className: scope === 'class' ? myClass : '',
+      subjectKey: filterSubject,
+      latihanId: filterLatihan,
+    }
+    const subjectOf = (id: string) => paketMap.get(id)?.subjectKey
+    let base: BaseRankRow[] = []
+    if (filterLatihan !== 'all') {
+      base = paketAttempts ? rankFromAttempts(paketAttempts, subjectOf, filters) : []
+    } else if (source?.mode === 'stats') {
+      base = rankFromStats(source.stats, filters)
+    } else if (source?.mode === 'attempts') {
+      base = rankFromAttempts(source.attempts, subjectOf, filters)
+    }
 
     const useBest = filterLatihan !== 'all'
 
-    const rows: RankRow[] = [...map.entries()].map(([key, v]) => ({
-      key,
-      name: v.name,
-      className: v.className,
-      attempts: v.n,
-      avg: useBest ? v.best : v.n ? Math.round(v.sum / v.n) : 0,
+    const rows: RankRow[] = base.map((r) => ({
+      key: r.key,
+      name: r.name,
+      className: r.className,
+      attempts: r.attempts,
+      avg: useBest ? r.best : r.avg,
       rank: 0,
-      isChild: key === childKey,
+      isChild: studentKey({ studentId: r.studentId, studentName: r.name }) === childKey,
     }))
 
     rows.sort(
@@ -185,7 +190,7 @@ export default function OrtuPeringkat() {
       r.rank = i + 1
     })
     return rows
-  }, [attempts, paketMap, filterSubject, filterLatihan, scope, selectedChild, childKey])
+  }, [source, paketAttempts, paketMap, filterSubject, filterLatihan, scope, selectedChild, childKey])
 
   const me = ranks.find((r) => r.isChild)
 

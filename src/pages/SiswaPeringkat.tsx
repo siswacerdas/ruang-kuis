@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, getDocs } from 'firebase/firestore'
-import { db } from '../lib/firebase'
 import { ensureStudentSession, type StudentSession } from '../lib/studentSession'
 import { Link, useNavigate } from 'react-router-dom'
 import StudentNav from '../components/StudentNav'
+import { loadRankingSource, type RankingSource } from '../lib/rankingData'
+import { rankFromAttempts, rankFromStats } from '../lib/ranking'
 import {
   SUBJECTS,
   getSubject,
-  type LatihanAttempt,
   type LatihanPaket,
   type SubjectKey,
 } from '../types/question'
@@ -31,8 +30,7 @@ interface RankRow {
 export default function SiswaPeringkat() {
   const navigate = useNavigate()
   const [student, setStudent] = useState<StudentSession | null>(null)
-  const [attempts, setAttempts] = useState<LatihanAttempt[]>([])
-  const [pakets, setPakets] = useState<LatihanPaket[]>([])
+  const [source, setSource] = useState<RankingSource | null>(null)
   const [loading, setLoading] = useState(true)
   const [filterSubject, setFilterSubject] = useState<string>('all')
   const [scope, setScope] = useState<'class' | 'all'>('class')
@@ -48,13 +46,9 @@ export default function SiswaPeringkat() {
       }
       setStudent(s)
       try {
-        const [aSnap, pSnap] = await Promise.all([
-          getDocs(collection(db, 'attempts')),
-          getDocs(collection(db, 'latihan')),
-        ])
+        const src = await loadRankingSource()
         if (cancelled) return
-        setAttempts(aSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanAttempt)))
-        setPakets(pSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanPaket)))
+        setSource(src)
       } catch (err) {
         console.error(err)
       } finally {
@@ -68,11 +62,13 @@ export default function SiswaPeringkat() {
 
   const paketMap = useMemo(() => {
     const m = new Map<string, LatihanPaket>()
-    pakets.forEach((p) => {
-      if (p.id) m.set(p.id, p)
-    })
+    if (source?.mode === 'attempts') {
+      source.pakets.forEach((p) => {
+        if (p.id) m.set(p.id, p)
+      })
+    }
     return m
-  }, [pakets])
+  }, [source])
 
   const myKey = useMemo(() => {
     if (!student) return ''
@@ -83,41 +79,24 @@ export default function SiswaPeringkat() {
     if (!student) return []
     const myClass = (student.className || '').trim()
 
-    const filtered = attempts.filter((a) => {
-      if (scope === 'class' && myClass) {
-        if ((a.studentClass || '').trim() !== myClass) return false
-      }
-      if (filterSubject !== 'all') {
-        const p = paketMap.get(a.latihanId)
-        if (!p || p.subjectKey !== filterSubject) return false
-      }
-      return true
-    })
+    if (!source) return []
+    const filters = {
+      className: scope === 'class' ? myClass : '',
+      subjectKey: filterSubject,
+    }
+    const base =
+      source.mode === 'stats'
+        ? rankFromStats(source.stats, filters)
+        : rankFromAttempts(source.attempts, (id) => paketMap.get(id)?.subjectKey, filters)
 
-    const map = new Map<string, { name: string; className?: string; sum: number; n: number }>()
-    filtered.forEach((a) => {
-      const key = studentKey(a)
-      const cur = map.get(key) || {
-        name: a.studentName || '—',
-        className: a.studentClass || undefined,
-        sum: 0,
-        n: 0,
-      }
-      cur.sum += a.percent ?? 0
-      cur.n += 1
-      if (a.studentName) cur.name = a.studentName
-      if (a.studentClass) cur.className = a.studentClass
-      map.set(key, cur)
-    })
-
-    const rows = [...map.entries()].map(([key, v]) => ({
-      key,
-      name: v.name,
-      className: v.className,
-      attempts: v.n,
-      avg: v.n ? Math.round(v.sum / v.n) : 0,
+    const rows = base.map((r) => ({
+      key: r.key,
+      name: r.name,
+      className: r.className,
+      attempts: r.attempts,
+      avg: r.avg,
       rank: 0,
-      isMe: key === myKey,
+      isMe: studentKey({ studentId: r.studentId, studentName: r.name }) === myKey,
     }))
 
     rows.sort((a, b) => b.avg - a.avg || b.attempts - a.attempts || a.name.localeCompare(b.name, 'id'))
@@ -125,7 +104,7 @@ export default function SiswaPeringkat() {
       r.rank = i + 1
     })
     return rows
-  }, [attempts, paketMap, filterSubject, scope, student, myKey])
+  }, [source, paketMap, filterSubject, scope, student, myKey])
 
   const me = ranks.find((r) => r.isMe)
 

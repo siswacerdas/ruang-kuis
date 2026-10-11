@@ -84,6 +84,13 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // Ringkasan peringkat per siswa (nama, kelas, jumlah & total skor per mapel).
+    // Ditulis HANYA oleh Cloud Function `syncStudentStats` (Admin SDK); klien hanya membaca.
+    match /studentStats/{statId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
     // --- Data siswa ---
     // Berisi NISN (= password login) & email ortu: HANYA admin.
     // Halaman login / portal ortu memakai salinan minimal `studentRoster`.

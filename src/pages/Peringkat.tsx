@@ -1,20 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { collection, getDocs } from 'firebase/firestore'
-import { db } from '../lib/firebase'
 import Layout from '../components/Layout'
+import { loadRankingSource, type RankingSource } from '../lib/rankingData'
+import { classesFromStats, rankFromAttempts, rankFromStats } from '../lib/ranking'
 import {
   SUBJECTS,
   getSubject,
-  type LatihanAttempt,
   type LatihanPaket,
   type SubjectKey,
 } from '../types/question'
-
-function studentKey(a: { studentId?: string | null; studentName: string }) {
-  const id = (a.studentId || '').trim()
-  if (id) return `id:${id}`
-  return `name:${(a.studentName || '').trim().toLowerCase()}`
-}
 
 interface RankRow {
   key: string
@@ -28,8 +21,7 @@ interface RankRow {
 }
 
 export default function Peringkat() {
-  const [attempts, setAttempts] = useState<LatihanAttempt[]>([])
-  const [pakets, setPakets] = useState<LatihanPaket[]>([])
+  const [source, setSource] = useState<RankingSource | null>(null)
   const [loading, setLoading] = useState(true)
   const [filterSubject, setFilterSubject] = useState<string>('all')
   const [filterClass, setFilterClass] = useState<string>('all')
@@ -39,12 +31,7 @@ export default function Peringkat() {
     ;(async () => {
       setLoading(true)
       try {
-        const [aSnap, pSnap] = await Promise.all([
-          getDocs(collection(db, 'attempts')),
-          getDocs(collection(db, 'latihan')),
-        ])
-        setAttempts(aSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanAttempt)))
-        setPakets(pSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LatihanPaket)))
+        setSource(await loadRankingSource())
       } catch (err) {
         console.error(err)
       } finally {
@@ -55,65 +42,45 @@ export default function Peringkat() {
 
   const paketMap = useMemo(() => {
     const m = new Map<string, LatihanPaket>()
-    pakets.forEach((p) => {
-      if (p.id) m.set(p.id, p)
-    })
+    if (source?.mode === 'attempts') {
+      source.pakets.forEach((p) => {
+        if (p.id) m.set(p.id, p)
+      })
+    }
     return m
-  }, [pakets])
+  }, [source])
 
   const classes = useMemo(() => {
-    const s = new Set<string>()
-    attempts.forEach((a) => {
+    if (!source) return []
+    if (source.mode === 'stats') return classesFromStats(source.stats)
+    const set = new Set<string>()
+    source.attempts.forEach((a) => {
       const c = (a.studentClass || '').trim()
-      if (c) s.add(c)
+      if (c) set.add(c)
     })
-    return [...s].sort((a, b) => a.localeCompare(b, 'id'))
-  }, [attempts])
+    return [...set].sort((a, b) => a.localeCompare(b, 'id'))
+  }, [source])
 
   const ranks: RankRow[] = useMemo(() => {
-    const filtered = attempts.filter((a) => {
-      if (filterClass !== 'all' && (a.studentClass || '').trim() !== filterClass) return false
-      if (filterSubject !== 'all') {
-        const p = paketMap.get(a.latihanId)
-        if (!p || p.subjectKey !== filterSubject) return false
-      }
-      return true
-    })
-
-    const map = new Map<
-      string,
-      { name: string; studentId?: string; className?: string; sum: number; n: number; best: number }
-    >()
-
-    filtered.forEach((a) => {
-      const key = studentKey(a)
-      const cur = map.get(key) || {
-        name: a.studentName || '—',
-        studentId: a.studentId || undefined,
-        className: a.studentClass || undefined,
-        sum: 0,
-        n: 0,
-        best: 0,
-      }
-      const pct = a.percent ?? 0
-      cur.sum += pct
-      cur.n += 1
-      if (pct > cur.best) cur.best = pct
-      if (a.studentClass) cur.className = a.studentClass
-      if (a.studentName) cur.name = a.studentName
-      if (a.studentId) cur.studentId = a.studentId
-      map.set(key, cur)
-    })
+    if (!source) return []
+    const filters = {
+      className: filterClass === 'all' ? '' : filterClass,
+      subjectKey: filterSubject,
+    }
+    const base =
+      source.mode === 'stats'
+        ? rankFromStats(source.stats, filters)
+        : rankFromAttempts(source.attempts, (id) => paketMap.get(id)?.subjectKey, filters)
 
     const q = search.trim().toLowerCase()
-    let rows = [...map.entries()].map(([key, v]) => ({
-      key,
-      name: v.name,
-      studentId: v.studentId,
-      className: v.className,
-      attempts: v.n,
-      avg: v.n ? Math.round(v.sum / v.n) : 0,
-      best: Math.round(v.best),
+    let rows = base.map((r) => ({
+      key: r.key,
+      name: r.name,
+      studentId: r.studentId,
+      className: r.className,
+      attempts: r.attempts,
+      avg: r.avg,
+      best: r.best,
       rank: 0,
     }))
 
@@ -130,7 +97,7 @@ export default function Peringkat() {
       r.rank = i + 1
     })
     return rows
-  }, [attempts, paketMap, filterSubject, filterClass, search])
+  }, [source, paketMap, filterSubject, filterClass, search])
 
   const medal = (rank: number) => {
     if (rank === 1) return '🥇'
