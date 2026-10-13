@@ -54,47 +54,62 @@ export async function countPendingParentRequests(): Promise<number> {
   }
 }
 
-/** Notifikasi belum dibaca (maks 30) — hanya unread */
+function mapNotifDocs(
+  docs: { id: string; data: () => Record<string, unknown> }[]
+): AdminNotification[] {
+  return docs
+    .map((d) => ({ id: d.id, ...d.data() } as AdminNotification))
+    .filter((n) => n.read === false)
+    .sort((a, b) => (toMillis(b.createdAt) || 0) - (toMillis(a.createdAt) || 0))
+    .slice(0, 30)
+}
+
+/**
+ * Notifikasi belum dibaca (maks 30).
+ * Urutan preferensi query:
+ * 1) where(read==false) + orderBy(createdAt) + limit  — butuh composite index
+ * 2) where(read==false) + limit                       — tanpa index order
+ * 3) full collection + filter client                   — terakhir, hindari jika bisa
+ */
 export async function fetchUnreadNotifications(): Promise<AdminNotification[]> {
+  const col = collection(db, 'adminNotifications')
   try {
-    let snap
     try {
-      snap = await getDocs(
-        query(
-          collection(db, 'adminNotifications'),
-          where('read', '==', false),
-          orderBy('createdAt', 'desc'),
-          limit(30)
-        )
+      const snap = await getDocs(
+        query(col, where('read', '==', false), orderBy('createdAt', 'desc'), limit(30))
       )
+      return mapNotifDocs(snap.docs)
     } catch {
-      // Fallback jika index belum ada: ambil semua lalu filter client-side
-      snap = await getDocs(collection(db, 'adminNotifications'))
+      /* index composite belum ada */
     }
-    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as AdminNotification))
-    return list
-      .filter((n) => n.read === false)
-      .sort((a, b) => (toMillis(b.createdAt) || 0) - (toMillis(a.createdAt) || 0))
-      .slice(0, 30)
+    try {
+      const snap = await getDocs(query(col, where('read', '==', false), limit(30)))
+      return mapNotifDocs(snap.docs)
+    } catch {
+      /* where saja gagal (jarang) */
+    }
+    const snap = await getDocs(query(col, limit(80)))
+    return mapNotifDocs(snap.docs)
   } catch {
     return []
   }
 }
 
 /**
- * Setelah dilihat: tandai read lalu hapus dokumen agar lonceng hanya berisi yang baru.
- * Jika delete gagal (rules), tetap keep read=true.
+ * Setelah dilihat: hapus dokumen agar lonceng hanya berisi yang baru.
+ * Jika delete gagal (rules/jaringan), fallback tandai read=true.
  */
 export async function dismissNotification(id: string): Promise<void> {
   try {
-    await updateDoc(doc(db, 'adminNotifications', id), { read: true })
-  } catch {
-    /* ignore */
-  }
-  try {
     await deleteDoc(doc(db, 'adminNotifications', id))
+    return
   } catch (err) {
     console.warn('dismissNotification delete', err)
+  }
+  try {
+    await updateDoc(doc(db, 'adminNotifications', id), { read: true })
+  } catch (err) {
+    console.warn('dismissNotification mark read', err)
   }
 }
 
@@ -106,7 +121,7 @@ export async function markAllNotificationsRead(ids: string[]): Promise<void> {
   await Promise.all(ids.map((id) => markNotificationRead(id)))
 }
 
-/** Hapus semua notifikasi yang sudah / belum dibaca (bersihkan lonceng). */
+/** Hapus semua notifikasi yang tampil di lonceng. */
 export async function dismissAllNotifications(ids: string[]): Promise<void> {
   await Promise.all(ids.map((id) => dismissNotification(id)))
 }
@@ -114,10 +129,9 @@ export async function dismissAllNotifications(ids: string[]): Promise<void> {
 /**
  * Satu listener bersama per jenis hitungan (bukan satu per komponen/halaman).
  *
- * Sebelumnya Layout + lonceng + Dashboard masing-masing membuka listener ke SELURUH koleksi,
- * dibuat ulang setiap pindah halaman. Sekarang: query difilter di server, semua komponen berbagi
- * satu listener, dan listener ditahan 60 detik setelah komponen terakhir lepas supaya pindah
- * halaman tidak memulai ulang (dan menagih ulang) pembacaan.
+ * Query difilter di server; semua komponen berbagi satu listener; listener
+ * ditahan 60 detik setelah komponen terakhir lepas supaya pindah halaman
+ * tidak memulai ulang (dan menagih ulang) pembacaan.
  */
 const HUB_GRACE_MS = 60_000
 
@@ -149,7 +163,6 @@ function createCountHub(start: (emit: (n: number) => void, fail: () => void) => 
           listeners.forEach((l) => l(n))
         },
         () => {
-          // listener mati (mis. logout / izin ditolak): kosongkan agar bisa dimulai ulang
           unsub = null
           last = null
           listeners.forEach((l) => l(0))

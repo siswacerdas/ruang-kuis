@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { AdminNotification } from '../types/parent'
 import {
@@ -12,17 +12,24 @@ import {
 } from '../lib/adminNotifications'
 
 /**
- * Loneng notifikasi di header admin + badge pengajuan ortu pending.
+ * Lonceng notifikasi di header admin + badge pengajuan ortu pending.
  * Hanya menampilkan notifikasi belum dibaca; setelah diklik, dihapus otomatis.
+ *
+ * Daftar di-cache di state: buka panel lagi tidak memicu loading penuh
+ * kecuali cache kosong / badge naik / tekan Muat ulang.
  */
 export default function AdminNotifBell() {
   const [open, setOpen] = useState(false)
   const [pendingOrtu, setPendingOrtu] = useState(0)
   const [unreadCount, setUnreadCount] = useState(0)
   const [notifs, setNotifs] = useState<AdminNotification[]>([])
+  /** true hanya saat fetch pertama / cache kosong — bukan soft refresh */
   const [loading, setLoading] = useState(false)
   const [clearing, setClearing] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
+  const lastKnownCount = useRef(0)
+  const fetching = useRef(false)
+  const hasLoadedOnce = useRef(false)
 
   useEffect(() => {
     const unsubPending = subscribePendingParentCount(setPendingOrtu)
@@ -33,22 +40,44 @@ export default function AdminNotifBell() {
     }
   }, [])
 
-  const loadNotifs = async () => {
-    setLoading(true)
+  const loadNotifs = useCallback(async (opts?: { force?: boolean; soft?: boolean }) => {
+    if (fetching.current) return
+    fetching.current = true
+    const showSpinner = opts?.force || !hasLoadedOnce.current || notifs.length === 0
+    if (showSpinner && !opts?.soft) setLoading(true)
     try {
       const list = await fetchUnreadNotifications()
       setNotifs(list)
+      hasLoadedOnce.current = true
+      lastKnownCount.current = list.length
     } catch (err) {
       console.warn('adminNotifications', err)
-      setNotifs([])
+      if (!hasLoadedOnce.current) setNotifs([])
     } finally {
       setLoading(false)
+      fetching.current = false
     }
-  }
+  }, [notifs.length])
 
+  // Buka panel: tampilkan cache instan; fetch hanya jika belum pernah / count berubah
   useEffect(() => {
-    if (open) loadNotifs()
-  }, [open])
+    if (!open) return
+    const countGrew = unreadCount > lastKnownCount.current
+    if (!hasLoadedOnce.current || notifs.length === 0) {
+      void loadNotifs({ force: true })
+    } else if (countGrew) {
+      void loadNotifs({ soft: true })
+    }
+    lastKnownCount.current = Math.max(lastKnownCount.current, unreadCount)
+  }, [open, unreadCount, notifs.length, loadNotifs])
+
+  // Badge naik saat panel tertutup → cache stale; soft refresh di background
+  useEffect(() => {
+    if (open) return
+    if (unreadCount > lastKnownCount.current && hasLoadedOnce.current) {
+      void loadNotifs({ soft: true })
+    }
+  }, [unreadCount, open, loadNotifs])
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -63,10 +92,12 @@ export default function AdminNotifBell() {
   const badgeTotal = pendingOrtu + unreadCount
 
   const handleDismiss = async (id: string) => {
+    // Optimistik: hilangkan dari UI dulu, tanpa loading ulang daftar
+    setNotifs((prev) => prev.filter((n) => n.id !== id))
+    setUnreadCount((c) => Math.max(0, c - 1))
+    lastKnownCount.current = Math.max(0, lastKnownCount.current - 1)
     try {
       await dismissNotification(id)
-      setNotifs((prev) => prev.filter((n) => n.id !== id))
-      setUnreadCount((c) => Math.max(0, c - 1))
     } catch (err) {
       console.warn(err)
     }
@@ -75,11 +106,12 @@ export default function AdminNotifBell() {
   const handleClearAll = async () => {
     if (notifs.length === 0) return
     setClearing(true)
+    const ids = notifs.map((n) => n.id!).filter(Boolean)
+    setNotifs([])
+    setUnreadCount(0)
+    lastKnownCount.current = 0
     try {
-      const ids = notifs.map((n) => n.id!).filter(Boolean)
       await dismissAllNotifications(ids)
-      setNotifs([])
-      setUnreadCount(0)
     } catch (err) {
       console.warn(err)
     } finally {
@@ -139,7 +171,7 @@ export default function AdminNotifBell() {
               )}
               <button
                 type="button"
-                onClick={() => loadNotifs()}
+                onClick={() => void loadNotifs({ force: true })}
                 className="text-[11px] text-indigo-600 hover:underline"
               >
                 Muat ulang
@@ -161,7 +193,7 @@ export default function AdminNotifBell() {
           )}
 
           <div className="max-h-72 overflow-y-auto">
-            {loading ? (
+            {loading && notifs.length === 0 ? (
               <p className="p-6 text-center text-xs text-gray-400">Memuat…</p>
             ) : notifs.length === 0 && pendingOrtu === 0 ? (
               <p className="p-6 text-center text-xs text-gray-400">Tidak ada notifikasi baru</p>
@@ -174,7 +206,7 @@ export default function AdminNotifBell() {
                     <Link
                       to={linkFor(n)}
                       onClick={() => {
-                        if (n.id) handleDismiss(n.id)
+                        if (n.id) void handleDismiss(n.id)
                         setOpen(false)
                       }}
                       className="block px-4 py-3 hover:bg-gray-50 transition bg-indigo-50/40"
