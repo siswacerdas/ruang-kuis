@@ -3,3 +3,42 @@
 /* Sembunyikan scrollbar pada strip yang bisa digeser (tab/menu mobile) */
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/*
+ * Teks Arab: font khusus + ukuran relatif lebih besar.
+ * em relatif terhadap parent, jadi ikut skala A+/A−.
+ */
+.arabic-text {
+  font-family: "Noto Naskh Arabic", "Amiri", "Traditional Arabic", "Scheherazade New", serif;
+  font-size: 1.4em;
+  line-height: 1.9;
+  font-weight: 500;
+  unicode-bidi: isolate;
+  letter-spacing: 0;
+}
+
+/* Area konten soal: skala dari tombol A+/A− */
+.quiz-content {
+  --quiz-text-scale: 1;
+}
+
+.quiz-stem {
+  font-size: calc(1.125rem * var(--quiz-text-scale, 1));
+  line-height: 1.65;
+}
+
+@media (min-width: 768px) {
+  .quiz-stem {
+    font-size: calc(1.25rem * var(--quiz-text-scale, 1));
+  }
+}
+
+.quiz-option {
+  font-size: calc(0.9375rem * var(--quiz-text-scale, 1));
+  line-height: 1.55;
+}
+
+.quiz-stimulus {
+  font-size: calc(0.9375rem * var(--quiz-text-scale, 1));
+  line-height: 1.6;
+}

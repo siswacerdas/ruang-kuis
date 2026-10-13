@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useRef } from 'react'
+import { QuizText, wrapArabicInHtml } from '../lib/quizText'
 
 export function sanitizeStimulusHtml(html: string): string {
   if (!html) return ''
@@ -15,18 +16,23 @@ export function sanitizeStimulusHtml(html: string): string {
             continue
           }
           const lh = el.style.lineHeight
+          const keepArabic = el.classList.contains('arabic-text')
           el.removeAttribute('style')
           if (lh) el.style.lineHeight = lh
           if (el.classList.contains('math-tex')) el.setAttribute('class', 'math-tex')
-          else el.removeAttribute('class')
+          else if (keepArabic) {
+            el.setAttribute('class', 'arabic-text')
+            el.setAttribute('dir', 'rtl')
+            el.setAttribute('lang', 'ar')
+          } else el.removeAttribute('class')
           walk(el)
         }
       }
     }
     walk(doc.body)
-    return doc.body.innerHTML
+    return wrapArabicInHtml(doc.body.innerHTML)
   } catch {
-    return html.replace(/</g, '<')
+    return html.replace(/</g, '&lt;')
   }
 }
 
@@ -54,15 +60,15 @@ export const StimulusBlock = memo(function StimulusBlock({ html }: { html: strin
   if (!html) return null
   if (!/<[a-z][\s\S]*>/i.test(html)) {
     return (
-      <div className="px-4 py-3 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
-        {html}
+      <div className="px-4 py-3 quiz-stimulus text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
+        <QuizText text={html} />
       </div>
     )
   }
   return (
     <div
       ref={ref}
-      className="px-4 py-3 text-sm text-gray-700 leading-relaxed break-words"
+      className="px-4 py-3 quiz-stimulus text-gray-700 leading-relaxed break-words"
       dangerouslySetInnerHTML={{ __html: safeHtml }}
     />
   )
