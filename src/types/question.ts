@@ -21,6 +21,7 @@ export const SUBJECTS: Subject[] = [
   { key: 'bahasa-inggris', name: 'Bahasa Inggris', shortName: 'ENG', color: 'indigo', icon: '🔤' },
   { key: 'kemuhammadiyahan', name: 'Kemuhammadiyahan', shortName: 'KM', color: 'green', icon: '🕌' },
   { key: 'bahasa-sunda', name: 'Bahasa Sunda', shortName: 'BS', color: 'orange', icon: '🗣️' },
+  { key: 'bahasa-arab', name: 'Bahasa Arab', shortName: 'ARB', color: 'cyan', icon: '🕌' },
 ]
 
 /** Diisi oleh lib/subjects agar mapel dinamis ikut ter-resolve. */
