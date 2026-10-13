@@ -537,41 +537,38 @@ export default function Laporan() {
             <button
               type="button"
               disabled={loading || filteredAttempts.length === 0}
-              onClick={() => downloadPdfTable(stampFilename('nilai_per_mapel', 'pdf'), buildNilaiPerMapelTable(exportInput()))}
+              onClick={() => downloadPdfTable(stampFilename('nilai_per_mapel', 'pdf'), 'Nilai per mapel', buildNilaiPerMapelTable(exportInput()))}
               className="w-full text-left text-xs px-2.5 py-2 rounded-lg hover:bg-indigo-50 text-gray-700 disabled:opacity-40"
             >
-              Nilai per mapel (PDF)
+              Nilai per mapel
             </button>
             <button
               type="button"
               disabled={loading || filteredAttempts.length === 0}
-              onClick={() => downloadPdfTable(stampFilename('rekap_siswa', 'pdf'), buildRekapSiswaTable(exportInput()))}
+              onClick={() => downloadPdfTable(stampFilename('rekap_siswa', 'pdf'), 'Rekap siswa', buildRekapSiswaTable(exportInput()))}
               className="w-full text-left text-xs px-2.5 py-2 rounded-lg hover:bg-indigo-50 text-gray-700 disabled:opacity-40"
             >
-              Rekap siswa (PDF)
+              Rekap siswa
             </button>
             <button
               type="button"
               disabled={loading || filteredAttempts.length === 0}
-              onClick={() => downloadPdfTable(stampFilename('detail_attempt', 'pdf'), buildDetailAttemptTable(exportInput()))}
+              onClick={() => downloadPdfTable(stampFilename('detail_attempt', 'pdf'), 'Detail attempt', buildDetailAttemptTable(exportInput()))}
               className="w-full text-left text-xs px-2.5 py-2 rounded-lg hover:bg-indigo-50 text-gray-700 disabled:opacity-40"
             >
-              Detail attempt (PDF)
+              Detail attempt
             </button>
           </div>
         </details>
       </div>
 
-      <div className="flex gap-1 mb-5 overflow-x-auto border-b border-gray-100 pb-px">
+      <div className="flex flex-wrap gap-2 mb-5 border-b border-gray-100 pb-0">
         {tabs.map((t) => (
           <button
             key={t.key}
             type="button"
-            onClick={() => {
-              setTab(t.key)
-              if (t.key !== 'siswa') setSelectedStudentKey(null)
-            }}
-            className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+            onClick={() => setTab(t.key)}
+            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               tab === t.key
                 ? 'border-indigo-600 text-indigo-700'
                 : 'border-transparent text-gray-500 hover:text-gray-800'
@@ -582,13 +579,9 @@ export default function Laporan() {
         ))}
       </div>
 
-      {loading && (
-        <p className="text-sm text-gray-400 mb-4">Memuat data laporan…</p>
-      )}
-
       {tab === 'ringkasan' && (
         <div className="space-y-5">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
               <p className="text-[11px] uppercase tracking-wide text-gray-400 font-medium">Attempt</p>
               <p className="text-2xl font-bold text-gray-900 mt-1 tabular-nums">{loading ? '…' : stats.n}</p>
@@ -597,7 +590,13 @@ export default function Laporan() {
               <p className="text-[11px] uppercase tracking-wide text-gray-400 font-medium">Rata skor</p>
               <p
                 className={`text-2xl font-bold mt-1 tabular-nums ${
-                  !stats.n ? 'text-gray-400' : stats.avg >= 70 ? 'text-emerald-600' : stats.avg >= 40 ? 'text-amber-600' : 'text-rose-600'
+                  !stats.n
+                    ? 'text-gray-400'
+                    : stats.avg >= 70
+                      ? 'text-emerald-600'
+                      : stats.avg >= 40
+                        ? 'text-amber-600'
+                        : 'text-rose-600'
                 }`}
               >
                 {loading ? '…' : stats.n ? `${stats.avg}%` : '—'}
@@ -611,12 +610,18 @@ export default function Laporan() {
               <p className="text-[11px] uppercase tracking-wide text-gray-400 font-medium">Lulus (≥70%)</p>
               <p className="text-2xl font-bold text-gray-900 mt-1 tabular-nums">{loading ? '…' : stats.n ? `${stats.passRate}%` : '—'}</p>
             </div>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+              <p className="text-[11px] uppercase tracking-wide text-gray-400 font-medium">Paket dikerjakan</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1 tabular-nums">
+                {loading ? '…' : `${stats.paketDone}/${stats.paketCount}`}
+              </p>
+            </div>
           </div>
 
           {/* Opsi B: ganti Tren skor */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-              <p className="text-[11px] uppercase tracking-wide text-gray-400 font-medium">7 hari terakhir</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h2 className="text-sm font-semibold text-gray-900 mb-1">7 hari terakhir</h2>
               <p className="text-2xl font-bold text-gray-900 mt-1 tabular-nums">{loading ? '…' : last7Days.n}</p>
               <p className="text-xs text-gray-500 mt-1">
                 {loading
@@ -626,17 +631,15 @@ export default function Laporan() {
                     : 'Belum ada aktivitas'}
               </p>
             </div>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:col-span-2">
-              <p className="text-[11px] uppercase tracking-wide text-gray-400 font-medium mb-2">Rata skor per mapel</p>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 md:col-span-2">
+              <h2 className="text-sm font-semibold text-gray-900 mb-3">Rata skor per mapel</h2>
               {bySubjectAvg.length === 0 ? (
                 <p className="text-sm text-gray-400">Belum ada data.</p>
               ) : (
                 <ul className="space-y-2">
                   {bySubjectAvg.map((s) => (
                     <li key={s.key} className="flex items-center gap-3">
-                      <span className="text-xs font-medium text-gray-700 w-20 shrink-0 truncate" title={s.name}>
-                        {s.shortName}
-                      </span>
+                      <span className="text-xs font-medium text-gray-700 w-20 shrink-0">{s.shortName}</span>
                       <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full ${
@@ -645,78 +648,69 @@ export default function Laporan() {
                           style={{ width: `${Math.min(100, s.avg)}%` }}
                         />
                       </div>
+                      <span className="text-xs tabular-nums text-gray-600 w-14 text-right">{s.avg}% · {s.n}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <h2 className="text-sm font-semibold text-gray-900 mb-3">Paket yang perlu perhatian</h2>
+            {attentionPakets.length === 0 ? (
+              <p className="text-sm text-gray-400">Semua paket aktif sudah dikerjakan dengan rata ≥ 70%.</p>
+            ) : (
+              <ul className="space-y-2">
+                {attentionPakets.map((p) => (
+                  <li key={p.id} className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 line-clamp-1">{p.title}</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        {p.shortName ? `${p.shortName} · ` : ''}
+                        {p.n === 0 ? 'Belum ada attempt' : `${p.n} attempt`}
+                      </p>
+                    </div>
+                    {p.n === 0 ? (
+                      <span className="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-md bg-amber-50 text-amber-800">
+                        Kosong
+                      </span>
+                    ) : (
                       <span
-                        className={`text-xs font-semibold tabular-nums w-12 text-right ${
-                          s.avg >= 70 ? 'text-emerald-600' : s.avg >= 40 ? 'text-amber-600' : 'text-rose-600'
+                        className={`shrink-0 text-sm font-semibold tabular-nums ${
+                          p.avg >= 40 ? 'text-amber-600' : 'text-rose-600'
                         }`}
                       >
-                        {s.avg}%
+                        {p.avg}%
                       </span>
-                      <span className="text-[10px] text-gray-400 w-10 text-right tabular-nums">{s.n}x</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <h2 className="text-sm font-semibold text-gray-900 mb-3">Paket yang perlu perhatian</h2>
-              {attentionPakets.length === 0 ? (
-                <p className="text-sm text-gray-400">Semua paket aktif sudah dikerjakan dengan rata ≥ 70%.</p>
-              ) : (
-                <ul className="space-y-2.5">
-                  {attentionPakets.map((p) => (
-                    <li key={p.id} className="flex items-center gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-gray-900 line-clamp-1">{p.title}</p>
-                        <p className="text-[11px] text-gray-400 mt-0.5">
-                          {p.shortName ? `${p.shortName} · ` : ''}
-                          {p.n === 0 ? 'Belum ada attempt' : `${p.n} attempt`}
-                        </p>
-                      </div>
-                      {p.n === 0 ? (
-                        <span className="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-md bg-amber-50 text-amber-800">
-                          Kosong
-                        </span>
-                      ) : (
-                        <span
-                          className={`shrink-0 text-sm font-semibold tabular-nums ${
-                            p.avg >= 40 ? 'text-amber-600' : 'text-rose-600'
-                          }`}
-                        >
-                          {p.avg}%
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            {weakTp.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <h2 className="text-sm font-semibold text-gray-900 mb-3">TP yang perlu perhatian</h2>
-                <ul className="space-y-2">
-                  {weakTp.map((r) => (
-                    <li key={r.tp} className="flex items-center gap-3">
-                      <span className="text-xs font-medium text-gray-700 w-16">{r.tp}</span>
-                      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${
-                            r.percent >= 70 ? 'bg-emerald-500' : r.percent >= 40 ? 'bg-amber-400' : 'bg-rose-400'
-                          }`}
-                          style={{ width: `${r.percent}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-gray-500 w-12 text-right tabular-nums">{r.percent}%</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
+
+          {weakTp.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <h2 className="text-sm font-semibold text-gray-900 mb-3">TP yang perlu perhatian</h2>
+              <ul className="space-y-2">
+                {weakTp.map((r) => (
+                  <li key={r.tp} className="flex items-center gap-3">
+                    <span className="text-xs font-medium text-gray-700 w-16">{r.tp}</span>
+                    <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          r.percent >= 70 ? 'bg-emerald-500' : r.percent >= 40 ? 'bg-amber-400' : 'bg-rose-400'
+                        }`}
+                        style={{ width: `${r.percent}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500 w-12 text-right tabular-nums">{r.percent}%</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100">
@@ -725,48 +719,33 @@ export default function Laporan() {
             {byStudent.length === 0 ? (
               <p className="p-8 text-center text-sm text-gray-400">Belum ada data.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-50 text-left text-xs text-gray-500">
-                      <th className="px-4 py-2.5 font-medium">Siswa</th>
-                      <th className="px-4 py-2.5 font-medium">Kelas</th>
-                      <th className="px-4 py-2.5 font-medium text-right">Attempt</th>
-                      <th className="px-4 py-2.5 font-medium text-right">Rata</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {byStudent.slice(0, 10).map((s) => (
-                      <tr key={s.key} className="border-t border-gray-50">
-                        <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${avatarColor(s.name)}`}>
-                              {initials(s.name)}
-                            </span>
-                            <span className="font-medium text-gray-900">{s.name}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-2.5 text-gray-500">{s.class || '—'}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">{s.attempts}</td>
-                        <td
-                          className={`px-4 py-2.5 text-right font-semibold tabular-nums ${
-                            s.avgPercent >= 70 ? 'text-emerald-600' : s.avgPercent >= 40 ? 'text-amber-600' : 'text-rose-600'
-                          }`}
-                        >
-                          {s.avgPercent}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ul className="divide-y divide-gray-50">
+                {byStudent.slice(0, 8).map((s) => (
+                  <li key={s.key} className="flex items-center gap-3 px-4 py-2.5">
+                    <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${avatarColor(s.name)}`}>
+                      {initials(s.name)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">{s.name}</p>
+                      <p className="text-[11px] text-gray-400">{s.class || '—'} · {s.attempts} attempt</p>
+                    </div>
+                    <span
+                      className={`text-sm font-semibold tabular-nums ${
+                        s.avgPercent >= 70 ? 'text-emerald-600' : s.avgPercent >= 40 ? 'text-amber-600' : 'text-rose-600'
+                      }`}
+                    >
+                      {s.avgPercent}%
+                    </span>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         </div>
       )}
 
       {tab === 'siswa' && (
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Daftar siswa</h2>
@@ -774,24 +753,22 @@ export default function Laporan() {
             {byStudent.length === 0 ? (
               <p className="p-8 text-center text-sm text-gray-400">Belum ada data.</p>
             ) : (
-              <ul className="max-h-[520px] overflow-y-auto divide-y divide-gray-50">
+              <ul className="max-h-[480px] overflow-y-auto divide-y divide-gray-50">
                 {byStudent.map((s) => (
                   <li key={s.key}>
                     <button
                       type="button"
                       onClick={() => setSelectedStudentKey(s.key)}
-                      className={`w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50 ${
+                      className={`w-full text-left flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 ${
                         selectedStudentKey === s.key ? 'bg-indigo-50' : ''
                       }`}
                     >
-                      <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${avatarColor(s.name)}`}>
+                      <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${avatarColor(s.name)}`}>
                         {initials(s.name)}
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-gray-900 truncate">{s.name}</p>
-                        <p className="text-[11px] text-gray-400">
-                          {s.class || '—'} · {s.attempts} attempt
-                        </p>
+                        <p className="text-[11px] text-gray-400">{s.class || '—'} · {s.attempts} attempt</p>
                       </div>
                       <span
                         className={`text-sm font-semibold tabular-nums ${
@@ -823,7 +800,7 @@ export default function Laporan() {
                     </p>
                   </div>
                 </div>
-                <SiswaTpBreakdown tp={selectedStudent.tp} />
+                <SiswaTpBreakdown studentKey={selectedStudent.key} attempts={filteredAttempts} paketMap={paketMap} />
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900 mb-2">Riwayat attempt</h3>
                   <ul className="space-y-2 max-h-64 overflow-y-auto">
@@ -852,7 +829,15 @@ export default function Laporan() {
         </div>
       )}
 
-      {tab === 'nilai-tp' && <LaporanNilaiTp attempts={filteredAttempts} pakets={pakets} />}
+      {tab === 'nilai-tp' && (
+        <LaporanNilaiTp
+          attempts={filteredAttempts}
+          paketMap={paketMap}
+          filterSubject={filterSubject}
+          setFilterSubject={setFilterSubject}
+          loading={loading}
+        />
+      )}
 
       {tab === 'tp' && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -880,7 +865,11 @@ export default function Laporan() {
                       <td className="px-4 py-2.5 text-right tabular-nums">{r.total}</td>
                       <td
                         className={`px-4 py-2.5 text-right font-semibold tabular-nums ${
-                          r.percent >= 70 ? 'text-emerald-600' : r.percent >= 40 ? 'text-amber-600' : 'text-rose-600'
+                          r.percent >= 70
+                            ? 'text-emerald-600'
+                            : r.percent >= 40
+                              ? 'text-amber-600'
+                              : 'text-rose-600'
                         }`}
                       >
                         {r.percent}%
@@ -923,12 +912,18 @@ export default function Laporan() {
                       <td className="px-4 py-2.5 text-right tabular-nums">{r.n}</td>
                       <td
                         className={`px-4 py-2.5 text-right font-semibold tabular-nums ${
-                          r.avg >= 70 ? 'text-emerald-600' : r.avg >= 40 ? 'text-amber-600' : 'text-rose-600'
+                          r.avg >= 70
+                            ? 'text-emerald-600'
+                            : r.avg >= 40
+                              ? 'text-amber-600'
+                              : 'text-rose-600'
                         }`}
                       >
                         {r.avg}%
                       </td>
-                      <td className="px-4 py-2.5 text-right text-gray-500 tabular-nums">{formatDuration(r.totalMs)}</td>
+                      <td className="px-4 py-2.5 text-right text-gray-500 tabular-nums">
+                        {formatDuration(r.totalMs)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
