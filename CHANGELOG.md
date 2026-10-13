@@ -8,6 +8,14 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Fixed — Bank soal & kelancaran aplikasi
+- Panel kanan materi bank soal menampilkan lagi **ringkasan materi buku** dan **rumusan tujuan pembelajaran** (hilang setelah mapel dijadikan dinamis; yang tersisa hanya nama dan kode TP).
+- Daftar materi tampil tanpa menunggu hitungan soal. Hitungan dijalankan di belakang, maksimal 4 permintaan sekaligus, agar membuka fitur lain tidak ikut antre.
+- Jika hitungan soal gagal, aplikasi tidak lagi mengunduh seluruh soal beserta gambarnya.
+- Daftar mapel di Bank Soal langsung tampil; angka materi/soal menyusul.
+- Daftar mapel di-cache selama sesi, jadi berpindah halaman tidak mengulang baca Firestore.
+- Font Arab (Noto Naskh) hanya dimuat saat membuka kuis, tidak lagi menahan setiap halaman.
+
 ### Added — Kelola mata pelajaran
 - Halaman admin **`/mata-pelajaran`**: tambah, edit, nonaktifkan, hapus master mapel.
 - Koleksi Firestore **`subjects`** (key, name, shortName, color, icon, order, active).

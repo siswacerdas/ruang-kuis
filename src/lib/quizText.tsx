@@ -4,6 +4,25 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 const ARABIC_CHAR = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
 const ARABIC_RUN = /([\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+(?:\s*[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+)*)/g
 
+/** Font Arab hanya di halaman kuis, bukan di setiap halaman admin. */
+function ensureArabicFont() {
+  if (typeof document === 'undefined') return
+  if (document.getElementById('rk-arabic-font')) return
+  const pre = document.createElement('link')
+  pre.rel = 'preconnect'
+  pre.href = 'https://fonts.gstatic.com'
+  pre.crossOrigin = 'anonymous'
+  document.head.appendChild(pre)
+  const link = document.createElement('link')
+  link.id = 'rk-arabic-font'
+  link.rel = 'stylesheet'
+  link.href =
+    'https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@500;700&display=swap'
+  document.head.appendChild(link)
+}
+
+ensureArabicFont()
+
 export function hasArabic(text: string): boolean {
   return ARABIC_CHAR.test(text || '')
 }

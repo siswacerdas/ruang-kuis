@@ -31,7 +31,9 @@ export type SubjectDoc = Subject & {
 const COL = 'subjects'
 
 let cache: SubjectDoc[] | null = null
+let cacheFresh = false
 let seedPromise: Promise<void> | null = null
+let inflight: Promise<void> | null = null
 
 function refreshLookup() {
   registerSubjectLookup((key) => getCachedSubjects(false).find((s) => s.key === key))
@@ -116,24 +118,34 @@ function mapDocs(
 }
 
 export async function loadSubjects(activeOnly = true): Promise<SubjectDoc[]> {
-  await seedIfEmpty()
-  try {
-    let snap
-    try {
-      snap = await getDocs(query(collection(db, COL), orderBy('order', 'asc')))
-    } catch {
-      snap = await getDocs(collection(db, COL))
-    }
-    const list = mapDocs(snap.docs)
-    cache = list.length ? list : DEFAULT_SUBJECTS.map((s, i) => ({ ...s, order: i + 1, active: true }))
-    refreshLookup()
-    return getCachedSubjects(activeOnly)
-  } catch (err) {
-    console.warn('loadSubjects fallback', err)
-    cache = DEFAULT_SUBJECTS.map((s, i) => ({ ...s, order: i + 1, active: true }))
-    refreshLookup()
-    return getCachedSubjects(activeOnly)
+  if (cache && cacheFresh) return getCachedSubjects(activeOnly)
+  if (!inflight) {
+    inflight = (async () => {
+      await seedIfEmpty()
+      try {
+        let snap
+        try {
+          snap = await getDocs(query(collection(db, COL), orderBy('order', 'asc')))
+        } catch {
+          snap = await getDocs(collection(db, COL))
+        }
+        const list = mapDocs(snap.docs)
+        cache = list.length ? list : DEFAULT_SUBJECTS.map((s, i) => ({ ...s, order: i + 1, active: true }))
+        cacheFresh = true
+        refreshLookup()
+      } catch (err) {
+        console.warn('loadSubjects fallback', err)
+        if (!cache) {
+          cache = DEFAULT_SUBJECTS.map((s, i) => ({ ...s, order: i + 1, active: true }))
+          refreshLookup()
+        }
+      }
+    })().finally(() => {
+      inflight = null
+    })
   }
+  await inflight
+  return getCachedSubjects(activeOnly)
 }
 
 export function subscribeSubjects(
@@ -149,6 +161,7 @@ export function subscribeSubjects(
         list.length > 0
           ? list
           : DEFAULT_SUBJECTS.map((s, i) => ({ ...s, order: i + 1, active: true }))
+      cacheFresh = true
       refreshLookup()
       onData([...cache])
     },
@@ -193,6 +206,7 @@ export async function saveSubject(
     active: payload.active as boolean,
   })
   cache = next.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'id'))
+  cacheFresh = true
   refreshLookup()
 }
 

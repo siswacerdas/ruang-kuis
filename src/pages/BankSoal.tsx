@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { where } from 'firebase/firestore'
 import { Link } from 'react-router-dom'
-import { countDocs } from '../lib/serverCounts'
+import { countDocs, mapPool } from '../lib/serverCounts'
 import Layout from '../components/Layout'
 import { loadSubjects, type SubjectDoc } from '../lib/subjects'
 
@@ -34,19 +34,21 @@ export default function BankSoal() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let cancelled = false
     const load = async () => {
       try {
         const list = await loadSubjects(true)
+        if (cancelled) return
         setSubjects(list)
-        const entries = await Promise.all(
-          list.map(async (s) => {
-            const [topicCount, questionCount] = await Promise.all([
-              countDocs('topics', where('subjectKey', '==', s.key)),
-              countDocs('questions', where('subjectKey', '==', s.key)),
-            ])
-            return [s.key, { topicCount, questionCount }] as const
-          }),
-        )
+        setLoading(false)
+        const entries = await mapPool(list, 4, async (s) => {
+          const [topicCount, questionCount] = await Promise.all([
+            countDocs('topics', where('subjectKey', '==', s.key)).catch(() => 0),
+            countDocs('questions', where('subjectKey', '==', s.key)).catch(() => 0),
+          ])
+          return [s.key, { topicCount, questionCount }] as const
+        })
+        if (cancelled) return
         const next: Record<string, SubjectStats> = {}
         entries.forEach(([key, value]) => {
           next[key] = value
@@ -54,11 +56,13 @@ export default function BankSoal() {
         setStats(next)
       } catch (err) {
         console.error(err)
-      } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
     load()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   return (
@@ -100,7 +104,7 @@ export default function BankSoal() {
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {subjects.map((subject) => {
             const c = colorMap[subject.color] || colorMap.indigo
-            const s = stats[subject.key] || { topicCount: 0, questionCount: 0 }
+            const s = stats[subject.key]
             return (
               <Link
                 key={subject.key}
@@ -118,11 +122,11 @@ export default function BankSoal() {
                     <p className="text-xs text-gray-400 mt-0.5">{subject.shortName}</p>
                     <div className="flex gap-3 mt-3 text-xs text-gray-500">
                       <span className="inline-flex items-center gap-1">
-                        <span className="font-semibold text-gray-700">{s.topicCount}</span> materi
+                        <span className="font-semibold text-gray-700">{s ? s.topicCount : '…'}</span> materi
                       </span>
                       <span className="text-gray-300">·</span>
                       <span className="inline-flex items-center gap-1">
-                        <span className="font-semibold text-gray-700">{s.questionCount}</span> soal
+                        <span className="font-semibold text-gray-700">{s ? s.questionCount : '…'}</span> soal
                       </span>
                     </div>
                   </div>
