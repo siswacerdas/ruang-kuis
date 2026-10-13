@@ -8,6 +8,10 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Changed — Laporan ringkasan admin
+- Kartu **Tren skor** diganti karena jarang bermanfaat (sering 1 titik data).
+- Diganti: **aktivitas 7 hari**, **rata skor per mapel** (urut dari yang lemah), dan **paket perlu perhatian** (tanpa attempt / rata < 70).
+
 ### Fixed — Bank soal & kelancaran aplikasi
 - Panel kanan materi bank soal menampilkan lagi **ringkasan materi buku** dan **rumusan tujuan pembelajaran** (hilang setelah mapel dijadikan dinamis; yang tersisa hanya nama dan kode TP).
 - Daftar materi tampil tanpa menunggu hitungan soal. Hitungan dijalankan di belakang, maksimal 4 permintaan sekaligus, agar membuka fitur lain tidak ikut antre.
