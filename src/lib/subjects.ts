@@ -15,7 +15,11 @@ import {
   orderBy,
 } from 'firebase/firestore'
 import { db } from './firebase'
-import { SUBJECTS as DEFAULT_SUBJECTS, type Subject } from '../types/question'
+import {
+  SUBJECTS as DEFAULT_SUBJECTS,
+  registerSubjectLookup,
+  type Subject,
+} from '../types/question'
 
 export type SubjectDoc = Subject & {
   order: number
@@ -29,6 +33,13 @@ const COL = 'subjects'
 let cache: SubjectDoc[] | null = null
 let seedPromise: Promise<void> | null = null
 
+function refreshLookup() {
+  registerSubjectLookup((key) => getCachedSubjects(false).find((s) => s.key === key))
+}
+
+// Daftarkan lookup segera (fallback default)
+refreshLookup()
+
 export function getCachedSubjects(activeOnly = true): SubjectDoc[] {
   const list = cache ?? DEFAULT_SUBJECTS.map((s, i) => ({ ...s, order: i + 1, active: true }))
   return activeOnly ? list.filter((s) => s.active !== false) : [...list]
@@ -38,7 +49,6 @@ export function getSubjectFromCache(key: string): SubjectDoc | undefined {
   return getCachedSubjects(false).find((s) => s.key === key)
 }
 
-/** Normalisasi key: huruf kecil, spasi → -, hanya a-z 0-9 - */
 export function normalizeSubjectKey(raw: string): string {
   return raw
     .toLowerCase()
@@ -50,21 +60,8 @@ export function normalizeSubjectKey(raw: string): string {
 }
 
 const COLOR_OPTIONS = [
-  'rose',
-  'red',
-  'emerald',
-  'purple',
-  'amber',
-  'blue',
-  'teal',
-  'indigo',
-  'green',
-  'orange',
-  'cyan',
-  'pink',
-  'lime',
-  'sky',
-  'violet',
+  'rose', 'red', 'emerald', 'purple', 'amber', 'blue', 'teal', 'indigo',
+  'green', 'orange', 'cyan', 'pink', 'lime', 'sky', 'violet',
 ] as const
 
 export { COLOR_OPTIONS }
@@ -118,7 +115,6 @@ function mapDocs(
     .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'id'))
 }
 
-/** Muat daftar mapel (seed sekali jika koleksi kosong). */
 export async function loadSubjects(activeOnly = true): Promise<SubjectDoc[]> {
   await seedIfEmpty()
   try {
@@ -130,15 +126,16 @@ export async function loadSubjects(activeOnly = true): Promise<SubjectDoc[]> {
     }
     const list = mapDocs(snap.docs)
     cache = list.length ? list : DEFAULT_SUBJECTS.map((s, i) => ({ ...s, order: i + 1, active: true }))
+    refreshLookup()
     return getCachedSubjects(activeOnly)
   } catch (err) {
     console.warn('loadSubjects fallback', err)
     cache = DEFAULT_SUBJECTS.map((s, i) => ({ ...s, order: i + 1, active: true }))
+    refreshLookup()
     return getCachedSubjects(activeOnly)
   }
 }
 
-/** Subscribe real-time (admin halaman kelola). */
 export function subscribeSubjects(
   onData: (list: SubjectDoc[]) => void,
   onError?: (err: Error) => void,
@@ -152,6 +149,7 @@ export function subscribeSubjects(
         list.length > 0
           ? list
           : DEFAULT_SUBJECTS.map((s, i) => ({ ...s, order: i + 1, active: true }))
+      refreshLookup()
       onData([...cache])
     },
     (err) => {
@@ -184,7 +182,6 @@ export async function saveSubject(
   if (isNew) payload.createdAt = serverTimestamp()
   await setDoc(ref, payload, { merge: true })
 
-  // Update cache lokal
   const next = getCachedSubjects(false).filter((s) => s.key !== key)
   next.push({
     key,
@@ -196,21 +193,21 @@ export async function saveSubject(
     active: payload.active as boolean,
   })
   cache = next.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'id'))
+  refreshLookup()
 }
 
 export async function setSubjectActive(key: string, active: boolean): Promise<void> {
-  await setDoc(
-    doc(db, COL, key),
-    { active, updatedAt: serverTimestamp() },
-    { merge: true },
-  )
+  await setDoc(doc(db, COL, key), { active, updatedAt: serverTimestamp() }, { merge: true })
   if (cache) {
     cache = cache.map((s) => (s.key === key ? { ...s, active } : s))
+    refreshLookup()
   }
 }
 
-/** Hapus dokumen mapel (tidak menghapus soal/topic — hanya master). */
 export async function removeSubject(key: string): Promise<void> {
   await deleteDoc(doc(db, COL, key))
-  if (cache) cache = cache.filter((s) => s.key !== key)
+  if (cache) {
+    cache = cache.filter((s) => s.key !== key)
+    refreshLookup()
+  }
 }

@@ -23,37 +23,27 @@ export const SUBJECTS: Subject[] = [
   { key: 'bahasa-sunda', name: 'Bahasa Sunda', shortName: 'BS', color: 'orange', icon: '🗣️' },
 ]
 
+/** Diisi oleh lib/subjects agar mapel dinamis ikut ter-resolve. */
+let subjectLookup: ((key: string) => Subject | undefined) | null = null
+
+export function registerSubjectLookup(fn: (key: string) => Subject | undefined) {
+  subjectLookup = fn
+}
+
 export function getSubject(key: string): Subject | undefined {
-  // Cache dinamis (setelah loadSubjects) lebih prioritas daripada konstanta default
-  try {
-    // lazy require-style via dynamic import not needed — synchronous cache from subjects module
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getSubjectFromCache } = require('../lib/subjects') as {
-      getSubjectFromCache: (k: string) => Subject | undefined
-    }
-    const fromCache = getSubjectFromCache(key)
-    if (fromCache) return fromCache
-  } catch {
-    /* module belum siap / SSR */
-  }
-  return SUBJECTS.find((s) => s.key === key)
+  return subjectLookup?.(key) || SUBJECTS.find((s) => s.key === key)
 }
 
 export interface Topic {
   id?: string
   subjectKey: SubjectKey
   name: string
-  /** ID dokumen bookMaterials, jika ditautkan */
   bookMaterialId?: string
-  /** Kode TP dari materi buku (denormalisasi, bisa diubah) */
   tpCodes?: string[]
   createdAt?: any
 }
 
-/** Tipe internal Ruang Kuis */
 export type QuestionType = 'single' | 'multiple' | 'category'
-
-/** Alias tipe tka2026 → internal */
 export type TkaQuestionType = 'pg' | 'pgk' | 'pgk-cat'
 
 export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
@@ -63,10 +53,7 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
 }
 
 export const DEFAULT_CATEGORY_LABELS = ['Benar', 'Salah'] as const
-
-/** Level kompleksitas (opsional, selaras tka2026) */
 export type Kompleksitas = 'L1-Pemahaman' | 'L2-Aplikasi' | 'L3-Penalaran' | string
-
 export const KOMPLEKSITAS_OPTIONS = ['L1-Pemahaman', 'L2-Aplikasi', 'L3-Penalaran'] as const
 
 export interface Question {
@@ -76,27 +63,17 @@ export interface Question {
   type: QuestionType
   question: string
   options: string[]
-  /** Indeks opsi/pernyataan yang benar (format internal stabil) */
   correctAnswers: number[]
   categoryLabels?: string[]
   explanation?: string
-  /** Konteks atau teks bacaan yang dibutuhkan untuk menjawab */
   stimulus?: string
-  /** URL atau data-URL gambar stimulus (opsional, selaras tka2026 stimulusImage) */
   stimulusImage?: string
-  /** Kode TP pertama, untuk kompatibilitas tampilan lama */
   tp?: string
-  /** Satu soal boleh mengisi lebih dari satu TP */
   tpCodes?: string[]
-  /** Nama materi saat impor, jika berbeda dari materi halaman */
   materialName?: string
-  /** Domain/topik (alias tipeMateri tka2026) */
   tipeMateri?: string
-  /** Level berpikir (L1/L2/L3) */
   kompleksitas?: Kompleksitas
-  /** Bobot skor soal (default 1) */
   skor?: number
-  /** Sidik jari soal agar impor ulang tidak menggandakan */
   importKey?: string
   createdAt?: any
 }
@@ -105,7 +82,6 @@ export function isOptionCorrect(q: Question, optionIndex: number): boolean {
   return q.correctAnswers.includes(optionIndex)
 }
 
-/** Map tipe tka2026 / label bebas → QuestionType internal */
 export function mapTkaType(raw: string): QuestionType {
   const t = String(raw || '').toLowerCase().trim()
   if (t === 'pg' || t === 'single' || (t.includes('pilihan ganda') && !t.includes('kompleks') && !t.includes('kategori'))) {
@@ -120,13 +96,6 @@ export function mapTkaType(raw: string): QuestionType {
   return 'single'
 }
 
-/**
- * Ubah kunci berbasis teks opsi (pola tka2026) menjadi indeks.
- * - single: string teks opsi → [index]
- * - multiple: array teks → indeks (urutan tidak penting)
- * - category: array "Benar"/"Salah" (atau label kolom) → indeks label per baris
- * Tetap menerima indeks angka / huruf A-D untuk kompatibilitas mundur.
- */
 export function resolveCorrectAnswers(
   type: QuestionType,
   raw: unknown,
@@ -134,24 +103,17 @@ export function resolveCorrectAnswers(
   categoryLabels: string[] = [...DEFAULT_CATEGORY_LABELS]
 ): number[] {
   if (raw == null) return type === 'category' ? options.map(() => 0) : []
-
   const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
-
-  // Sudah array angka
   if (Array.isArray(raw) && raw.every((v) => typeof v === 'number')) {
     return (raw as number[]).filter((n) => n >= 0 && (type === 'category' ? n < categoryLabels.length : n < options.length))
   }
-
-  // String tunggal: prioritaskan cocok penuh ke opsi (jangan dipecah koma dulu).
   if (typeof raw === 'string' || typeof raw === 'number') {
     const full = String(raw).trim()
     if (full) {
-      if (type === 'category') {
-        // satu label untuk semua baris? jarang; biarkan lewat path array di bawah
-      } else {
+      if (type !== 'category') {
         const asNum = parseInt(full, 10)
         if (!isNaN(asNum) && String(asNum) === full && asNum >= 0 && asNum < options.length) {
-          return type === 'single' ? [asNum] : [asNum]
+          return [asNum]
         }
         if (full.length === 1) {
           const u = full.toUpperCase()
@@ -165,16 +127,9 @@ export function resolveCorrectAnswers(
       }
     }
   }
-
-  // Array atau string multi-kunci: pisah ; | atau koma (hanya jika bukan match penuh)
   const parts: string[] = Array.isArray(raw)
     ? raw.map((v) => String(v).trim()).filter(Boolean)
-    : String(raw)
-        .split(/[;|]/)
-        .map((p) => p.trim())
-        .filter(Boolean)
-
-  // Fallback: jika masih 1 bagian dan mengandung koma, coba split koma hanya untuk huruf/indeks pendek
+    : String(raw).split(/[;|]/).map((p) => p.trim()).filter(Boolean)
   if (parts.length === 1 && /[,]/.test(parts[0]) && type !== 'category') {
     const maybeIdx = parts[0].split(/[,]/).map((p) => p.trim()).filter(Boolean)
     if (maybeIdx.length > 1 && maybeIdx.every((p) => /^[A-Za-z]$|^\d+$/.test(p))) {
@@ -182,7 +137,6 @@ export function resolveCorrectAnswers(
       parts.push(...maybeIdx)
     }
   }
-
   if (type === 'category') {
     return options.map((_, i) => {
       const label = parts[i]
@@ -193,7 +147,6 @@ export function resolveCorrectAnswers(
       return idx >= 0 ? idx : 0
     })
   }
-
   const indices: number[] = []
   for (const p of parts) {
     const u = p.toUpperCase()
@@ -210,11 +163,8 @@ export function resolveCorrectAnswers(
     const idx = options.findIndex((o) => norm(o) === norm(p))
     if (idx >= 0) indices.push(idx)
   }
-
   return [...new Set(indices)].sort((a, b) => a - b)
 }
-
-/* ========== LATIHAN SOAL (paket) ========== */
 
 export type LatihanStatus = 'draft' | 'scheduled' | 'active' | 'finished' | 'archived'
 
@@ -230,56 +180,32 @@ export interface LatihanPaket {
   id?: string
   title: string
   description?: string
-  /** Mapel utama (opsional, untuk filter) */
   subjectKey?: SubjectKey
-  /** ID soal yang masuk paket (urutan = urutan tampil) */
   questionIds: string[]
-  /** Jumlah soal (denormalisasi) */
   questionCount: number
-  /** Jadwal pelaksanaan */
-  startAt: any // Timestamp atau string ISO
+  startAt: any
   endAt: any
-  /** Token akses siswa (kode unik) */
   token: string
   status: LatihanStatus
-  /** Batas waktu mengerjakan (menit), 0 = tanpa batas */
   timeLimitMinutes?: number
   shuffleQuestions?: boolean
   shuffleOptions?: boolean
   showScoreImmediately?: boolean
-  /**
-   * Penugasan: kosong/undefined = semua siswa (kompatibel data lama).
-   * Jika diisi, hanya kelas tersebut yang melihat paket di jadwal.
-   */
   assignedClasses?: string[]
-  /** Opsional: batasi ke siswa tertentu (id dokumen students) */
   assignedStudentIds?: string[]
-  /**
-   * Izinkan mengerjakan ulang setelah ada attempt.
-   * Default false (dilarang). Set true hanya jika guru mengizinkan.
-   */
   allowRetry?: boolean
-  /**
-   * Wajibkan token selain login.
-   * Default false: siswa login + jadwal aktif + penugasan cukup untuk masuk.
-   * true: mode lama / ujian ketat — butuh token guru.
-   */
   requireToken?: boolean
   createdAt?: any
   updatedAt?: any
 }
 
-/** Generate token 6 karakter mudah dibaca */
 export function generateToken(length = 6): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
   let out = ''
-  for (let i = 0; i < length; i++) {
-    out += chars[Math.floor(Math.random() * chars.length)]
-  }
+  for (let i = 0; i < length; i++) out += chars[Math.floor(Math.random() * chars.length)]
   return out
 }
 
-/** Hitung status aktual berdasarkan waktu (client-side) */
 export function resolveLatihanStatus(
   paket: Pick<LatihanPaket, 'status' | 'startAt' | 'endAt'>
 ): LatihanStatus {
@@ -305,8 +231,6 @@ function toMillis(v: any): number | null {
   return null
 }
 
-
-/** Paket terlihat oleh siswa? (penugasan kelas / id). Kosong = publik. */
 export function isPaketForStudent(
   paket: Pick<LatihanPaket, 'assignedClasses' | 'assignedStudentIds'>,
   student: { studentId?: string; className?: string }
@@ -320,19 +244,16 @@ export function isPaketForStudent(
   return false
 }
 
-/** Jam tersisa sampai endAt (negatif = sudah lewat). null jika tidak ada endAt. */
 export function hoursUntilEnd(paket: Pick<LatihanPaket, 'endAt'>): number | null {
   const end = toMillis(paket.endAt as any)
   if (!end) return null
   return (end - Date.now()) / 3_600_000
 }
 
-/** Boleh mengerjakan ulang? Default: tidak. */
 export function canRetryPaket(paket: Pick<LatihanPaket, 'allowRetry'>): boolean {
   return paket.allowRetry === true
 }
 
-/** Perlu token? Default tidak (cukup login + jadwal + penugasan). */
 export function needsToken(paket: Pick<LatihanPaket, 'requireToken'>): boolean {
   return paket.requireToken === true
 }
@@ -350,14 +271,10 @@ export function formatDateTime(v: any): string {
   })
 }
 
-/* ========== HASIL / RIWAYAT PENGERJAAN ========== */
-
 export interface QuestionAnswer {
   questionId: string
-  /** Jawaban siswa — format sama dengan correctAnswers */
   selected: number[]
   isCorrect: boolean
-  /** ms mengerjakan soal ini (opsional) */
   timeMs?: number
 }
 
@@ -365,27 +282,19 @@ export interface LatihanAttempt {
   id?: string
   latihanId: string
   latihanTitle: string
-  /** Nama siswa */
   studentName: string
-  /** ID dokumen students (kunci stabil progress; opsional data lama) */
   studentId?: string | null
-  /** Kelas / identitas tambahan opsional */
   studentClass?: string
   answers: QuestionAnswer[]
-  /** Jumlah benar */
   score: number
-  /** Total soal */
   total: number
-  /** Skor 0–100 */
   percent: number
-  /** Ringkasan capaian per TP: { "3.1": { correct: 2, total: 3 }, ... } */
   tpSummary?: Record<string, { correct: number; total: number }>
   startedAt: any
   finishedAt: any
   durationMs?: number
 }
 
-/** Nilai benar/salah satu soal (indeks, kompatibel data lama) */
 export function gradeAnswer(
   question: { type: QuestionType; correctAnswers: number[] },
   selected: number[]

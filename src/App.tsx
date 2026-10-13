@@ -18,6 +18,7 @@ const SiswaList = lazy(() => import('./pages/SiswaList'))
 const TujuanPembelajaran = lazy(() => import('./pages/TujuanPembelajaran'))
 const InputNilai = lazy(() => import('./pages/InputNilai'))
 const RekapNilai = lazy(() => import('./pages/RekapNilai'))
+const AdminSubjects = lazy(() => import('./pages/AdminSubjects'))
 import SiswaLogin from './pages/SiswaLogin'
 import KerjakanEntry from './pages/KerjakanEntry'
 const KerjakanQuiz = lazy(() => import('./pages/KerjakanQuiz'))
@@ -97,7 +98,6 @@ function App() {
     )
   }
 
-  // Admin hanya jika terdaftar sebagai staff — bukan sekadar "bukan siswa/ortu" (gagal baca ≠ admin).
   const isAdmin = !!user && isStaff && !isStudent && !isParent
 
   const loginRedirect = isAdmin ? <Navigate to="/dashboard" replace /> : <Login />
@@ -170,10 +170,13 @@ function App() {
           path="/tujuan-pembelajaran"
           element={isAdmin ? <TujuanPembelajaran /> : <Navigate to="/login" />}
         />
-        <Route path="/input-nilai" element={isAdmin ? <InputNilai /> : <Navigate to="/login" />}
-        />
+        <Route path="/input-nilai" element={isAdmin ? <InputNilai /> : <Navigate to="/login" />} />
         <Route path="/rekap-nilai" element={isAdmin ? <RekapNilai /> : <Navigate to="/login" />} />
         <Route path="/materi" element={isAdmin ? <Materi audience="admin" /> : <Navigate to="/login" />} />
+        <Route
+          path="/mata-pelajaran"
+          element={isAdmin ? <AdminSubjects /> : <Navigate to="/login" />}
+        />
         <Route
           path="/pengajuan-ortu"
           element={isAdmin ? <AdminPengajuanOrtu /> : <Navigate to="/login" />}
