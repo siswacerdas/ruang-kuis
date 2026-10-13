@@ -22,6 +22,7 @@ import {
   type QuestionAnswer,
 } from '../types/question'
 import type { PracticeSession } from '../types/practice'
+import { QuizText, QuizTextScaleButtons, useQuizTextScale } from '../lib/quizText'
 
 export default function PracticeQuiz() {
   const { sessionId } = useParams<{ sessionId: string }>()
@@ -38,6 +39,7 @@ export default function PracticeQuiz() {
   const startedAt = useRef(Date.now())
   const questionStarted = useRef(Date.now())
   const timePerQ = useRef<Record<string, number>>({})
+  const { scale: textScale, zoomIn, zoomOut } = useQuizTextScale()
 
   useEffect(() => {
     if (!sessionId) {
@@ -231,7 +233,6 @@ export default function PracticeQuiz() {
         await deleteDoc(doc(db, 'practiceSessions', session.id!))
       } catch (err) {
         console.warn('hapus session', err)
-        // Bila gagal dihapus, tandai selesai agar kuis tidak muncul lagi di dashboard siswa.
         try {
           await updateDoc(doc(db, 'practiceSessions', session.id!), { status: 'completed' })
         } catch (err2) {
@@ -303,9 +304,12 @@ export default function PracticeQuiz() {
             <p className="text-sm font-semibold text-gray-900 truncate">Latihan mandiri</p>
             <p className="text-xs text-gray-500">{session.studentName}</p>
           </div>
-          <span className="text-xs text-gray-500 shrink-0">
-            {answeredCount}/{questions.length}
-          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <QuizTextScaleButtons scale={textScale} onZoomIn={zoomIn} onZoomOut={zoomOut} />
+            <span className="text-xs text-gray-500">
+              {answeredCount}/{questions.length}
+            </span>
+          </div>
         </div>
         <div className="max-w-3xl mx-auto mt-2 -mx-1 px-1 overflow-x-auto">
           <div className="flex gap-1 min-w-min pb-0.5">
@@ -334,14 +338,17 @@ export default function PracticeQuiz() {
       </header>
 
       <main className="flex-1 max-w-3xl w-full mx-auto p-4 md:p-6">
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 md:p-7">
+        <div
+          className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 md:p-7 quiz-content"
+          style={{ ['--quiz-text-scale' as any]: textScale }}
+        >
           <p className="text-xs font-medium text-gray-400 mb-2">
             Soal {current + 1} dari {questions.length}
             {q.tp ? ` · TP ${q.tp}` : ''}
           </p>
           {q.stimulus && (
-            <div className="mb-3 rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 text-sm text-gray-700 whitespace-pre-wrap break-words">
-              {q.stimulus}
+            <div className="mb-3 rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 quiz-stimulus text-gray-700 whitespace-pre-wrap break-words">
+              <QuizText text={q.stimulus} />
             </div>
           )}
           {q.stimulusImage &&
@@ -354,7 +361,7 @@ export default function PracticeQuiz() {
                 />
               </div>
             )}
-          <p className="text-base font-medium text-gray-900 mb-4 leading-relaxed break-words">{q.question}</p>
+          <QuizText as="p" text={q.question} className="quiz-stem font-medium text-gray-900 mb-4 break-words" />
 
           {q.type === 'single' && (
             <div className="space-y-2">
@@ -373,7 +380,7 @@ export default function PracticeQuiz() {
                     key={i}
                     type="button"
                     onClick={() => setSingle(q.id!, i)}
-                    className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition flex items-start gap-3 ${
+                    className={`w-full text-left px-4 py-3 rounded-xl border transition flex items-start gap-3 ${
                       checked
                         ? 'border-teal-400 bg-teal-50 ring-1 ring-teal-100 text-teal-900'
                         : 'border-gray-100 hover:border-teal-200'
@@ -387,11 +394,11 @@ export default function PracticeQuiz() {
                     >
                       {checked && <span className="block w-2 h-2 rounded-full bg-white" />}
                     </span>
-                    <span className="break-words min-w-0">
+                    <span className="break-words min-w-0 quiz-option">
                       <span className="font-semibold text-gray-400 mr-1.5">
                         {String.fromCharCode(65 + i)}.
                       </span>
-                      {opt}
+                      <QuizText text={opt} />
                     </span>
                   </button>
                 )
@@ -427,7 +434,7 @@ export default function PracticeQuiz() {
                     key={i}
                     type="button"
                     onClick={() => toggleMulti(q.id!, i)}
-                    className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition flex items-start gap-3 ${
+                    className={`w-full text-left px-4 py-3 rounded-xl border transition flex items-start gap-3 ${
                       checked
                         ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-200 text-amber-950'
                         : 'border-gray-100 hover:border-amber-200'
@@ -445,11 +452,11 @@ export default function PracticeQuiz() {
                         </svg>
                       )}
                     </span>
-                    <span className="break-words min-w-0">
+                    <span className="break-words min-w-0 quiz-option">
                       <span className="font-semibold text-gray-400 mr-1.5">
                         {String.fromCharCode(65 + i)}.
                       </span>
-                      {opt}
+                      <QuizText text={opt} />
                     </span>
                   </button>
                 )
@@ -461,7 +468,7 @@ export default function PracticeQuiz() {
             <div className="space-y-3">
               {q.options.map((stmt, si) => (
                 <div key={si} className="rounded-xl border border-gray-100 p-3">
-                  <p className="text-sm text-gray-800 mb-2">{stmt}</p>
+                  <p className="quiz-option text-gray-800 mb-2"><QuizText text={stmt} /></p>
                   <div className="flex flex-wrap gap-2">
                     {labels.map((lab, li) => (
                       <button
