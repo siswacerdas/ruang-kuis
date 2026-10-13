@@ -395,9 +395,6 @@ export default function PracticeQuiz() {
                       {checked && <span className="block w-2 h-2 rounded-full bg-white" />}
                     </span>
                     <span className="break-words min-w-0 quiz-option">
-                      <span className="font-semibold text-gray-400 mr-1.5">
-                        {String.fromCharCode(65 + i)}.
-                      </span>
                       <QuizText text={opt} />
                     </span>
                   </button>
@@ -453,9 +450,6 @@ export default function PracticeQuiz() {
                       )}
                     </span>
                     <span className="break-words min-w-0 quiz-option">
-                      <span className="font-semibold text-gray-400 mr-1.5">
-                        {String.fromCharCode(65 + i)}.
-                      </span>
                       <QuizText text={opt} />
                     </span>
                   </button>
