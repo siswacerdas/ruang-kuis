@@ -1,15 +1,5 @@
 /** Master Tujuan Pembelajaran Kelas 5 Fase C. */
-export type SubjectKey =
-  | 'bahasa-indonesia'
-  | 'pendidikan-pancasila'
-  | 'ipas'
-  | 'seni-musik'
-  | 'seni-rupa'
-  | 'matematika'
-  | 'al-islam'
-  | 'bahasa-inggris'
-  | 'kemuhammadiyahan'
-  | 'bahasa-sunda'
+export type SubjectKey = string
 
 export interface LearningObjective {
   id?: string

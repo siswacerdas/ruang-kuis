@@ -1,15 +1,5 @@
-/** Kunci mata pelajaran (tetap, sesuai kurikulum SD) */
-export type SubjectKey =
-  | 'bahasa-indonesia'
-  | 'pendidikan-pancasila'
-  | 'ipas'
-  | 'seni-musik'
-  | 'seni-rupa'
-  | 'matematika'
-  | 'al-islam'
-  | 'bahasa-inggris'
-  | 'kemuhammadiyahan'
-  | 'bahasa-sunda'
+/** Kunci mata pelajaran — string bebas; daftar master di Firestore `subjects`. */
+export type SubjectKey = string
 
 export interface Subject {
   key: SubjectKey
@@ -19,6 +9,7 @@ export interface Subject {
   icon: string
 }
 
+/** Daftar default (seed + fallback jika Firestore belum terisi). */
 export const SUBJECTS: Subject[] = [
   { key: 'bahasa-indonesia', name: 'Bahasa Indonesia', shortName: 'BIN', color: 'rose', icon: '📖' },
   { key: 'pendidikan-pancasila', name: 'Pendidikan Pancasila', shortName: 'PP', color: 'red', icon: '🇮🇩' },
@@ -33,6 +24,18 @@ export const SUBJECTS: Subject[] = [
 ]
 
 export function getSubject(key: string): Subject | undefined {
+  // Cache dinamis (setelah loadSubjects) lebih prioritas daripada konstanta default
+  try {
+    // lazy require-style via dynamic import not needed — synchronous cache from subjects module
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getSubjectFromCache } = require('../lib/subjects') as {
+      getSubjectFromCache: (k: string) => Subject | undefined
+    }
+    const fromCache = getSubjectFromCache(key)
+    if (fromCache) return fromCache
+  } catch {
+    /* module belum siap / SSR */
+  }
   return SUBJECTS.find((s) => s.key === key)
 }
 
@@ -105,7 +108,7 @@ export function isOptionCorrect(q: Question, optionIndex: number): boolean {
 /** Map tipe tka2026 / label bebas → QuestionType internal */
 export function mapTkaType(raw: string): QuestionType {
   const t = String(raw || '').toLowerCase().trim()
-  if (t === 'pg' || t === 'single' || t.includes('pilihan ganda') && !t.includes('kompleks') && !t.includes('kategori')) {
+  if (t === 'pg' || t === 'single' || (t.includes('pilihan ganda') && !t.includes('kompleks') && !t.includes('kategori'))) {
     return 'single'
   }
   if (t === 'pgk' || t === 'multiple' || t.includes('kompleks') || t.includes('multi')) {
@@ -140,7 +143,6 @@ export function resolveCorrectAnswers(
   }
 
   // String tunggal: prioritaskan cocok penuh ke opsi (jangan dipecah koma dulu).
-  // Contoh gagal lama: "Sabtu, 11 Oktober 2026 ..." terpecah di koma → tidak match.
   if (typeof raw === 'string' || typeof raw === 'number') {
     const full = String(raw).trim()
     if (full) {
@@ -168,7 +170,7 @@ export function resolveCorrectAnswers(
   const parts: string[] = Array.isArray(raw)
     ? raw.map((v) => String(v).trim()).filter(Boolean)
     : String(raw)
-        .split(/[;|]/) // utamakan ; dan | — koma sering ada di teks opsi bahasa Indonesia
+        .split(/[;|]/)
         .map((p) => p.trim())
         .filter(Boolean)
 
@@ -182,11 +184,9 @@ export function resolveCorrectAnswers(
   }
 
   if (type === 'category') {
-    // Setiap elemen = label kolom untuk baris ke-i
     return options.map((_, i) => {
       const label = parts[i]
       if (label == null) return 0
-      // angka?
       const asNum = parseInt(label, 10)
       if (!isNaN(asNum) && asNum >= 0 && asNum < categoryLabels.length) return asNum
       const idx = categoryLabels.findIndex((c) => norm(c) === norm(label))
@@ -207,12 +207,10 @@ export function resolveCorrectAnswers(
       indices.push(asNum)
       continue
     }
-    // Cocokkan teks opsi (case-insensitive, spasi dinormalisasi)
     const idx = options.findIndex((o) => norm(o) === norm(p))
     if (idx >= 0) indices.push(idx)
   }
 
-  // unique, sorted for multiple
   return [...new Set(indices)].sort((a, b) => a - b)
 }
 

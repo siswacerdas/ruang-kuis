@@ -3,7 +3,7 @@ import { where } from 'firebase/firestore'
 import { Link } from 'react-router-dom'
 import { countDocs } from '../lib/serverCounts'
 import Layout from '../components/Layout'
-import { SUBJECTS } from '../types/question'
+import { loadSubjects, type SubjectDoc } from '../lib/subjects'
 
 interface SubjectStats {
   topicCount: number
@@ -19,30 +19,38 @@ const colorMap: Record<string, { bg: string; text: string; border: string; iconB
   blue: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'hover:border-blue-200', iconBg: 'bg-blue-100 text-blue-600' },
   teal: { bg: 'bg-teal-50', text: 'text-teal-700', border: 'hover:border-teal-200', iconBg: 'bg-teal-100 text-teal-600' },
   indigo: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'hover:border-indigo-200', iconBg: 'bg-indigo-100 text-indigo-600' },
+  green: { bg: 'bg-green-50', text: 'text-green-700', border: 'hover:border-green-200', iconBg: 'bg-green-100 text-green-600' },
+  orange: { bg: 'bg-orange-50', text: 'text-orange-700', border: 'hover:border-orange-200', iconBg: 'bg-orange-100 text-orange-600' },
+  cyan: { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'hover:border-cyan-200', iconBg: 'bg-cyan-100 text-cyan-600' },
+  pink: { bg: 'bg-pink-50', text: 'text-pink-700', border: 'hover:border-pink-200', iconBg: 'bg-pink-100 text-pink-600' },
+  lime: { bg: 'bg-lime-50', text: 'text-lime-700', border: 'hover:border-lime-200', iconBg: 'bg-lime-100 text-lime-600' },
+  sky: { bg: 'bg-sky-50', text: 'text-sky-700', border: 'hover:border-sky-200', iconBg: 'bg-sky-100 text-sky-600' },
+  violet: { bg: 'bg-violet-50', text: 'text-violet-700', border: 'hover:border-violet-200', iconBg: 'bg-violet-100 text-violet-600' },
 }
 
 export default function BankSoal() {
+  const [subjects, setSubjects] = useState<SubjectDoc[]>([])
   const [stats, setStats] = useState<Record<string, SubjectStats>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const load = async () => {
       try {
-        // Hitung per mapel di server — tidak mengunduh semua soal (berisi gambar & kunci jawaban).
+        const list = await loadSubjects(true)
+        setSubjects(list)
         const entries = await Promise.all(
-          SUBJECTS.map(async (s) => {
+          list.map(async (s) => {
             const [topicCount, questionCount] = await Promise.all([
               countDocs('topics', where('subjectKey', '==', s.key)),
               countDocs('questions', where('subjectKey', '==', s.key)),
             ])
             return [s.key, { topicCount, questionCount }] as const
-          })
+          }),
         )
         const next: Record<string, SubjectStats> = {}
         entries.forEach(([key, value]) => {
           next[key] = value
         })
-
         setStats(next)
       } catch (err) {
         console.error(err)
@@ -57,20 +65,40 @@ export default function BankSoal() {
     <Layout
       title="Bank Soal"
       subtitle="Pilih mata pelajaran untuk mengelola materi dan soal"
+      actions={
+        <Link
+          to="/mata-pelajaran"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          Kelola mapel
+        </Link>
+      }
     >
       <div className="mb-6 rounded-2xl border border-indigo-100 bg-indigo-50/60 px-5 py-4 text-sm text-indigo-800">
         <p className="font-medium mb-1">Pool soal per mata pelajaran</p>
         <p className="text-indigo-700/80">
           Setiap materi (misalnya Ekosistem, Bunyi &amp; Cahaya) berada di bawah mapel yang sama.
           Soal dari semua materi dalam satu mapel dapat digabung saat membuat latihan ATS / AS nanti.
+          Mapel baru ditambah lewat{' '}
+          <Link to="/mata-pelajaran" className="font-semibold underline">
+            Mata Pelajaran
+          </Link>
+          .
         </p>
       </div>
 
       {loading ? (
         <div className="text-center py-16 text-gray-500 text-sm">Memuat data...</div>
+      ) : subjects.length === 0 ? (
+        <div className="text-center py-16 text-gray-500 text-sm">
+          Belum ada mata pelajaran aktif.{' '}
+          <Link to="/mata-pelajaran" className="text-indigo-600 font-medium hover:underline">
+            Tambah mapel
+          </Link>
+        </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {SUBJECTS.map((subject) => {
+          {subjects.map((subject) => {
             const c = colorMap[subject.color] || colorMap.indigo
             const s = stats[subject.key] || { topicCount: 0, questionCount: 0 }
             return (
