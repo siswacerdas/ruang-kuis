@@ -11,8 +11,9 @@ import { db } from '../lib/firebase'
 import { ensureStudentSession, type StudentSession } from '../lib/studentSession'
 import { Link, useNavigate } from 'react-router-dom'
 import StudentNav from '../components/StudentNav'
-import { SUBJECTS, getSubject, type SubjectKey, type Topic, type Question } from '../types/question'
+import { getSubject, type SubjectKey, type Topic, type Question } from '../types/question'
 import { PRACTICE_COUNTS, type PracticeCount } from '../types/practice'
+import { loadSubjects, type SubjectDoc } from '../lib/subjects'
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr]
@@ -26,6 +27,7 @@ function shuffle<T>(arr: T[]): T[] {
 export default function PracticeSetup() {
   const navigate = useNavigate()
   const [student, setStudent] = useState<StudentSession | null>(null)
+  const [subjects, setSubjects] = useState<SubjectDoc[]>([])
   const [subjectKey, setSubjectKey] = useState<SubjectKey | ''>('')
   const [topics, setTopics] = useState<Topic[]>([])
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([])
@@ -51,7 +53,12 @@ export default function PracticeSetup() {
         return
       }
       setStudent(s)
-      // Hanya sesi milik siswa login (filter studentId)
+      try {
+        const list = await loadSubjects(true)
+        if (!cancelled) setSubjects(list)
+      } catch (err) {
+        console.warn('load subjects', err)
+      }
       try {
         const snap = await getDocs(
           query(
@@ -264,7 +271,7 @@ export default function PracticeSetup() {
         <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
           <h2 className="text-sm font-semibold text-gray-900">1. Mata pelajaran</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {SUBJECTS.map((s) => (
+            {subjects.map((s) => (
               <button
                 key={s.key}
                 type="button"

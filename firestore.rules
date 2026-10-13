@@ -2,16 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ---------------------------------------------------------------
-    // Peran
-    //   admin     : guru/admin sekolah (custom claim `admin` ATAU email di daftar bawah)
-    //   signedIn  : akun Firebase Auth apa pun (siswa, orang tua, guru)
-    //   publik    : tanpa login
-    //
-    // PENTING: siswa & orang tua juga punya akun Auth, jadi "sudah login" BUKAN admin.
-    // Daftar email di bawah harus sama dengan STAFF_ACCOUNTS (src/lib/loginAccounts.ts),
-    // ADMIN_EMAILS (functions/src/index.ts) dan storage.rules.
-    // ---------------------------------------------------------------
     function isSignedIn() {
       return request.auth != null;
     }
@@ -22,7 +12,12 @@ service cloud.firestore {
             || request.auth.token.email in ['arif.azwar79@gmail.com']);
     }
 
-    // --- Konten kuis ---
+    // Master mata pelajaran (dinamis)
+    match /subjects/{subjectId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
     match /topics/{topicId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
@@ -54,7 +49,6 @@ service cloud.firestore {
         && request.resource.data.score >= 0
         && request.resource.data.score <= request.resource.data.total
         && request.resource.data.total <= 300;
-      // siswa & ortu membaca riwayat / peringkat (dibatasi ketat di tahap berikutnya)
       allow read: if isSignedIn();
       allow update, delete: if isAdmin();
     }
@@ -84,28 +78,20 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
-    // Ringkasan peringkat per siswa (nama, kelas, jumlah & total skor per mapel).
-    // Ditulis HANYA oleh Cloud Function `syncStudentStats` (Admin SDK); klien hanya membaca.
     match /studentStats/{statId} {
       allow read: if isSignedIn();
       allow write: if false;
     }
 
-    // --- Data siswa ---
-    // Berisi NISN (= password login) & email ortu: HANYA admin.
-    // Halaman login / portal ortu memakai salinan minimal `studentRoster`.
     match /students/{studentId} {
       allow read, write: if isAdmin();
     }
 
-    // Salinan publik minimal (nama, kelas, email login). Ditulis oleh Cloud Function
-    // `syncStudentRoster` (Admin SDK, tidak terkena rules) — klien tidak boleh menulis.
     match /studentRoster/{studentId} {
       allow read: if true;
       allow write: if false;
     }
 
-    // --- Kurikulum / materi ---
     match /learningObjectives/{tpId} {
       allow read: if true;
       allow write: if isAdmin();
@@ -129,9 +115,7 @@ service cloud.firestore {
       allow read, write: if isAdmin();
     }
 
-    // --- Orang tua ---
     match /parentRequests/{requestId} {
-      // Formulir publik (belum punya akun)
       allow create: if request.resource.data.keys().hasAll([
              'fullName', 'whatsapp', 'email', 'studentIds', 'studentNames', 'status'
            ])
@@ -147,14 +131,11 @@ service cloud.firestore {
     }
 
     match /parents/{parentId} {
-      // Admin, atau orang tua yang membaca dokumennya sendiri
-      // (query where authUid == uid, atau where email == email login).
       allow read: if isAdmin()
         || (isSignedIn()
             && (resource.data.authUid == request.auth.uid
                 || resource.data.email == request.auth.token.email));
       allow create, delete: if isAdmin();
-      // Orang tua hanya boleh memperbarui penghitung login miliknya sendiri
       allow update: if isAdmin()
         || (isSignedIn()
             && resource.data.authUid == request.auth.uid
@@ -163,7 +144,6 @@ service cloud.firestore {
     }
 
     match /adminNotifications/{notifId} {
-      // Dibuat siswa (selesai kuis) & formulir publik ortu; dibaca/dihapus hanya admin
       allow create: if request.resource.data.type is string
         && request.resource.data.title is string
         && request.resource.data.title.size() < 300

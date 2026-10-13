@@ -8,6 +8,15 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Added — Kelola mata pelajaran
+- Halaman admin **`/mata-pelajaran`**: tambah, edit, nonaktifkan, hapus master mapel.
+- Koleksi Firestore **`subjects`** (key, name, shortName, color, icon, order, active).
+- Seed otomatis 10 mapel default saat koleksi masih kosong.
+- **Bank Soal** dan **latihan mandiri** memuat daftar mapel dari Firestore (bukan hanya konstanta hardcode).
+- `SubjectKey` dilonggarkan ke `string` agar mapel baru tidak perlu ubah TypeScript union.
+- Nav admin + tombol “Kelola mapel” di Bank Soal.
+- Rules: signed-in read, admin write pada `subjects`.
+
 ### Added — Ekspor tujuan pembelajaran
 - Halaman `/tujuan-pembelajaran`: tombol **Ekspor JSON** (format seed yang bisa diimpor ulang) dan **Ekspor Excel** (lembar TP + materi buku).
 - Cakupan: baris tercentang, atau seluruh baris yang sedang tampil menurut filter mapel/pencarian.
