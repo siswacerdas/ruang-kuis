@@ -537,7 +537,7 @@ export default function Laporan() {
             <button
               type="button"
               disabled={loading || filteredAttempts.length === 0}
-              onClick={() => downloadPdfTable(stampFilename('nilai_per_mapel', 'pdf'), 'Nilai per mapel', buildNilaiPerMapelTable(exportInput()))}
+              onClick={() => downloadPdfTable(stampFilename('nilai_per_mapel', 'pdf'), buildNilaiPerMapelTable(exportInput()))}
               className="w-full text-left text-xs px-2.5 py-2 rounded-lg hover:bg-indigo-50 text-gray-700 disabled:opacity-40"
             >
               Nilai per mapel
@@ -545,7 +545,7 @@ export default function Laporan() {
             <button
               type="button"
               disabled={loading || filteredAttempts.length === 0}
-              onClick={() => downloadPdfTable(stampFilename('rekap_siswa', 'pdf'), 'Rekap siswa', buildRekapSiswaTable(exportInput()))}
+              onClick={() => downloadPdfTable(stampFilename('rekap_siswa', 'pdf'), buildRekapSiswaTable(exportInput()))}
               className="w-full text-left text-xs px-2.5 py-2 rounded-lg hover:bg-indigo-50 text-gray-700 disabled:opacity-40"
             >
               Rekap siswa
@@ -553,7 +553,7 @@ export default function Laporan() {
             <button
               type="button"
               disabled={loading || filteredAttempts.length === 0}
-              onClick={() => downloadPdfTable(stampFilename('detail_attempt', 'pdf'), 'Detail attempt', buildDetailAttemptTable(exportInput()))}
+              onClick={() => downloadPdfTable(stampFilename('detail_attempt', 'pdf'), buildDetailAttemptTable(exportInput()))}
               className="w-full text-left text-xs px-2.5 py-2 rounded-lg hover:bg-indigo-50 text-gray-700 disabled:opacity-40"
             >
               Detail attempt
