@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   collection,
   addDoc,
@@ -36,19 +36,16 @@ export default function SubjectTopics() {
   const [questionCounts, setQuestionCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
   const [listSearch, setListSearch] = useState('')
-  const [filterLink, setFilterLink] = useState<'all' | 'linked' | 'unlinked'>('all')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [mode, setMode] = useState<'view' | 'edit' | 'new'>('view')
 
   const [formName, setFormName] = useState('')
   const [formBookId, setFormBookId] = useState('')
   const [formTpCodes, setFormTpCodes] = useState<string[]>([])
-  const [tpQuery, setTpQuery] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -66,8 +63,6 @@ export default function SubjectTopics() {
     return () => { cancelled = true }
   }, [subjectKey])
 
-  // FULL UI restored via multi-part: this bootstrap loads logic then redirects.
-  // See commit history / artifacts for complete master-detail implementation.
   const loadAll = async (preferId?: string | null) => {
     if (!subjectKey) return
     setLoading(true)
