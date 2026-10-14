@@ -22,7 +22,6 @@ import { buildAllMine, capFinished, visiblePakets, FINISHED_CAP } from '../lib/s
 import { dedupeDocs, getAttemptsForPakets } from '../lib/historyQueries'
 import StudentNav, { StudentQuickLinks } from '../components/StudentNav'
 import {
-  SUBJECTS,
   getSubject,
   resolveLatihanStatus,
   LATIHAN_STATUS_LABELS,
@@ -34,6 +33,7 @@ import {
   type LatihanAttempt,
   type LatihanStatus,
 } from '../types/question'
+import { loadSubjects, getCachedSubjects, type SubjectDoc } from '../lib/subjects'
 
 /** Beranda / dashboard siswa */
 
@@ -270,13 +270,30 @@ export default function KerjakanEntry() {
   // Bila guru mereset hasilnya (dokumen attempts dihapus), `done` kembali false → paket muncul lagi.
   const myPakets = useMemo(() => visiblePakets(allMine), [allMine])
 
+  const [subjects, setSubjects] = useState<SubjectDoc[]>(() => getCachedSubjects(true))
+  useEffect(() => {
+    let c = false
+    loadSubjects(true).then((list) => { if (!c) setSubjects(list) })
+    return () => { c = true }
+  }, [])
+
   const subjectOptions = useMemo(() => {
     const keys = new Set<string>()
     myPakets.forEach((r) => {
       if (r.paket.subjectKey) keys.add(r.paket.subjectKey)
     })
-    return SUBJECTS.filter((s) => keys.has(s.key))
-  }, [myPakets])
+    const fromMaster = subjects.filter((s) => keys.has(s.key))
+    const known = new Set(fromMaster.map((s) => s.key))
+    const extras = [...keys]
+      .filter((k) => !known.has(k))
+      .map((k) => {
+        const g = getSubject(k)
+        return g
+          ? { key: g.key, name: g.name, shortName: g.shortName, color: g.color, icon: g.icon, order: 99, active: true }
+          : { key: k, name: k, shortName: k.slice(0, 6).toUpperCase(), color: 'indigo', icon: '📚', order: 99, active: true }
+      })
+    return [...fromMaster, ...extras]
+  }, [myPakets, subjects])
 
   const { filtered, hiddenFinished } = useMemo(() => {
     const q = search.trim().toLowerCase()

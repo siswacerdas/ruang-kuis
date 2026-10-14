@@ -12,12 +12,12 @@ import { db } from '../lib/firebase'
 import { ensureParentSession } from '../lib/parentSession'
 import type { ParentSession } from '../types/parent'
 import {
-  SUBJECTS,
   getSubject,
   type SubjectKey,
   type Topic,
   type Question,
 } from '../types/question'
+import { loadSubjects, getCachedSubjects, type SubjectDoc } from '../lib/subjects'
 import { PRACTICE_COUNTS, type PracticeCount } from '../types/practice'
 import OrtuLayout from '../components/OrtuLayout'
 import { getRosterDoc } from '../lib/studentRoster'
@@ -48,6 +48,12 @@ export default function OrtuBuatKuis() {
   const [children, setChildren] = useState<ChildInfo[]>([])
   const [selectedChildId, setSelectedChildId] = useState('')
   const [subjectKey, setSubjectKey] = useState<SubjectKey | ''>('')
+  const [subjects, setSubjects] = useState<SubjectDoc[]>(() => getCachedSubjects(true))
+  useEffect(() => {
+    let c = false
+    loadSubjects(true).then((list) => { if (!c) setSubjects(list) })
+    return () => { c = true }
+  }, [])
   const [topics, setTopics] = useState<Topic[]>([])
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([])
   const [count, setCount] = useState<PracticeCount>(15)
@@ -345,7 +351,7 @@ export default function OrtuBuatKuis() {
             <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
               <h2 className="text-sm font-semibold text-gray-900">1. Mata pelajaran</h2>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {SUBJECTS.map((s) => {
+                {subjects.map((s) => {
                   const on = subjectKey === s.key
                   return (
                     <button

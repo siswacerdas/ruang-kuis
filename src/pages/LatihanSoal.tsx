@@ -14,7 +14,6 @@ import { Link } from 'react-router-dom'
 import Layout from '../components/Layout'
 import {
   getSubject,
-  SUBJECTS,
   LATIHAN_STATUS_LABELS,
   resolveLatihanStatus,
   formatDateTime,
@@ -22,6 +21,7 @@ import {
   type LatihanStatus,
   type SubjectKey,
 } from '../types/question'
+import { loadSubjects, getCachedSubjects, type SubjectDoc } from '../lib/subjects'
 
 type TabKey = 'all' | LatihanStatus
 type GroupKey = SubjectKey | 'none'
@@ -63,9 +63,10 @@ function lsSet(key: string, value: string) {
   }
 }
 
-/** Paket tanpa mapel (data lama) atau dengan mapel tak dikenal → kelompok "none". */
+/** Paket tanpa mapel (data lama) → "none". Mapel dinamis tetap dikelompokkan by subjectKey. */
 function groupKeyOf(p: LatihanPaket): GroupKey {
-  return p.subjectKey && getSubject(p.subjectKey) ? p.subjectKey : 'none'
+  const sk = (p.subjectKey || '').trim()
+  return sk ? sk : 'none'
 }
 
 /** Apakah paket termasuk tab status tertentu (aturan sama untuk daftar dan hitungan). */
@@ -81,6 +82,17 @@ function matchesTab(p: LatihanPaket, tab: TabKey): boolean {
 export default function LatihanSoal() {
   const [list, setList] = useState<LatihanPaket[]>([])
   const [loading, setLoading] = useState(true)
+  const [subjects, setSubjects] = useState<SubjectDoc[]>(() => getCachedSubjects(true))
+
+  useEffect(() => {
+    let c = false
+    loadSubjects(true).then((list) => {
+      if (!c) setSubjects(list)
+    })
+    return () => {
+      c = true
+    }
+  }, [])
   const [tab, setTab] = useState<TabKey>('all')
   const [subjectFilter, setSubjectFilter] = useState<SubjectFilter>('all')
   const [search, setSearch] = useState('')
@@ -146,13 +158,17 @@ export default function LatihanSoal() {
     [searched, subjectFilter]
   )
 
-  // Kelompok per mapel (urutan sesuai SUBJECTS, "tanpa mapel" di akhir)
+  // Kelompok per mapel (urutan master subjects dinamis, mapel tak dikenal, lalu "tanpa mapel")
   const groups = useMemo(() => {
-    const order: GroupKey[] = [...SUBJECTS.map((s) => s.key), 'none']
+    const known = subjects.map((s) => s.key)
+    const present = new Set<GroupKey>()
+    filtered.forEach((p) => present.add(groupKeyOf(p)))
+    const extras = [...present].filter((k) => k !== 'none' && !known.includes(k))
+    const order: GroupKey[] = [...known, ...extras, 'none']
     return order
       .map((key) => ({ key, items: filtered.filter((p) => groupKeyOf(p) === key) }))
       .filter((g) => g.items.length > 0)
-  }, [filtered])
+  }, [filtered, subjects])
 
   const showGrouped = grouped && subjectFilter === 'all'
   const hasActiveFilter = subjectFilter !== 'all' || search.trim() !== ''
@@ -427,7 +443,7 @@ export default function LatihanSoal() {
             Semua mapel
             <span className="text-gray-400">{searched.length}</span>
           </button>
-          {SUBJECTS.filter((s) => (subjectCounts.get(s.key) || 0) > 0 || subjectFilter === s.key).map((s) => (
+          {subjects.filter((s) => (subjectCounts.get(s.key) || 0) > 0 || subjectFilter === s.key).map((s) => (
             <button
               key={s.key}
               type="button"
@@ -528,7 +544,7 @@ export default function LatihanSoal() {
                     </svg>
                     <span className="text-base shrink-0">{subject ? subject.icon : '📂'}</span>
                     <span className="font-semibold text-gray-900 text-sm truncate">
-                      {subject ? subject.name : 'Tanpa mapel'}
+                      {g.key === 'none' ? 'Tanpa mapel' : subject?.name || g.key}
                     </span>
                     <span className="text-xs text-gray-400 shrink-0">{g.items.length} paket</span>
                     <span className="ml-auto flex items-center gap-1.5 shrink-0">
