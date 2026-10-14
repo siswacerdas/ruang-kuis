@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { collection, getDocs, query, where } from 'firebase/firestore'
 import { db } from '../lib/firebase'
-import { SUBJECTS, getSubject, type SubjectKey } from '../types/question'
+import { getSubject, type SubjectKey } from '../types/question'
+import { loadSubjects, getCachedSubjects, type SubjectDoc } from '../lib/subjects'
 import { saveLessonMaterial, type LessonMaterialStatus, type LessonPdf } from '../lib/lessonMaterials'
 import type { BookMaterial } from '../types/tp'
 import LessonViewer from './LessonViewer'
@@ -44,8 +45,11 @@ export default function HtmlMaterialEditor({
   const [selectedBookId, setSelectedBookId] = useState('')
   const [bookQuery, setBookQuery] = useState('')
 
+  const [subjects, setSubjects] = useState<SubjectDoc[]>(() => getCachedSubjects(true))
+
   useEffect(() => {
     if (!open) return
+    void loadSubjects(true).then((list) => setSubjects(list))
     setSubjectKey(initial?.subjectKey || defaultSubjectKey || 'bahasa-indonesia')
     setTitle(initial?.title || '')
     setHtmlContent(initial?.htmlContent || '')
@@ -201,7 +205,7 @@ export default function HtmlMaterialEditor({
                 }}
                 className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white"
               >
-                {SUBJECTS.map((s) => (
+                {subjects.map((s) => (
                   <option key={s.key} value={s.key}>
                     {s.name}
                   </option>
@@ -423,7 +427,7 @@ export default function HtmlMaterialEditor({
       {previewOpen && canPreview && (
         <LessonViewer
           title={title.trim() || 'Pratinjau'}
-          subjectName={subject?.name || subjectKey}
+          subjectName={subject?.name ?? subjectKey}
           htmlContent={htmlContent}
           onClose={() => setPreviewOpen(false)}
           showExport

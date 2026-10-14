@@ -8,7 +8,8 @@ import {
   type AssessmentActivity,
   type AssessmentScore,
 } from '../types/assessment'
-import { SUBJECTS, getSubject, type SubjectKey } from '../types/question'
+import { getSubject, type SubjectKey } from '../types/question'
+import { loadSubjects, getCachedSubjects, type SubjectDoc } from '../lib/subjects'
 import type { LearningObjective } from '../types/tp'
 import { isDummyStudent, type Student } from '../types/student'
 import { downloadCsv, stampFilename } from '../lib/exportGrades'
@@ -124,6 +125,12 @@ function buildStudentTpMatrix(
 
 export default function RekapNilai() {
   const [loading, setLoading] = useState(true)
+  const [subjects, setSubjects] = useState<SubjectDoc[]>(() => getCachedSubjects(true))
+  useEffect(() => {
+    let c = false
+    loadSubjects(true).then((list) => { if (!c) setSubjects(list) })
+    return () => { c = true }
+  }, [])
   const [error, setError] = useState('')
   const [activities, setActivities] = useState<AssessmentActivity[]>([])
   const [scores, setScores] = useState<AssessmentScore[]>([])
@@ -388,7 +395,7 @@ export default function RekapNilai() {
 
       <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
         <div className="flex flex-wrap gap-1.5">
-          {SUBJECTS.map((s) => {
+          {subjects.map((s) => {
             const on = subjectKey === s.key
             const hasData = activities.some((a) => (a.subjectKeys || []).includes(s.key))
             return (

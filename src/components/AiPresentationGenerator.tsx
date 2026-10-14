@@ -9,7 +9,8 @@ import {
   type PresentationStyle,
 } from '../lib/openaiPresentation'
 import { saveLessonMaterial } from '../lib/lessonMaterials'
-import { SUBJECTS, getSubject, type SubjectKey } from '../types/question'
+import { getSubject, type SubjectKey } from '../types/question'
+import { loadSubjects, getCachedSubjects, type SubjectDoc } from '../lib/subjects'
 import type { BookMaterial } from '../types/tp'
 import PresentationViewer from './PresentationViewer'
 
@@ -63,6 +64,7 @@ export default function AiPresentationGenerator({
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [subjects, setSubjects] = useState<SubjectDoc[]>(() => getCachedSubjects(true))
   const [slides, setSlides] = useState<PresentationSlide[]>([])
   const [previewOpen, setPreviewOpen] = useState(false)
 
@@ -71,6 +73,7 @@ export default function AiPresentationGenerator({
 
   useEffect(() => {
     if (!open) return
+    void loadSubjects(true).then((list) => setSubjects(list))
     if (defaultSubjectKey) setSubjectKey(defaultSubjectKey)
     setSlides([])
     setError('')
@@ -118,7 +121,7 @@ export default function AiPresentationGenerator({
     setSlides([])
     try {
       const { slides: list, imageWarnings } = await generatePresentationWithOpenAI({
-        subjectName: subject?.name || subjectKey,
+        subjectName: subject?.name ?? subjectKey,
         subjectKey,
         title: title.trim(),
         outline,
@@ -210,7 +213,7 @@ export default function AiPresentationGenerator({
                 onChange={(e) => setSubjectKey(e.target.value as SubjectKey)}
                 className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white"
               >
-                {SUBJECTS.map((s) => (
+                {subjects.map((s) => (
                   <option key={s.key} value={s.key}>
                     {s.name}
                   </option>
@@ -432,7 +435,7 @@ export default function AiPresentationGenerator({
       {previewOpen && slides.length > 0 && (
         <PresentationViewer
           title={title.trim() || 'Pratinjau'}
-          subjectName={subject?.name || subjectKey}
+          subjectName={subject?.name ?? subjectKey}
           slides={slides}
           onClose={() => setPreviewOpen(false)}
           showExport

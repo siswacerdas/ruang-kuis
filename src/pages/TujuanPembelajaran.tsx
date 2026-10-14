@@ -3,7 +3,8 @@ import { collection, doc, getDocs, serverTimestamp, writeBatch } from 'firebase/
 import Layout from '../components/Layout'
 import { db } from '../lib/firebase'
 import * as XLSX from 'xlsx'
-import { SUBJECTS, getSubject } from '../types/question'
+import { getSubject } from '../types/question'
+import { loadSubjects, getCachedSubjects, type SubjectDoc } from '../lib/subjects'
 import type { BookMaterial, LearningObjective, SubjectKey, TpSeedFile } from '../types/tp'
 
 type Tab = 'tp' | 'materi'
@@ -79,6 +80,8 @@ export default function TujuanPembelajaran() {
   const [selectedMaterialIds, setSelectedMaterialIds] = useState<string[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
 
+  const [subjects, setSubjects] = useState<SubjectDoc[]>(() => getCachedSubjects(true))
+
   const load = async () => {
     setLoading(true)
     setError('')
@@ -111,6 +114,14 @@ export default function TujuanPembelajaran() {
   }
 
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const list = await loadSubjects(true)
+      if (!cancelled) setSubjects(list)
+    })()
+    return () => { cancelled = true }
+  }, [])
   useEffect(() => {
     setSelectedTpCodes([])
     setSelectedMaterialIds([])
@@ -602,7 +613,7 @@ export default function TujuanPembelajaran() {
             onClick={() => setSubjectFilter('semua')}
             label={tab === 'tp' ? `Semua (${items.length} TP)` : `Semua (${materials.length} materi)`}
           />
-          {SUBJECTS.map((s) => (
+          {subjects.map((s) => (
             <FilterChip
               key={s.key}
               active={subjectFilter === s.key}
@@ -741,7 +752,7 @@ export default function TujuanPembelajaran() {
             </Field>
             <Field label="Mapel">
               <select value={editor.subjectKey} onChange={(e) => setEditor({ ...editor, subjectKey: e.target.value as SubjectKey })} className="field">
-                {SUBJECTS.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
+                {subjects.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
               </select>
             </Field>
             <Field label="Elemen / tema">
@@ -785,7 +796,7 @@ export default function TujuanPembelajaran() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Mapel">
               <select value={materialEditor.subjectKey} onChange={(e) => setMaterialEditor({ ...materialEditor, subjectKey: e.target.value as SubjectKey })} className="field">
-                {SUBJECTS.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
+                {subjects.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
               </select>
             </Field>
             <Field label="Judul">

@@ -30,7 +30,8 @@ import {
   type AssessmentComponent,
   type AssessmentScore,
 } from '../types/assessment'
-import { SUBJECTS, getSubject, type SubjectKey } from '../types/question'
+import { getSubject, type SubjectKey } from '../types/question'
+import { loadSubjects, getCachedSubjects, type SubjectDoc } from '../lib/subjects'
 import type { LearningObjective } from '../types/tp'
 import { isDummyStudent, type Student } from '../types/student'
 
@@ -42,6 +43,12 @@ function scoreDocId(activityId: string, studentId: string) {
 
 export default function InputNilai() {
   const [view, setView] = useState<View>('list')
+  const [subjects, setSubjects] = useState<SubjectDoc[]>(() => getCachedSubjects(true))
+  useEffect(() => {
+    let c = false
+    loadSubjects(true).then((list) => { if (!c) setSubjects(list) })
+    return () => { c = true }
+  }, [])
   const [activities, setActivities] = useState<AssessmentActivity[]>([])
   const [tps, setTps] = useState<LearningObjective[]>([])
   const [students, setStudents] = useState<Student[]>([])
@@ -569,7 +576,7 @@ export default function InputNilai() {
             <div>
               <p className="text-xs font-medium text-gray-500 mb-2">Mata pelajaran terkait <span className="text-red-500">*</span></p>
               <div className="flex flex-wrap gap-2">
-                {SUBJECTS.map((s) => {
+                {subjects.map((s) => {
                   const on = selectedSubjects.includes(s.key)
                   return (
                     <button key={s.key} type="button" onClick={() => toggleSubject(s.key)} className={`text-xs font-medium px-3 py-1.5 rounded-full border transition ${on ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-600 border-gray-200'}`}>

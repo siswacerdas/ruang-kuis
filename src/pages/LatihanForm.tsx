@@ -16,7 +16,6 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import Layout from '../components/Layout'
 import QuestionQuickEdit from '../components/QuestionQuickEdit'
 import {
-  SUBJECTS,
   getSubject,
   generateToken,
   QUESTION_TYPE_LABELS,
@@ -27,6 +26,7 @@ import {
   type Topic,
   KOMPLEKSITAS_OPTIONS,
 } from '../types/question'
+import { loadSubjects, getCachedSubjects, type SubjectDoc } from '../lib/subjects'
 
 import {
   generateQuestions,
@@ -61,6 +61,12 @@ export default function LatihanForm() {
   const isNew = !id || id === 'baru'
 
   const [loading, setLoading] = useState(!isNew)
+  const [subjects, setSubjects] = useState<SubjectDoc[]>(() => getCachedSubjects(true))
+  useEffect(() => {
+    let c = false
+    loadSubjects(true).then((list) => { if (!c) setSubjects(list) })
+    return () => { c = true }
+  }, [])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [buildMode, setBuildMode] = useState<BuildMode>('manual')
@@ -443,7 +449,7 @@ export default function LatihanForm() {
                 className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-gray-50"
               >
                 <option value="">— Pilih mapel (pool soal) —</option>
-                {SUBJECTS.map((s) => (
+                {subjects.map((s) => (
                   <option key={s.key} value={s.key}>
                     {s.icon} {s.name}
                   </option>
