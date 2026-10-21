@@ -33,6 +33,7 @@ const PracticeResult = lazy(() => import('./pages/PracticeResult'))
 const OrtuDaftar = lazy(() => import('./pages/OrtuDaftar'))
 const AdminPengajuanOrtu = lazy(() => import('./pages/AdminPengajuanOrtu'))
 const AdminParents = lazy(() => import('./pages/AdminParents'))
+const AdminGantiPassword = lazy(() => import('./pages/AdminGantiPassword'))
 const OrtuLupaPassword = lazy(() => import('./pages/OrtuLupaPassword'))
 const OrtuHome = lazy(() => import('./pages/OrtuHome'))
 const OrtuRiwayat = lazy(() => import('./pages/OrtuRiwayat'))
@@ -184,6 +185,10 @@ function App() {
         <Route
           path="/akun-ortu"
           element={isAdmin ? <AdminParents /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/ganti-password"
+          element={isAdmin ? <AdminGantiPassword /> : <Navigate to="/login" />}
         />
 
         <Route path="/questions" element={<Navigate to="/bank-soal" replace />} />
