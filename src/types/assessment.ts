@@ -141,26 +141,19 @@ export function emptyRubric(): RubricBand[] {
 }
 
 /**
- * Predikat huruf — setiap huruf punya target level UNIK (step 0,25)
- * agar round-trip predikat → skor → % → predikat stabil (A- ≠ A, B- ≠ B+).
+ * Predikat huruf dengan pita % sekolah + sub-range per huruf.
  *
- * Konversi: % = (level / 4) * 100
+ * Kategori:
+ *   90–100 Sangat Baik | 80–89 Baik | 70–79 Cukup | 60–69 Kurang | <60 Sangat Kurang
  *
- *   Predikat  Level   %       Kategori
- *   A+        4.00    100.00  Sangat Baik
- *   A         3.75     93.75  Sangat Baik
- *   A-        3.50     87.50  Sangat Baik
- *   B+        3.25     81.25  Baik
- *   B         3.00     75.00  Baik / Cukup-atas
- *   B-        2.75     68.75  Cukup
- *   C+        2.50     62.50  Kurang / Cukup-bawah
- *   C         2.25     56.25  Kurang
- *   C-        2.00     50.00  Kurang
- *   D         1.50     37.50  Sangat Kurang
- *   E         1.00     25.00  Sangat Kurang
+ * Sub-range:
+ *   A+ 97–100 | A 93–96 | A- 90–92
+ *   B+ 87–89  | B 83–86 | B- 80–82
+ *   C+ 77–79  | C 73–76 | C- 70–72
+ *   D  60–69  | E <60
  *
- * Catatan: grid 0,25 hanya punya 13 slot %; 11 predikat dipetakan 1:1
- * tanpa dua huruf berbagi level yang sama.
+ * Observasi tetap 1–4 step 0,25. Simulasi mengisi KOMPONEN BERBEDA
+ * agar rata tertimbang % jatuh di tengah sub-range (bukan satu level seragam).
  */
 export const PREDICATE_OPTIONS = [
   'A+',
@@ -193,19 +186,40 @@ export const PREDICATE_CATEGORY: Record<LetterPredicate, string> = {
   E: 'Sangat Kurang',
 }
 
-/** Target level observasi unik per predikat (kelipatan 0,25). */
+/**
+ * Titik tengah sub-range % — dipakai simulasi agar total tertimbang tepat di pita.
+ * B- 80–82 → 81 | B 83–86 → 84.5 | B+ 87–89 → 88 | dst.
+ */
+export const PREDICATE_PERCENT_CENTER: Record<LetterPredicate, number> = {
+  'A+': 98.5,
+  A: 94.5,
+  'A-': 91,
+  'B+': 88,
+  B: 84.5,
+  'B-': 81,
+  'C+': 78,
+  C: 74.5,
+  'C-': 71,
+  D: 64.5,
+  E: 45,
+}
+
+/**
+ * Level observasi acuan kasar (untuk prompt AI / fallback).
+ * level ≈ (center% / 100) * 4, dibulatkan ke 0,25 terdekat.
+ */
 export const PREDICATE_TARGET_LEVEL: Record<LetterPredicate, number> = {
   'A+': 4,
   A: 3.75,
-  'A-': 3.5,
-  'B+': 3.25,
-  B: 3,
-  'B-': 2.75,
-  'C+': 2.5,
-  C: 2.25,
-  'C-': 2,
-  D: 1.5,
-  E: 1,
+  'A-': 3.75,
+  'B+': 3.5,
+  B: 3.25,
+  'B-': 3.25,
+  'C+': 3,
+  C: 3,
+  'C-': 2.75,
+  D: 2.5,
+  E: 1.75,
 }
 
 /** Normalisasi input predikat (huruf, plus/minus, atau label kategori). */
@@ -244,56 +258,98 @@ export function normalizePredicate(raw: string): LetterPredicate | null {
 
 export function predicateToTargetLevel(raw: string): number {
   const p = normalizePredicate(raw)
-  if (!p) return 3 // default B (~75%)
+  if (!p) return 3
   return PREDICATE_TARGET_LEVEL[p]
 }
 
+export function predicateToTargetPercent(raw: string): number {
+  const p = normalizePredicate(raw)
+  if (!p) return 75
+  return PREDICATE_PERCENT_CENTER[p]
+}
+
 /**
- * Simulasi lokal (tanpa AI): sebar skor komponen di sekitar target predikat.
- * Plus cenderung sedikit di atas target; minus sedikit di bawah — tetap di-clamp 1–4 step 0,25.
+ * Simulasi lokal: sebar skor komponen (step 0,25) agar rata tertimbang ≈ tengah sub-range %.
+ * Contoh B (83–86): target 84.5% → level rata-rata 3.38 → campuran 3.25 & 3.50.
  */
 export function simulateScoresFromPredicateLocal(
   components: AssessmentComponent[],
   predicate: string
 ): Record<string, number> {
-  const normalized = normalizePredicate(predicate)
-  const target = predicateToTargetLevel(predicate)
-  const minus = normalized != null && normalized.includes('-')
-  const plus = normalized != null && normalized.includes('+')
+  const targetPct = predicateToTargetPercent(predicate)
+  // level kontinu yang setara target %
+  const targetLevel = (targetPct / 100) * SCORE_MAX
+
+  if (!components.length) return {}
+
+  // Urutkan: bobot besar lebih dulu (disesuaikan terakhir)
+  const order = components
+    .map((c, i) => ({ c, i, w: c.weight > 0 ? c.weight : 1 }))
+    .sort((a, b) => b.w - a.w)
+
+  // Inisialisasi semua ke floor 0,25 terdekat di bawah target
+  const base = clampScore(Math.floor(targetLevel / SCORE_STEP) * SCORE_STEP)
+  const levels: number[] = components.map(() => base)
+
+  // Naikkan komponen (dari bobot besar) selangkah 0,25 sampai rata tertimbang >= target
+  const weightedAvg = () => {
+    let s = 0
+    let w = 0
+    components.forEach((c, i) => {
+      const ww = c.weight > 0 ? c.weight : 1
+      s += levels[i] * ww
+      w += ww
+    })
+    return w > 0 ? s / w : 0
+  }
+
+  let guard = 0
+  while (weightedAvg() < targetLevel - 1e-9 && guard < 200) {
+    guard += 1
+    let raised = false
+    for (const { i } of order) {
+      if (levels[i] + SCORE_STEP <= SCORE_MAX + 1e-9) {
+        levels[i] = clampScore(levels[i] + SCORE_STEP)
+        raised = true
+        if (weightedAvg() >= targetLevel - 1e-9) break
+      }
+    }
+    if (!raised) break
+  }
+
+  // Variasi ringan: geser ±0,25 pada komponen non-utama tanpa keluar jauh dari target
+  // (jaga tetap di dalam sub-range setelah pembulatan %)
   const out: Record<string, number> = {}
-  const n = components.length || 1
   components.forEach((c, i) => {
-    // Sebaran kecil antar komponen agar tidak identik
-    const wave = ((i % 3) - 1) * 0.25
-    const weightBias = c.weight >= 1.5 ? 0.25 : c.weight < 1 ? -0.25 : 0
-    // Plus: tarik ke atas di komponen berbobot; minus: tarik ke bawah
-    const signBias = plus ? 0.25 : minus ? -0.25 : 0
-    const centerPull = i === Math.floor(n / 2) ? signBias : wave * 0.5
-    out[c.id] = clampScore(target + centerPull + weightBias * 0.25)
+    out[c.id] = clampScore(levels[i])
   })
-  // Pastikan rata-rata mendekati target: koreksi kasar jika semua tergeser
-  // (computeWeightedPercent dibulatkan; target level harus tetap khas per predikat)
   return out
 }
 
 /**
- * Predikat huruf dari total persen (0–100).
- * Ambang di antara nilai diskrit (level/4*100) agar setiap predikat punya zona sendiri.
+ * Predikat huruf dari total persen (0–100) menurut sub-range sekolah.
+ *
+ *   97–100 A+ | 93–96 A | 90–92 A-
+ *   87–89  B+ | 83–86 B | 80–82 B-
+ *   77–79  C+ | 73–76 C | 70–72 C-
+ *   60–69  D  | <60 E
  */
 export function percentToPredicate(pct: number | null): LetterPredicate | null {
   if (pct == null || !Number.isFinite(pct)) return null
-  if (pct >= 97) return 'A+' // 100
-  if (pct >= 90) return 'A' // 93.75
-  if (pct >= 84) return 'A-' // 87.5
-  if (pct >= 78) return 'B+' // 81.25
-  if (pct >= 72) return 'B' // 75
-  if (pct >= 66) return 'B-' // 68.75
-  if (pct >= 59) return 'C+' // 62.5
-  if (pct >= 53) return 'C' // 56.25
-  if (pct >= 44) return 'C-' // 50
-  if (pct >= 31) return 'D' // 37.5
-  return 'E' // 25
+  if (pct >= 97) return 'A+'
+  if (pct >= 93) return 'A'
+  if (pct >= 90) return 'A-'
+  if (pct >= 87) return 'B+'
+  if (pct >= 83) return 'B'
+  if (pct >= 80) return 'B-'
+  if (pct >= 77) return 'C+'
+  if (pct >= 73) return 'C'
+  if (pct >= 70) return 'C-'
+  if (pct >= 60) return 'D'
+  return 'E'
 }
+
+
 
 
 
