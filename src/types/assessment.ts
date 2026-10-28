@@ -141,37 +141,77 @@ export function emptyRubric(): RubricBand[] {
 }
 
 /**
- * Predikat nilai akhir (skala sekolah).
- * 90–100 Sangat Baik | 80–89 Baik | 70–79 Cukup | 60–69 Kurang | <60 Sangat Kurang
+ * Predikat huruf (diferensiasi halus pada skala observasi 1–4 step 0,25).
+ *
+ * Kategori sekolah (ringkas):
+ *   90–100 Sangat Baik | 80–89 Baik | 70–79 Cukup | 60–69 Kurang | <60 Sangat Kurang
+ *
+ * Konversi level → %: (level / 4) * 100
+ *   4.00→100  3.75→93.75  3.50→87.5  3.25→81.25  3.00→75
+ *   2.75→68.75 2.50→62.5  2.25→56.25 2.00→50  1.75→43.75 …
  */
 export const PREDICATE_OPTIONS = [
-  'Sangat Baik',
-  'Baik',
-  'Cukup',
-  'Kurang',
-  'Sangat Kurang',
+  'A+',
+  'A',
+  'A-',
+  'B+',
+  'B',
+  'B-',
+  'C+',
+  'C',
+  'C-',
+  'D',
+  'E',
 ] as const
 
 export type LetterPredicate = (typeof PREDICATE_OPTIONS)[number]
 
-/**
- * Target level observasi 1–4 (kelipatan 0.25) agar total % jatuh di pita predikat.
- * (level / 4) * 100 ≈ persen:
- *   3.75 → 94%  Sangat Baik
- *   3.25 → 81%  Baik
- *   3.00 → 75%  Cukup
- *   2.50 → 63%  Kurang
- *   1.75 → 44%  Sangat Kurang
- */
-export const PREDICATE_TARGET_LEVEL: Record<LetterPredicate, number> = {
-  'Sangat Baik': 3.75,
-  Baik: 3.25,
-  Cukup: 3,
-  Kurang: 2.5,
-  'Sangat Kurang': 1.75,
+/** Label kategori sekolah untuk tiap predikat huruf. */
+export const PREDICATE_CATEGORY: Record<LetterPredicate, string> = {
+  'A+': 'Sangat Baik',
+  A: 'Sangat Baik',
+  'A-': 'Sangat Baik',
+  'B+': 'Baik',
+  B: 'Baik',
+  'B-': 'Baik',
+  'C+': 'Cukup',
+  C: 'Cukup',
+  'C-': 'Cukup',
+  D: 'Kurang',
+  E: 'Sangat Kurang',
 }
 
-/** Normalisasi input predikat (boleh "C", "B+", "cukup", "istimewa", dll.). */
+/**
+ * Target level observasi (kelipatan 0,25) saat simulasi dari predikat.
+ * Dipilih agar total % jatuh di pita kategori, dengan beda antar huruf.
+ *
+ *   A+ 4.00 → 100%   Sangat Baik
+ *   A  3.75 → 93.75% Sangat Baik
+ *   A- 3.50 → 87.5%  Sangat Baik / batas Baik
+ *   B+ 3.25 → 81.25% Baik
+ *   B  3.25 → 81.25% Baik (variasi simulasi membedakan dari B+)
+ *   B- 3.00 → 75%    Cukup (batas bawah Baik)
+ *   C+ 3.00 → 75%    Cukup
+ *   C  3.00 → 75%    Cukup
+ *   C- 2.75 → 68.75% Cukup/Kurang (batas)
+ *   D  2.50 → 62.5%  Kurang
+ *   E  1.75 → 43.75% Sangat Kurang
+ */
+export const PREDICATE_TARGET_LEVEL: Record<LetterPredicate, number> = {
+  'A+': 4, // 100%
+  A: 3.75, // 93.75%
+  'A-': 3.75, // 93.75% (slot terdekat di pita ≥90; beda lewat variasi komponen)
+  'B+': 3.5, // 87.5%
+  B: 3.25, // 81.25%
+  'B-': 3.25, // 81.25%
+  'C+': 3, // 75%
+  C: 3, // 75%
+  'C-': 2.75, // 68.75% (batas Cukup/Kurang)
+  D: 2.5, // 62.5%
+  E: 1.75, // 43.75%
+}
+
+/** Normalisasi input predikat (huruf, plus/minus, atau label kategori). */
 export function normalizePredicate(raw: string): LetterPredicate | null {
   const t = (raw || '')
     .trim()
@@ -181,52 +221,33 @@ export function normalizePredicate(raw: string): LetterPredicate | null {
     .replace(/—/g, '-')
   if (!t) return null
 
-  // Cocokkan label resmi (tanpa spasi)
-  const byLabel: Record<string, LetterPredicate> = {
-    SANGATBAIK: 'Sangat Baik',
-    BAIK: 'Baik',
-    CUKUP: 'Cukup',
-    KURANG: 'Kurang',
-    SANGATKURANG: 'Sangat Kurang',
+  for (const p of PREDICATE_OPTIONS) {
+    if (p === t) return p
   }
-  if (byLabel[t]) return byLabel[t]
 
-  // Alias huruf & bahasa umum
   const aliases: Record<string, LetterPredicate> = {
-    'A+': 'Sangat Baik',
-    A: 'Sangat Baik',
-    'A-': 'Sangat Baik',
-    ISTIMEWA: 'Sangat Baik',
-    EXCELLENT: 'Sangat Baik',
-    SANGATBAIKSEKALI: 'Sangat Baik',
-    BAIKSEKALI: 'Sangat Baik',
-    'B+': 'Baik',
-    B: 'Baik',
-    'B-': 'Baik',
-    GOOD: 'Baik',
-    'C+': 'Cukup',
-    C: 'Cukup',
-    'C-': 'Cukup',
-    PASS: 'Cukup',
-    D: 'Kurang',
-    NEEDSIMPROVEMENT: 'Kurang',
-    E: 'Sangat Kurang',
-    GAGAL: 'Sangat Kurang',
-    FAIL: 'Sangat Kurang',
+    SANGATBAIK: 'A',
+    ISTIMEWA: 'A+',
+    EXCELLENT: 'A+',
+    SANGATBAIKSEKALI: 'A+',
+    BAIKSEKALI: 'A',
+    BAIK: 'B',
+    GOOD: 'B',
+    CUKUP: 'C',
+    PASS: 'C',
+    KURANG: 'D',
+    NEEDSIMPROVEMENT: 'D',
+    SANGATKURANG: 'E',
+    GAGAL: 'E',
+    FAIL: 'E',
   }
   if (aliases[t]) return aliases[t]
-
-  // Label dengan spasi / case asli
-  const lower = (raw || '').trim().toLowerCase()
-  for (const p of PREDICATE_OPTIONS) {
-    if (p.toLowerCase() === lower) return p
-  }
   return null
 }
 
 export function predicateToTargetLevel(raw: string): number {
   const p = normalizePredicate(raw)
-  if (!p) return 3 // default Cukup (~75%)
+  if (!p) return 3 // default C (~75% Cukup)
   return PREDICATE_TARGET_LEVEL[p]
 }
 
@@ -250,12 +271,24 @@ export function simulateScoresFromPredicateLocal(
   return out
 }
 
-/** Predikat dari total persen (0–100) sesuai skala sekolah. */
+/**
+ * Predikat huruf dari total persen (0–100).
+ * Pita: 90 Sangat Baik, 80 Baik, 70 Cukup, 60 Kurang, <60 Sangat Kurang,
+ * dengan sub-tingkat A+/A/A- … memakai diferensiasi step 0,25.
+ */
 export function percentToPredicate(pct: number | null): LetterPredicate | null {
   if (pct == null || !Number.isFinite(pct)) return null
-  if (pct >= 90) return 'Sangat Baik'
-  if (pct >= 80) return 'Baik'
-  if (pct >= 70) return 'Cukup'
-  if (pct >= 60) return 'Kurang'
-  return 'Sangat Kurang'
+  if (pct >= 97) return 'A+'
+  if (pct >= 93) return 'A'
+  if (pct >= 90) return 'A-'
+  if (pct >= 87) return 'B+'
+  if (pct >= 83) return 'B'
+  if (pct >= 80) return 'B-'
+  if (pct >= 77) return 'C+'
+  if (pct >= 73) return 'C'
+  if (pct >= 70) return 'C-'
+  if (pct >= 60) return 'D'
+  return 'E'
 }
+
+

@@ -247,26 +247,23 @@ export type SimulateScoresOptions = {
   model?: string
 }
 
-const SIMULATE_SYSTEM = `Kamu membantu guru SD mengisi skor observasi aktivitas (skala 1–4, boleh 0.25).
+const SIMULATE_SYSTEM = `Kamu membantu guru SD mengisi skor observasi aktivitas (skala 1–4, boleh kelipatan 0,25).
 
-Tugas: terjemahkan predikat/kategori nilai siswa menjadi skor per komponen penilaian.
+Tugas: terjemahkan predikat huruf siswa menjadi skor per komponen penilaian.
 
-Skala predikat sekolah (total %):
-- Sangat Baik (Istimewa): 90–100
-- Baik: 80–89
-- Cukup: 70–79
-- Kurang: 60–69
-- Sangat Kurang (Gagal): di bawah 60
-
-Alias huruf yang mungkin dipakai guru: A/A+ ≈ Sangat Baik, B/B+ ≈ Baik, C/C+ ≈ Cukup, D ≈ Kurang, E ≈ Sangat Kurang.
+Predikat huruf & target kasar (level observasi → % ≈ level/4*100):
+- A+ → level ~4,00 (100%) | A → ~3,75 (94%) | A- → ~3,75 (94%) — kategori Sangat Baik (90–100)
+- B+ → ~3,50 (88%) | B → ~3,25 (81%) | B- → ~3,25 (81%) — kategori Baik (80–89)
+- C+ → ~3,00 (75%) | C → ~3,00 (75%) | C- → ~2,75 (69%) — kategori Cukup (70–79)
+- D → ~2,50 (63%) — kategori Kurang (60–69)
+- E → ~1,75 (44%) — kategori Sangat Kurang (<60)
 
 Skala observasi komponen: 1 Belum tampak, 2 Berkembang, 3 Mahir, 4 Sangat mahir (boleh 1.25, 1.5, …, 3.75).
-Konversi kasar level→%: (level/4)*100 → level 3 ≈ 75% (Cukup), 3.25 ≈ 81% (Baik), 3.75 ≈ 94% (Sangat Baik).
 
 Aturan:
-- Skor harus konsisten dengan predikat target (rata tertimbang mendekati pita % di atas).
-- Komponen tidak harus identik; variasikan wajar sesuai bobot & rubrik.
-- Pertimbangkan catatan performa mapel lain jika ada (jangan ekstrem bertentangan tanpa alasan).
+- Rata tertimbang skor mendekati target predikat; JANGAN semua komponen identik.
+- Bedakan A+ vs A vs A- (dan seterusnya) dengan selisih kecil berdasar rubrik & bobot.
+- Pertimbangkan catatan performa mapel lain jika ada.
 - Hanya kembalikan JSON: { "scores": { "<componentId>": <number> }, "note": "opsional singkat" }
 - Setiap componentId yang diminta harus ada di scores.
 - Nilai hanya antara 1 dan 4, kelipatan 0.25.`
@@ -276,7 +273,7 @@ export async function simulateScoresWithOpenAI(
 ): Promise<{ scores: Record<string, number>; note?: string }> {
   const key = resolveGeminiKey()
   const predicate = opts.predicate.trim()
-  if (!predicate) throw new Error('Predikat wajib diisi (mis. Cukup atau Baik).')
+  if (!predicate) throw new Error('Predikat wajib diisi (mis. B+ atau A-).')
   if (!opts.components.length) throw new Error('Tidak ada komponen penilaian.')
 
   const model = resolveGeminiModel(opts.model)
