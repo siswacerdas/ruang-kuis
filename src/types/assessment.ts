@@ -198,17 +198,17 @@ export const PREDICATE_CATEGORY: Record<LetterPredicate, string> = {
  *   E  1.75 → 43.75% Sangat Kurang
  */
 export const PREDICATE_TARGET_LEVEL: Record<LetterPredicate, number> = {
-  'A+': 4, // 100%
-  A: 3.75, // 93.75%
-  'A-': 3.75, // 93.75% (slot terdekat di pita ≥90; beda lewat variasi komponen)
-  'B+': 3.5, // 87.5%
-  B: 3.25, // 81.25%
-  'B-': 3.25, // 81.25%
-  'C+': 3, // 75%
-  C: 3, // 75%
-  'C-': 2.75, // 68.75% (batas Cukup/Kurang)
-  D: 2.5, // 62.5%
-  E: 1.75, // 43.75%
+  'A+': 4, // 100%   → A+
+  A: 3.75, // 93.75% → A
+  'A-': 3.5, // 87.5%  → A-   (penting: beda dari A)
+  'B+': 3.25, // 81.25% → B+
+  B: 3.25, // 81.25% → B+ / B (variasi komponen)
+  'B-': 3.25, // 81.25% → B-
+  'C+': 3, // 75%    → C+
+  C: 3, // 75%    → C
+  'C-': 2.75, // 68.75% → C-
+  D: 2.5, // 62.5%  → D
+  E: 1.75, // 43.75% → E
 }
 
 /** Normalisasi input predikat (huruf, plus/minus, atau label kategori). */
@@ -278,15 +278,19 @@ export function simulateScoresFromPredicateLocal(
  */
 export function percentToPredicate(pct: number | null): LetterPredicate | null {
   if (pct == null || !Number.isFinite(pct)) return null
+  // Sangat Baik (90–100) — A- memakai slot 3.50 (87.5%), ambang 85
   if (pct >= 97) return 'A+'
-  if (pct >= 93) return 'A'
-  if (pct >= 90) return 'A-'
-  if (pct >= 87) return 'B+'
-  if (pct >= 83) return 'B'
-  if (pct >= 80) return 'B-'
-  if (pct >= 77) return 'C+'
-  if (pct >= 73) return 'C'
-  if (pct >= 70) return 'C-'
+  if (pct >= 90) return 'A'
+  if (pct >= 85) return 'A-'
+  // Baik (80–89)
+  if (pct >= 80) return 'B+'
+  if (pct >= 77) return 'B'
+  if (pct >= 76) return 'B-'
+  // Cukup (70–79) — level 3.00 = 75%
+  if (pct >= 73) return 'C+'
+  if (pct >= 70) return 'C'
+  if (pct >= 67) return 'C-'
+  // Kurang / Sangat Kurang
   if (pct >= 60) return 'D'
   return 'E'
 }

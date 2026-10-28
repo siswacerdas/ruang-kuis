@@ -1,12 +1,7 @@
-Ruang Kuis — AI Gemini + predikat huruf A+…E (step 0,25)
+Fix A- → tidak lagi menjadi A.
 
-Salin isi folder src/ ke repo (path sama).
+A- target level 3.50 (87.5%), ambang percent ≥85.
+A  target level 3.75 (93.75%), ambang ≥90.
+A+ target level 4.00 (100%), ambang ≥97.
 
-Env (.env):
-  VITE_GEMINI_API_KEY=...
-  VITE_GEMINI_MODEL=gemini-2.0-flash
-
-Predikat: A+ A A- B+ B B- C+ C C- D E
-Pita %: 90 Sangat Baik | 80 Baik | 70 Cukup | 60 Kurang | <60 Sangat Kurang
-
-Setelah salin: npm run build && npm run deploy
+Salin src/ ke repo, lalu npm run build.
