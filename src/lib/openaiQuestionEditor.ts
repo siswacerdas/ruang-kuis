@@ -1,79 +1,16 @@
 /**
- * AI helpers for question editor.
+ * AI helpers for question editor (backend: Google Gemini).
  */
 import type { QuestionType } from '../types/question'
 import { compressImageSrc } from './imageCompress'
+import { callGeminiJson, generateGeminiImage, resolveGeminiKey } from './geminiClient'
 import { analyzeOptionLength } from './optionPattern'
-
-function resolveImageModel(): string {
-  return (
-    import.meta.env.VITE_OPENAI_IMAGE_MODEL?.trim() ||
-    'gpt-image-1-mini'
-  )
-}
 
 async function generateOpenAiImage(
   prompt: string,
-  apiKey: string
+  _apiKey?: string
 ): Promise<{ url?: string; error?: string }> {
-  const fullPrompt = [
-    prompt.trim(),
-    "Children's educational illustration for Indonesian elementary school, simple, colorful, neutral teaching material.",
-    'No text overlays, no watermarks, no circled answers, no explicit solution numbers.',
-  ].join(' ')
-
-  const primary = resolveImageModel()
-  const attempts: { model: string; quality: string; size: string }[] = [
-    { model: primary, quality: 'low', size: '1024x1024' },
-  ]
-  if (primary !== 'gpt-image-1-mini') {
-    attempts.push({ model: 'gpt-image-1-mini', quality: 'low', size: '1024x1024' })
-  }
-  if (primary !== 'gpt-image-2' && primary !== 'gpt-image-1-mini') {
-    attempts.push({ model: 'gpt-image-2', quality: 'low', size: '1024x1024' })
-  }
-
-  const errors: string[] = []
-  for (const a of attempts) {
-    try {
-      const body: Record<string, unknown> = {
-        model: a.model,
-        prompt: fullPrompt.slice(0, 32000),
-        n: 1,
-        size: a.size,
-        quality: a.quality,
-      }
-
-      const res = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(body),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        const msg =
-          data?.error?.message ||
-          data?.error?.code ||
-          `HTTP ${res.status}`
-        errors.push(`${a.model}: ${msg}`)
-        continue
-      }
-      const item = data?.data?.[0]
-      if (item?.b64_json) {
-        return { url: `data:image/png;base64,${item.b64_json}` }
-      }
-      if (item?.url) {
-        return { url: item.url as string }
-      }
-      errors.push(`${a.model}: respons tanpa gambar (b64/url)`)
-    } catch (e: any) {
-      errors.push(`${a.model}: ${e?.message || 'network error'}`)
-    }
-  }
-  return { error: errors.join(' | ') || 'Gagal generate gambar' }
+  return generateGeminiImage(prompt)
 }
 
 export type StimulusImageInput = {
@@ -153,41 +90,22 @@ function buildImagePromptRequest(input: StimulusImageInput): string {
 export async function generateStimulusImage(
   input: StimulusImageInput
 ): Promise<StimulusImageResult> {
-  const key = import.meta.env.VITE_OPENAI_API_KEY?.trim()
-  if (!key) {
-    throw new Error(
-      'VITE_OPENAI_API_KEY belum diisi. Tambahkan di file .env lalu restart npm run dev.'
-    )
-  }
+  const key = resolveGeminiKey()
   if (!input.question.trim()) {
     throw new Error('Isi pertanyaan terlebih dahulu agar gambar sesuai soal.')
   }
 
   let imagePrompt = ''
   try {
-    const model = import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini'
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model,
-        temperature: 0.4,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: IMAGE_FOR_QUESTION_GUIDANCE },
-          { role: 'user', content: buildImagePromptRequest(input) },
-        ],
-      }),
-    })
-    if (res.ok) {
-      const data = await res.json()
-      const content = data?.choices?.[0]?.message?.content
-      if (typeof content === 'string') {
-        imagePrompt = String(JSON.parse(content)?.imagePrompt || '').trim()
-      }
-    }
+    const data = await callGeminiJson(
+      IMAGE_FOR_QUESTION_GUIDANCE,
+      buildImagePromptRequest(input),
+      { temperature: 0.4, maxOutputTokens: 1024 }
+    )
+    imagePrompt = String(data?.imagePrompt || '').trim()
   } catch (e: any) {
-    if (/401|429/.test(String(e?.message))) throw e
+    if (/401|403|429/.test(String(e?.message))) throw e
+    /* fallback prompt di bawah */
   }
   if (!imagePrompt) {
     imagePrompt = `Simple educational illustration for an elementary school question: ${input.question.trim()}`
@@ -304,51 +222,17 @@ type QuestionView = {
 }
 
 function requireOpenAiKey(): string {
-  const key = import.meta.env.VITE_OPENAI_API_KEY?.trim()
-  if (!key) {
-    throw new Error(
-      'VITE_OPENAI_API_KEY belum diisi. Tambahkan di file .env lalu restart npm run dev.'
-    )
-  }
-  return key
+  // Nama lama dipertahankan agar call-site tidak berubah; backend = Gemini.
+  return resolveGeminiKey()
 }
 
 async function chatJson(
-  key: string,
+  _key: string,
   system: string,
   user: string,
   temperature: number
 ): Promise<any> {
-  const model = import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini'
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      model,
-      temperature,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    }),
-  })
-  if (!res.ok) {
-    if (res.status === 401) throw new Error('API key OpenAI tidak valid (401).')
-    if (res.status === 429) throw new Error('Batas kuota/rate OpenAI (429). Coba lagi nanti.')
-    const errText = await res.text().catch(() => '')
-    throw new Error(`OpenAI error ${res.status}: ${errText.slice(0, 200)}`)
-  }
-  const data = await res.json()
-  const content = data?.choices?.[0]?.message?.content
-  if (typeof content !== 'string' || !content.trim()) {
-    throw new Error('Respons OpenAI kosong.')
-  }
-  try {
-    return JSON.parse(content)
-  } catch {
-    throw new Error('Respons OpenAI bukan JSON valid.')
-  }
+  return callGeminiJson(system, user, { temperature, maxOutputTokens: 8192 })
 }
 
 function categoryLabelsOf(v: { categoryLabels?: string[] }): string[] {

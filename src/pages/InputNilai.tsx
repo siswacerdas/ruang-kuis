@@ -299,7 +299,7 @@ export default function InputNilai() {
     if (!active) return
     const predRaw = (predicates[studentId] || '').trim()
     if (!predRaw) {
-      setError('Isi predikat dulu (mis. B+ atau A-), lalu tekan tombol petir.')
+      setError('Isi predikat dulu (mis. Cukup atau Baik), lalu tekan tombol petir.')
       return
     }
     setError('')
@@ -742,7 +742,7 @@ export default function InputNilai() {
                 </div>
               )}
               <p className="px-4 py-2 text-[11px] text-gray-400 border-t border-gray-50">
-                Predikat (E…A+) + ⚡: AI mengisi skor komponen. Tombol "Sembunyikan rubrik" melebarkan tabel. Total = rata tertimbang %.
+                Predikat (Sangat Baik…Sangat Kurang) + ⚡: AI mengisi skor komponen. Tombol "Sembunyikan rubrik" melebarkan tabel. Total = rata tertimbang %.
               </p>
             </div>
 

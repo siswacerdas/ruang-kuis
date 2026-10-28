@@ -1,21 +1,23 @@
-Fix subjects dinamis v3 — termasuk dropdown Materi HTML
+Ruang Kuis — paket migrasi AI OpenAI → Google Gemini
+====================================================
 
-Masalah: dialog "Materi HTML" / presentasi AI masih pakai SUBJECTS statis,
-jadi mapel baru dari master tidak bisa dipilih di select.
+Isi folder src/ meniru struktur repo. Salin file ke lokasi yang sama di proyek Anda.
 
-File (struktur repo):
-  src/pages/MateriBody.tsx
-  src/pages/TujuanPembelajaran.tsx
-  src/pages/InputNilai.tsx
-  src/pages/RekapNilai.tsx
-  src/pages/LatihanForm.tsx
-  src/components/AiLessonGenerator.tsx
-  src/components/HtmlMaterialEditor.tsx   ← baru di v3 (dropdown Materi HTML)
-  src/components/AiPresentationGenerator.tsx ← baru di v3
+1. src/lib/geminiClient.ts          → BARU (wajib)
+2. src/lib/openaiAssessment.ts
+3. src/lib/openaiLesson.ts
+4. src/lib/openaiPresentation.ts
+5. src/lib/openaiQuestions.ts
+6. src/lib/openaiQuestionEditor.ts
+7. src/types/assessment.ts          (skala predikat baru)
+8. src/pages/InputNilai.tsx         (teks predikat)
 
-Windows (root repo):
-  Expand-Archive -Force .\ruang-kuis-subjects-fix.zip -DestinationPath .
-  npm run build
+Env .env (root proyek):
+  VITE_GEMINI_API_KEY=...
+  VITE_GEMINI_MODEL=gemini-2.0-flash          # opsional
+  VITE_GEMINI_IMAGE_MODEL=imagen-3.0-generate-002  # opsional
 
-Cek setelah ekstrak:
-  Select-String -Path src\components\HtmlMaterialEditor.tsx -Pattern "getCachedSubjects"
+Hapus / abaikan VITE_OPENAI_* — tidak dipakai lagi.
+Setelah isi .env: restart npm run dev.
+
+Panduan lengkap: CARA_INSTALL.md

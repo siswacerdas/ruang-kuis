@@ -1,6 +1,11 @@
 /**
- * AI: tautkan aktivitas belajar ke TP terpilih + rumuskan komponen penilaian + rubrik.
+ * AI penilaian aktivitas: tautkan TP + komponen + rubrik, serta simulasi skor.
+ * Backend: Google Gemini (bukan OpenAI).
  * Hanya TP dari mapel yang dikirim guru — tidak menambah mapel di luar permintaan.
+ *
+ * Env:
+ *   VITE_GEMINI_API_KEY   (wajib)
+ *   VITE_GEMINI_MODEL     (opsional, default gemini-2.0-flash)
  */
 
 import {
@@ -86,39 +91,95 @@ function buildUserPrompt(opts: GenerateAssessmentOptions): string {
   return parts.filter(Boolean).join('\n')
 }
 
-async function callOpenAI(apiKey: string, model: string, system: string, user: string): Promise<any> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+/** Panggil Gemini generateContent; kembalikan objek JSON ter-parse. */
+async function callGemini(
+  apiKey: string,
+  model: string,
+  system: string,
+  user: string
+): Promise<any> {
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent` +
+    `?key=${encodeURIComponent(apiKey)}`
+
+  const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model,
-      temperature: 0.35,
-      top_p: 0.9,
-      max_tokens: 6000,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
+      systemInstruction: {
+        parts: [{ text: system }],
+      },
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: user }],
+        },
       ],
+      generationConfig: {
+        temperature: 0.35,
+        topP: 0.9,
+        maxOutputTokens: 8192,
+        responseMimeType: 'application/json',
+      },
     }),
   })
+
   if (!res.ok) {
     const errText = await res.text().catch(() => '')
-    if (res.status === 401) throw new Error('API key OpenAI tidak valid (401).')
-    if (res.status === 429) throw new Error('Batas kuota/rate OpenAI (429). Coba lagi nanti.')
-    throw new Error(`OpenAI error ${res.status}: ${errText.slice(0, 200)}`)
+    if (res.status === 400 && /API key/i.test(errText)) {
+      throw new Error('API key Gemini tidak valid (400).')
+    }
+    if (res.status === 401 || res.status === 403) {
+      throw new Error('API key Gemini ditolak (401/403). Periksa VITE_GEMINI_API_KEY.')
+    }
+    if (res.status === 429) {
+      throw new Error('Batas kuota/rate Gemini (429). Coba lagi nanti.')
+    }
+    throw new Error(`Gemini error ${res.status}: ${errText.slice(0, 240)}`)
   }
+
   const data = await res.json()
-  const content = data?.choices?.[0]?.message?.content
-  if (!content || typeof content !== 'string') throw new Error('Respons OpenAI kosong.')
-  try {
-    return JSON.parse(content)
-  } catch {
-    throw new Error('Respons OpenAI bukan JSON valid.')
+  const parts = data?.candidates?.[0]?.content?.parts
+  let content = ''
+  if (Array.isArray(parts)) {
+    content = parts.map((p: any) => String(p?.text || '')).join('')
   }
+  if (!content || typeof content !== 'string') {
+    const block = data?.promptFeedback?.blockReason || data?.candidates?.[0]?.finishReason
+    throw new Error(
+      block ? `Respons Gemini kosong (${block}).` : 'Respons Gemini kosong.'
+    )
+  }
+
+  // Bersihkan fence markdown bila model menyertakan ```json
+  const cleaned = content
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim()
+
+  try {
+    return JSON.parse(cleaned)
+  } catch {
+    throw new Error('Respons Gemini bukan JSON valid.')
+  }
+}
+
+function resolveGeminiKey(): string {
+  const key = import.meta.env.VITE_GEMINI_API_KEY?.trim()
+  if (!key) {
+    throw new Error(
+      'VITE_GEMINI_API_KEY belum diisi. Tambahkan di file .env lalu restart npm run dev.'
+    )
+  }
+  return key
+}
+
+function resolveGeminiModel(override?: string): string {
+  return (
+    override?.trim() ||
+    import.meta.env.VITE_GEMINI_MODEL?.trim() ||
+    'gemini-2.0-flash'
+  )
 }
 
 function normalizeRubric(raw: any): RubricBand[] {
@@ -152,7 +213,11 @@ function pickAllowedCodes(raw: unknown, allowedCodes: Set<string>): string[] {
   return out
 }
 
-function normalizeComponent(raw: any, index: number, allowedCodes: Set<string>): AssessmentComponent | null {
+function normalizeComponent(
+  raw: any,
+  index: number,
+  allowedCodes: Set<string>
+): AssessmentComponent | null {
   if (!raw || typeof raw !== 'object') return null
   const label = String(raw.label || raw.name || '').trim()
   const description = String(raw.description || raw.kompetensi || '').trim()
@@ -160,9 +225,10 @@ function normalizeComponent(raw: any, index: number, allowedCodes: Set<string>):
   const tpCodes = pickAllowedCodes(raw.tpCodes, allowedCodes)
   const weight = Number(raw.weight)
   return {
-    id: String(raw.id || `c${index + 1}`)
-      .replace(/[^a-zA-Z0-9_-]/g, '')
-      .slice(0, 24) || `c${index + 1}`,
+    id:
+      String(raw.id || `c${index + 1}`)
+        .replace(/[^a-zA-Z0-9_-]/g, '')
+        .slice(0, 24) || `c${index + 1}`,
     label: label.slice(0, 80),
     description: description.slice(0, 400),
     tpCodes,
@@ -183,12 +249,22 @@ export type SimulateScoresOptions = {
 
 const SIMULATE_SYSTEM = `Kamu membantu guru SD mengisi skor observasi aktivitas (skala 1–4, boleh 0.25).
 
-Tugas: terjemahkan predikat huruf siswa menjadi skor per komponen penilaian.
-Predikat umum: E (sangat rendah), D, C-, C, C+, B-, B, B+, A-, A, A+ (sangat tinggi).
-Skala: 1 Belum tampak, 2 Berkembang, 3 Mahir, 4 Sangat mahir (boleh 1.25, 1.5, …, 3.75).
+Tugas: terjemahkan predikat/kategori nilai siswa menjadi skor per komponen penilaian.
+
+Skala predikat sekolah (total %):
+- Sangat Baik (Istimewa): 90–100
+- Baik: 80–89
+- Cukup: 70–79
+- Kurang: 60–69
+- Sangat Kurang (Gagal): di bawah 60
+
+Alias huruf yang mungkin dipakai guru: A/A+ ≈ Sangat Baik, B/B+ ≈ Baik, C/C+ ≈ Cukup, D ≈ Kurang, E ≈ Sangat Kurang.
+
+Skala observasi komponen: 1 Belum tampak, 2 Berkembang, 3 Mahir, 4 Sangat mahir (boleh 1.25, 1.5, …, 3.75).
+Konversi kasar level→%: (level/4)*100 → level 3 ≈ 75% (Cukup), 3.25 ≈ 81% (Baik), 3.75 ≈ 94% (Sangat Baik).
 
 Aturan:
-- Skor harus konsisten dengan predikat target (rata tertimbang mendekati target).
+- Skor harus konsisten dengan predikat target (rata tertimbang mendekati pita % di atas).
 - Komponen tidak harus identik; variasikan wajar sesuai bobot & rubrik.
 - Pertimbangkan catatan performa mapel lain jika ada (jangan ekstrem bertentangan tanpa alasan).
 - Hanya kembalikan JSON: { "scores": { "<componentId>": <number> }, "note": "opsional singkat" }
@@ -198,17 +274,12 @@ Aturan:
 export async function simulateScoresWithOpenAI(
   opts: SimulateScoresOptions
 ): Promise<{ scores: Record<string, number>; note?: string }> {
-  const key = import.meta.env.VITE_OPENAI_API_KEY?.trim()
-  if (!key) {
-    throw new Error(
-      'VITE_OPENAI_API_KEY belum diisi. Tambahkan di file .env lalu restart npm run dev.'
-    )
-  }
+  const key = resolveGeminiKey()
   const predicate = opts.predicate.trim()
-  if (!predicate) throw new Error('Predikat wajib diisi (mis. B+ atau A-).')
+  if (!predicate) throw new Error('Predikat wajib diisi (mis. Cukup atau Baik).')
   if (!opts.components.length) throw new Error('Tidak ada komponen penilaian.')
 
-  const model = opts.model || import.meta.env.VITE_OPENAI_MODEL?.trim() || 'gpt-4.1'
+  const model = resolveGeminiModel(opts.model)
 
   const compLines = opts.components.map((c) => {
     const rub = (c.rubric || [])
@@ -236,7 +307,7 @@ export async function simulateScoresWithOpenAI(
     .filter(Boolean)
     .join('\n')
 
-  const parsed = await callOpenAI(key, model, SIMULATE_SYSTEM, user)
+  const parsed = await callGemini(key, model, SIMULATE_SYSTEM, user)
   const rawScores = parsed?.scores
   if (!rawScores || typeof rawScores !== 'object') {
     throw new Error('AI tidak mengembalikan scores yang valid.')
@@ -265,12 +336,7 @@ export async function simulateScoresWithOpenAI(
 export async function generateAssessmentWithOpenAI(
   opts: GenerateAssessmentOptions
 ): Promise<AiAssessmentDraft> {
-  const key = import.meta.env.VITE_OPENAI_API_KEY?.trim()
-  if (!key) {
-    throw new Error(
-      'VITE_OPENAI_API_KEY belum diisi. Tambahkan di file .env lalu restart npm run dev.'
-    )
-  }
+  const key = resolveGeminiKey()
   const description = opts.description.trim()
   if (!description) throw new Error('Deskripsi aktivitas wajib diisi.')
   if (!opts.subjectKeys.length) throw new Error('Pilih minimal satu mata pelajaran.')
@@ -281,8 +347,8 @@ export async function generateAssessmentWithOpenAI(
   }
 
   const allowedCodes = new Set(opts.availableTps.map((t) => t.code))
-  const model = opts.model || import.meta.env.VITE_OPENAI_MODEL?.trim() || 'gpt-4.1'
-  const parsed = await callOpenAI(key, model, SYSTEM_PROMPT, buildUserPrompt(opts))
+  const model = resolveGeminiModel(opts.model)
+  const parsed = await callGemini(key, model, SYSTEM_PROMPT, buildUserPrompt(opts))
 
   const title =
     String(parsed.title || opts.titleHint || 'Penilaian aktivitas')

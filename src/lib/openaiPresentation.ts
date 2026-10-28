@@ -1,10 +1,11 @@
 /**
- * Generate presentasi materi pelajaran via OpenAI.
+ * Generate presentasi materi pelajaran via Gemini.
  * Target: densitas visual + jumlah slide sesuai target user.
  */
 
 import { compressImageSrc } from './imageCompress'
 import type { SubjectKey } from '../types/question'
+import { callGeminiJson, generateGeminiImage, resolveGeminiKey } from './geminiClient'
 
 export type SlideLayout =
   | 'title'
@@ -236,99 +237,26 @@ function normalizeSlide(raw: any, index: number): PresentationSlide | null {
   return slide
 }
 
-function resolveImageModel(): string {
-  return import.meta.env.VITE_OPENAI_IMAGE_MODEL?.trim() || 'gpt-image-1-mini'
-}
-
 async function generateSlideImage(
   prompt: string,
-  apiKey: string
+  _apiKey?: string
 ): Promise<{ url?: string; error?: string }> {
-  const fullPrompt = [
-    prompt.trim(),
-    "Children's educational illustration for Indonesian elementary school, simple, colorful, friendly.",
-    'No text overlays, no watermarks, no labels with answers.',
-  ].join(' ')
-  const primary = resolveImageModel()
-  const attempts: { model: string; quality: string; size: string }[] = [
-    { model: primary, quality: 'low', size: '1024x1024' },
-  ]
-  if (primary !== 'gpt-image-1-mini') {
-    attempts.push({ model: 'gpt-image-1-mini', quality: 'low', size: '1024x1024' })
-  }
-  const errors: string[] = []
-  for (const a of attempts) {
-    try {
-      const res = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: a.model,
-          prompt: fullPrompt.slice(0, 32000),
-          n: 1,
-          size: a.size,
-          quality: a.quality,
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        errors.push(`${a.model}: ${data?.error?.message || data?.error?.code || `HTTP ${res.status}`}`)
-        continue
-      }
-      const item = data?.data?.[0]
-      if (item?.b64_json) return { url: `data:image/png;base64,${item.b64_json}` }
-      if (item?.url) return { url: item.url as string }
-      errors.push(`${a.model}: respons tanpa gambar`)
-    } catch (e: any) {
-      errors.push(`${a.model}: ${e?.message || 'network error'}`)
-    }
-  }
-  return { error: errors.join(' | ') || 'Gagal generate gambar' }
+  return generateGeminiImage(prompt)
 }
 
 async function callOpenAI(
-  apiKey: string,
+  _apiKey: string,
   model: string,
   system: string,
   user: string
 ): Promise<any> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.65,
-      max_tokens: 8000,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    }),
+  return callGeminiJson(system, user, {
+    model,
+    temperature: 0.65,
+    maxOutputTokens: 8000,
   })
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '')
-    if (res.status === 401) throw new Error('API key OpenAI tidak valid (401).')
-    if (res.status === 429) throw new Error('Batas kuota/rate OpenAI (429). Coba lagi nanti.')
-    throw new Error(`OpenAI error ${res.status}: ${errText.slice(0, 200)}`)
-  }
-  const data = await res.json()
-  const content = data?.choices?.[0]?.message?.content
-  if (!content || typeof content !== 'string') {
-    throw new Error('Respons OpenAI kosong.')
-  }
-  try {
-    return JSON.parse(content)
-  } catch {
-    throw new Error('Respons OpenAI bukan JSON valid.')
-  }
 }
+
 
 function parseSlides(parsed: any): PresentationSlide[] {
   const arr = Array.isArray(parsed?.slides) ? parsed.slides : Array.isArray(parsed) ? parsed : []
@@ -338,17 +266,12 @@ function parseSlides(parsed: any): PresentationSlide[] {
 export async function generatePresentationWithOpenAI(
   opts: GeneratePresentationOptions
 ): Promise<GeneratePresentationResult> {
-  const key = import.meta.env.VITE_OPENAI_API_KEY?.trim()
-  if (!key) {
-    throw new Error(
-      'VITE_OPENAI_API_KEY belum diisi. Tambahkan di file .env lalu restart npm run dev.'
-    )
-  }
+  const key = resolveGeminiKey()
   const outline = opts.outline.trim()
   if (!outline) throw new Error('Outline materi wajib diisi.')
   if (!opts.title.trim()) throw new Error('Judul presentasi wajib diisi.')
 
-  const model = opts.model || import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini'
+  const model = opts.model || import.meta.env.VITE_GEMINI_MODEL?.trim() || undefined
   const target = Math.max(8, Math.min(opts.targetSlides || 14, 22))
   const minAccept = Math.max(6, target - 3)
 

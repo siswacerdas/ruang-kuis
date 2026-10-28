@@ -70,7 +70,7 @@ export interface AssessmentScore {
   updatedAt?: any
 }
 
-/** Respons terstruktur dari OpenAI. */
+/** Respons terstruktur dari AI (Gemini). */
 export interface AiAssessmentDraft {
   title: string
   linkedTpCodes: string[]
@@ -140,39 +140,38 @@ export function emptyRubric(): RubricBand[] {
   }))
 }
 
-/** Predikat huruf yang dipetakan ke skala observasi 1–4. */
+/**
+ * Predikat nilai akhir (skala sekolah).
+ * 90–100 Sangat Baik | 80–89 Baik | 70–79 Cukup | 60–69 Kurang | <60 Sangat Kurang
+ */
 export const PREDICATE_OPTIONS = [
-  'E',
-  'D',
-  'C-',
-  'C',
-  'C+',
-  'B-',
-  'B',
-  'B+',
-  'A-',
-  'A',
-  'A+',
+  'Sangat Baik',
+  'Baik',
+  'Cukup',
+  'Kurang',
+  'Sangat Kurang',
 ] as const
 
 export type LetterPredicate = (typeof PREDICATE_OPTIONS)[number]
 
-/** Target level 1–4 (kelipatan 0.25) untuk tiap predikat. */
+/**
+ * Target level observasi 1–4 (kelipatan 0.25) agar total % jatuh di pita predikat.
+ * (level / 4) * 100 ≈ persen:
+ *   3.75 → 94%  Sangat Baik
+ *   3.25 → 81%  Baik
+ *   3.00 → 75%  Cukup
+ *   2.50 → 63%  Kurang
+ *   1.75 → 44%  Sangat Kurang
+ */
 export const PREDICATE_TARGET_LEVEL: Record<LetterPredicate, number> = {
-  E: 1,
-  D: 1.5,
-  'C-': 2,
-  C: 2.25,
-  'C+': 2.5,
-  'B-': 2.75,
-  B: 3,
-  'B+': 3.25,
-  'A-': 3.5,
-  A: 3.75,
-  'A+': 4,
+  'Sangat Baik': 3.75,
+  Baik: 3.25,
+  Cukup: 3,
+  Kurang: 2.5,
+  'Sangat Kurang': 1.75,
 }
 
-/** Normalisasi input predikat (boleh "a+", "C −", "sangat baik", dll.). */
+/** Normalisasi input predikat (boleh "C", "B+", "cukup", "istimewa", dll.). */
 export function normalizePredicate(raw: string): LetterPredicate | null {
   const t = (raw || '')
     .trim()
@@ -181,28 +180,53 @@ export function normalizePredicate(raw: string): LetterPredicate | null {
     .replace(/−/g, '-')
     .replace(/—/g, '-')
   if (!t) return null
-  for (const p of PREDICATE_OPTIONS) {
-    if (p === t) return p
+
+  // Cocokkan label resmi (tanpa spasi)
+  const byLabel: Record<string, LetterPredicate> = {
+    SANGATBAIK: 'Sangat Baik',
+    BAIK: 'Baik',
+    CUKUP: 'Cukup',
+    KURANG: 'Kurang',
+    SANGATKURANG: 'Sangat Kurang',
   }
+  if (byLabel[t]) return byLabel[t]
+
+  // Alias huruf & bahasa umum
   const aliases: Record<string, LetterPredicate> = {
-    SANGATBAIK: 'A+',
-    EXCELLENT: 'A+',
-    BAIKSEKALI: 'A',
-    BAIK: 'B',
-    CUKUP: 'C',
-    KURANG: 'D',
-    SANGATKURANG: 'E',
-    NEEDSIMPROVEMENT: 'D',
-    PASS: 'C',
-    FAIL: 'E',
+    'A+': 'Sangat Baik',
+    A: 'Sangat Baik',
+    'A-': 'Sangat Baik',
+    ISTIMEWA: 'Sangat Baik',
+    EXCELLENT: 'Sangat Baik',
+    SANGATBAIKSEKALI: 'Sangat Baik',
+    BAIKSEKALI: 'Sangat Baik',
+    'B+': 'Baik',
+    B: 'Baik',
+    'B-': 'Baik',
+    GOOD: 'Baik',
+    'C+': 'Cukup',
+    C: 'Cukup',
+    'C-': 'Cukup',
+    PASS: 'Cukup',
+    D: 'Kurang',
+    NEEDSIMPROVEMENT: 'Kurang',
+    E: 'Sangat Kurang',
+    GAGAL: 'Sangat Kurang',
+    FAIL: 'Sangat Kurang',
   }
   if (aliases[t]) return aliases[t]
+
+  // Label dengan spasi / case asli
+  const lower = (raw || '').trim().toLowerCase()
+  for (const p of PREDICATE_OPTIONS) {
+    if (p.toLowerCase() === lower) return p
+  }
   return null
 }
 
 export function predicateToTargetLevel(raw: string): number {
   const p = normalizePredicate(raw)
-  if (!p) return 3
+  if (!p) return 3 // default Cukup (~75%)
   return PREDICATE_TARGET_LEVEL[p]
 }
 
@@ -226,18 +250,12 @@ export function simulateScoresFromPredicateLocal(
   return out
 }
 
-/** Predikat huruf dari total persen (0–100). */
+/** Predikat dari total persen (0–100) sesuai skala sekolah. */
 export function percentToPredicate(pct: number | null): LetterPredicate | null {
   if (pct == null || !Number.isFinite(pct)) return null
-  if (pct >= 97) return 'A+'
-  if (pct >= 90) return 'A'
-  if (pct >= 85) return 'A-'
-  if (pct >= 80) return 'B+'
-  if (pct >= 75) return 'B'
-  if (pct >= 70) return 'B-'
-  if (pct >= 65) return 'C+'
-  if (pct >= 60) return 'C'
-  if (pct >= 55) return 'C-'
-  if (pct >= 45) return 'D'
-  return 'E'
+  if (pct >= 90) return 'Sangat Baik'
+  if (pct >= 80) return 'Baik'
+  if (pct >= 70) return 'Cukup'
+  if (pct >= 60) return 'Kurang'
+  return 'Sangat Kurang'
 }

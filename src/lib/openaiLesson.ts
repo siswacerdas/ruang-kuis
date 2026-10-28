@@ -1,16 +1,13 @@
 /**
- * Generate materi belajar mandiri (HTML lengkap) via OpenAI.
+ * Generate materi belajar mandiri (HTML lengkap) via Gemini.
  * Bukan slide presentasi — konten self-contained untuk siswa SD kelas 5.
  *
- * Setting selaras Playground/OpenAI:
- * - model default: gpt-4.1 (override via VITE_OPENAI_MODEL)
- * - temperature: 0.4
- * - top_p: 0.9
- * - max_tokens: 14000
+ * Env: VITE_GEMINI_API_KEY, VITE_GEMINI_MODEL (opsional, default gemini-2.0-flash)
  */
 
 import { compressImageSrc } from './imageCompress'
 import type { SubjectKey } from '../types/question'
+import { callGeminiJson, generateGeminiImage, resolveGeminiKey } from './geminiClient'
 
 export type LessonStyle = 'penjelasan' | 'ringkas' | 'latihan'
 
@@ -299,109 +296,37 @@ function escapeText(t: string): string {
     .replace(/"/g, '"')
 }
 
-async function callOpenAI(apiKey: string, model: string, system: string, user: string): Promise<any> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.4,
-      top_p: 0.9,
-      max_tokens: 14000,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-    }),
+async function callOpenAI(
+  _apiKey: string,
+  model: string,
+  system: string,
+  user: string
+): Promise<any> {
+  return callGeminiJson(system, user, {
+    model,
+    temperature: 0.4,
+    topP: 0.9,
+    maxOutputTokens: 14000,
   })
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '')
-    if (res.status === 401) throw new Error('API key OpenAI tidak valid (401).')
-    if (res.status === 429) throw new Error('Batas kuota/rate OpenAI (429). Coba lagi nanti.')
-    throw new Error(`OpenAI error ${res.status}: ${errText.slice(0, 200)}`)
-  }
-  const data = await res.json()
-  const content = data?.choices?.[0]?.message?.content
-  if (!content || typeof content !== 'string') throw new Error('Respons OpenAI kosong.')
-  try {
-    return JSON.parse(content)
-  } catch {
-    throw new Error('Respons OpenAI bukan JSON valid.')
-  }
 }
 
-function resolveImageModel(): string {
-  return import.meta.env.VITE_OPENAI_IMAGE_MODEL?.trim() || 'gpt-image-1-mini'
-}
 
 async function generateLessonImage(
   prompt: string,
-  apiKey: string,
+  _apiKey?: string,
 ): Promise<{ url?: string; error?: string }> {
-  const fullPrompt = [
-    prompt.trim(),
-    "Children's educational illustration for Indonesian elementary school, simple, colorful, friendly.",
-    'No text overlays, no watermarks, no labels with written answers.',
-  ].join(' ')
-  const primary = resolveImageModel()
-  const attempts: { model: string; quality: string; size: string }[] = [
-    { model: primary, quality: 'low', size: '1024x1024' },
-  ]
-  if (primary !== 'gpt-image-1-mini') {
-    attempts.push({ model: 'gpt-image-1-mini', quality: 'low', size: '1024x1024' })
-  }
-  const errors: string[] = []
-  for (const a of attempts) {
-    try {
-      const res = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: a.model,
-          prompt: fullPrompt.slice(0, 32000),
-          n: 1,
-          size: a.size,
-          quality: a.quality,
-        }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        errors.push(`${a.model}: ${data?.error?.message || data?.error?.code || `HTTP ${res.status}`}`)
-        continue
-      }
-      const item = data?.data?.[0]
-      if (item?.b64_json) return { url: `data:image/png;base64,${item.b64_json}` }
-      if (item?.url) return { url: item.url as string }
-      errors.push(`${a.model}: respons tanpa gambar`)
-    } catch (e: any) {
-      errors.push(`${a.model}: ${e?.message || 'network error'}`)
-    }
-  }
-  return { error: errors.join(' | ') || 'Gagal generate gambar' }
+  return generateGeminiImage(prompt)
 }
 
 export async function generateLessonWithOpenAI(
   opts: GenerateLessonOptions,
 ): Promise<GenerateLessonResult> {
-  const key = import.meta.env.VITE_OPENAI_API_KEY?.trim()
-  if (!key) {
-    throw new Error(
-      'VITE_OPENAI_API_KEY belum diisi. Tambahkan di file .env lalu restart npm run dev.',
-    )
-  }
+  const key = resolveGeminiKey()
   const outline = opts.outline.trim()
   if (!outline) throw new Error('Outline materi wajib diisi.')
   if (!opts.title.trim()) throw new Error('Judul materi wajib diisi.')
 
-  // Default gpt-4.1; override via opts.model atau VITE_OPENAI_MODEL
-  const model = opts.model || import.meta.env.VITE_OPENAI_MODEL?.trim() || 'gpt-4.1'
+  const model = opts.model || import.meta.env.VITE_GEMINI_MODEL?.trim() || undefined
   const parsed = await callOpenAI(key, model, SYSTEM_PROMPT, buildUserPrompt(opts))
 
   const title = String(parsed.title || opts.title).trim().slice(0, 160)

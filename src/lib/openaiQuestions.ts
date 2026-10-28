@@ -1,13 +1,17 @@
 /**
- * Generate draft soal via OpenAI — arahan & API.
+ * Generate draft soal via Gemini — arahan & API.
  *
- * File ini adalah "penghubung" petunjuk ke AI (system + user prompt).
- * Kunci: VITE_OPENAI_API_KEY di .env (jangan commit).
- *
- * Produksi: pindahkan pemanggilan ke Cloud Function agar key tidak di client.
+ * Kunci: VITE_GEMINI_API_KEY di .env (jangan commit).
+ * Nama fungsi *WithGemini dipertahankan agar import UI stabil.
  */
 
 import type { QuestionType, SubjectKey } from '../types/question'
+import {
+  callGeminiJson,
+  generateGeminiImage,
+  isGeminiConfigured,
+  resolveGeminiKey,
+} from './geminiClient'
 
 /** Mode stimulus yang diminta guru */
 export type StimulusMode = 'none' | 'text' | 'image'
@@ -299,7 +303,7 @@ function normalizeDraft(raw: any, fallbackKomp?: string): AiDraftQuestion | null
 }
 
 export function isOpenAiConfigured(): boolean {
-  return Boolean(import.meta.env.VITE_OPENAI_API_KEY?.trim())
+  return isGeminiConfigured()
 }
 
 export type GenerateAiResult = {
@@ -307,116 +311,25 @@ export type GenerateAiResult = {
   imageWarnings: string[]
 }
 
-function resolveImageModel(): string {
-  return import.meta.env.VITE_OPENAI_IMAGE_MODEL?.trim() || 'gpt-image-1-mini'
-}
-
 async function generateOpenAiImage(
   prompt: string,
-  apiKey: string
+  _apiKey?: string
 ): Promise<{ url?: string; error?: string }> {
-  const fullPrompt = [
-    prompt.trim(),
-    "Children's educational illustration for Indonesian elementary school, simple, colorful, neutral teaching material.",
-    'No text overlays, no watermarks, no circled answers, no explicit solution numbers.',
-  ].join(' ')
-
-  const primary = resolveImageModel()
-  const attempts: { model: string; quality: string; size: string }[] = [
-    { model: primary, quality: 'low', size: '1024x1024' },
-  ]
-  if (primary !== 'gpt-image-1-mini') {
-    attempts.push({ model: 'gpt-image-1-mini', quality: 'low', size: '1024x1024' })
-  }
-  if (primary !== 'gpt-image-2' && primary !== 'gpt-image-1-mini') {
-    attempts.push({ model: 'gpt-image-2', quality: 'low', size: '1024x1024' })
-  }
-
-  const errors: string[] = []
-  for (const a of attempts) {
-    try {
-      const body: Record<string, unknown> = {
-        model: a.model,
-        prompt: fullPrompt.slice(0, 32000),
-        n: 1,
-        size: a.size,
-        quality: a.quality,
-      }
-      const res = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(body),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        const msg = data?.error?.message || data?.error?.code || `HTTP ${res.status}`
-        errors.push(`${a.model}: ${msg}`)
-        continue
-      }
-      const item = data?.data?.[0]
-      if (item?.b64_json) return { url: `data:image/png;base64,${item.b64_json}` }
-      if (item?.url) return { url: item.url as string }
-      errors.push(`${a.model}: respons tanpa gambar (b64/url)`)
-    } catch (e: any) {
-      errors.push(`${a.model}: ${e?.message || 'network error'}`)
-    }
-  }
-  return { error: errors.join(' | ') || 'Gagal generate gambar' }
+  return generateGeminiImage(prompt)
 }
 
-export async function generateQuestionsWithOpenAI(
+export async function generateQuestionsWithGemini(
   opts: GenerateAiOptions
 ): Promise<GenerateAiResult> {
-  const key = import.meta.env.VITE_OPENAI_API_KEY?.trim()
-  if (!key) {
-    throw new Error(
-      'VITE_OPENAI_API_KEY belum diisi. Tambahkan di file .env lalu restart npm run dev.'
-    )
-  }
-
-  const model = opts.model || import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini'
+  const key = resolveGeminiKey()
   const count = Math.max(1, Math.min(opts.count || 5, 15))
   const plan = resolveStimulusPlan(count, opts.stimulusModes, opts.stimulusMode, opts.stimulusCounts)
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.7,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: buildSystemPrompt() },
-        { role: 'user', content: buildUserPrompt({ ...opts, count }) },
-      ],
-    }),
-  })
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '')
-    if (res.status === 401) throw new Error('API key OpenAI tidak valid (401).')
-    if (res.status === 429) throw new Error('Batas kuota/rate OpenAI (429). Coba lagi nanti.')
-    throw new Error(`OpenAI error ${res.status}: ${errText.slice(0, 200)}`)
-  }
-
-  const data = await res.json()
-  const content = data?.choices?.[0]?.message?.content
-  if (!content || typeof content !== 'string') {
-    throw new Error('Respons OpenAI kosong.')
-  }
-
-  let parsed: any
-  try {
-    parsed = JSON.parse(content)
-  } catch {
-    throw new Error('Respons OpenAI bukan JSON valid.')
-  }
+  const parsed = await callGeminiJson(
+    buildSystemPrompt(),
+    buildUserPrompt({ ...opts, count }),
+    { model: opts.model, temperature: 0.7, maxOutputTokens: 8192 }
+  )
 
   const arr = Array.isArray(parsed?.questions)
     ? parsed.questions
