@@ -2,7 +2,7 @@
  * Generate draft soal via Gemini — arahan & API.
  *
  * Kunci: VITE_GEMINI_API_KEY di .env (jangan commit).
- * Nama fungsi *WithGemini dipertahankan agar import UI stabil.
+ * Nama fungsi *WithOpenAI dipertahankan agar import UI stabil (backend Gemini).
  */
 
 import type { QuestionType, SubjectKey } from '../types/question'
@@ -318,7 +318,7 @@ async function generateOpenAiImage(
   return generateGeminiImage(prompt)
 }
 
-export async function generateQuestionsWithGemini(
+export async function generateQuestionsWithOpenAI(
   opts: GenerateAiOptions
 ): Promise<GenerateAiResult> {
   const key = resolveGeminiKey()

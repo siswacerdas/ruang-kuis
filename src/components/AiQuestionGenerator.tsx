@@ -117,7 +117,7 @@ export default function AiQuestionGenerator({ open, onClose, subject, topic, onA
         generateImages: stimulusModes.includes('image') && generateImages,
       })
       setDrafts(list)
-      setSelected(new Set(list.map((_, i) => i)))
+      setSelected(new Set(list.map((_: AiDraftQuestion, i: number) => i)))
       if (imageWarnings.length > 0) {
         setError(
           'Soal berhasil dibuat, tetapi sebagian gambar gagal:\n' +
