@@ -251,13 +251,12 @@ const SIMULATE_SYSTEM = `Kamu membantu guru SD mengisi skor observasi aktivitas 
 
 Tugas: terjemahkan predikat huruf siswa menjadi skor per komponen penilaian.
 
-Predikat huruf & target kasar (level observasi → % ≈ level/4*100):
-- A+ → level 4,00 (100%) | A → 3,75 (94%) | A- → 3,50 (87,5%) — Sangat Baik (ambang A- ≥85)
-- B+ / B / B- → ~3,25 (81%) — Baik (80–89)
-- C+ / C → ~3,00 (75%) | C- → ~2,75 (69%) — Cukup (70–79)
-- D → ~2,50 (63%) — Kurang (60–69)
-- E → ~1,75 (44%) — Sangat Kurang (<60)
-PENTING: A- HARUS memakai level sekitar 3,5 (bukan 3,75) agar tidak jatuh ke predikat A.
+Predikat huruf & target level UNIK (wajib beda antar huruf; % ≈ level/4*100):
+- A+ → 4.00 (100%) | A → 3.75 (93.75%) | A- → 3.50 (87.5%)
+- B+ → 3.25 (81.25%) | B → 3.00 (75%) | B- → 2.75 (68.75%)
+- C+ → 2.50 (62.5%) | C → 2.25 (56.25%) | C- → 2.00 (50%)
+- D → 1.50 (37.5%) | E → 1.00 (25%)
+PENTING: Jangan samakan level B- dengan B+ (2.75 vs 3.25). Jangan samakan A- dengan A (3.50 vs 3.75).
 
 Skala observasi komponen: 1 Belum tampak, 2 Berkembang, 3 Mahir, 4 Sangat mahir (boleh 1.25, 1.5, …, 3.75).
 
