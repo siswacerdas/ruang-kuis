@@ -4,6 +4,7 @@ import HtmlMaterialEditor from '../components/HtmlMaterialEditor'
 import LessonViewer from '../components/LessonViewer'
 import PresentationViewer from '../components/PresentationViewer'
 import { getSubject, type SubjectKey } from '../types/question'
+import { downloadMaterialsJson } from '../lib/exportMaterials'
 import { loadSubjects, getCachedSubjects, type SubjectDoc } from '../lib/subjects'
 import {
   deleteLessonMaterial,
@@ -320,7 +321,10 @@ export default function MateriBody({
             <p className="text-sm text-slate-500 mt-1">{pdfs.length > 0 ? `${pdfs.length} dokumen` : 'Belum ada dokumen untuk mapel ini'}</p>
           </div>
           {isAdmin && (
-            <div className="flex flex-wrap gap-2 shrink-0">
+            <div className="flex flex-wrap gap-2 sm:shrink-0">
+              {pdfs.length > 0 && (
+                <button type="button" onClick={() => downloadMaterialsJson(pdfs, subject.key)} className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-medium hover:bg-slate-50" title="Unduh semua materi mapel ini sebagai JSON">Ekspor JSON</button>
+              )}
               <button type="button" onClick={() => setShowAiGen(true)} className="px-4 py-2 rounded-xl border border-violet-200 bg-violet-50 text-violet-800 text-sm font-medium hover:bg-violet-100">✨ Buat materi belajar AI</button>
               <button type="button" onClick={openHtmlCreate} className="px-4 py-2 rounded-xl border border-teal-200 bg-teal-50 text-teal-800 text-sm font-medium hover:bg-teal-100">+ Materi HTML</button>
               <button type="button" onClick={() => openCreate(subject.key)} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700">+ PDF Drive</button>
@@ -341,7 +345,7 @@ export default function MateriBody({
             )}
             <div className="rounded-xl border border-slate-200 bg-white overflow-hidden divide-y divide-slate-100">
               {pdfs.map((pdf, i) => (
-                <div key={pdf.id} className="group flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-3.5 hover:bg-slate-50/80 transition">
+                <div key={pdf.id} className="group flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 px-3 sm:px-5 py-3.5 hover:bg-slate-50/80 transition">
                   {isAdmin && (
                     <div className="flex flex-col gap-0.5 shrink-0">
                       <button
@@ -381,13 +385,14 @@ export default function MateriBody({
                     <svg className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 shrink-0 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                   </button>
                   {isAdmin && (
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center justify-end gap-1 w-full sm:w-auto shrink-0">
                       <button type="button" onClick={() => handleToggleStatus(pdf)} disabled={statusBusyId === pdf.id || !!pdf.isStatic} className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border disabled:opacity-50 ${isPublished(pdf) ? 'text-amber-700 border-amber-200 hover:bg-amber-50' : 'text-emerald-700 border-emerald-200 hover:bg-emerald-50'}`} title={isPublished(pdf) ? 'Sembunyikan dari siswa' : 'Tampilkan ke siswa'}>{statusBusyId === pdf.id ? '...' : isPublished(pdf) ? 'Unpublish' : 'Publish'}</button>
                       {isHtmlLesson(pdf) ? (
                         <button type="button" onClick={() => openHtmlEdit(pdf)} className="text-xs font-medium text-slate-600 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-white">Edit</button>
                       ) : !isPresentation(pdf) ? (
                         <button type="button" onClick={() => openEdit(pdf)} className="text-xs font-medium text-slate-600 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-white">Edit</button>
                       ) : null}
+                      <button type="button" onClick={() => downloadMaterialsJson([pdf], pdf.title)} className="text-xs font-medium text-slate-600 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-white" title="Ekspor materi ini sebagai JSON" aria-label={`Ekspor JSON: ${pdf.title}`}>JSON</button>
                       <button type="button" onClick={() => handleDelete(pdf)} disabled={deletingId === pdf.id} className="text-xs font-medium text-red-600 px-2.5 py-1.5 rounded-lg border border-red-100 hover:bg-red-50 disabled:opacity-50">{deletingId === pdf.id ? '...' : 'Hapus'}</button>
                     </div>
                   )}
@@ -427,6 +432,9 @@ export default function MateriBody({
             <div className="flex flex-wrap gap-2">
               {usingStatic && (
                 <button type="button" onClick={onSeed} disabled={seeding} className="px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-xs font-medium hover:bg-amber-100 disabled:opacity-50">{seeding ? 'Migrasi...' : 'Migrasi seed ke Firestore'}</button>
+              )}
+              {materials.length > 0 && (
+                <button type="button" onClick={() => downloadMaterialsJson(materials, 'semua-mapel')} className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50" title="Unduh seluruh materi sebagai JSON">Ekspor JSON (semua)</button>
               )}
               <button type="button" onClick={() => setShowAiGen(true)} className="px-3 py-2 rounded-xl border border-violet-200 bg-violet-50 text-violet-800 text-xs font-medium hover:bg-violet-100">✨ Materi AI</button>
               <button type="button" onClick={openHtmlCreate} className="px-3 py-2 rounded-xl border border-teal-200 bg-teal-50 text-teal-800 text-xs font-medium hover:bg-teal-100">+ Materi HTML</button>
