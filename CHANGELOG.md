@@ -8,6 +8,11 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id/1.0.0/), dan p
 
 ## [Unreleased]
 
+### Added — Ekspor materi ke JSON
+- Halaman admin **Materi**: tombol **Ekspor JSON (semua)**, **Ekspor JSON** per mapel, dan tombol **JSON** per materi (termasuk draft).
+- Format `ruang-kuis-materi` versi 1: isi HTML dan slide ikut utuh; materi PDF Drive hanya menyimpan `driveFileId` (berkas PDF tidak ikut).
+- Logika di `src/lib/exportMaterials.ts`. Impor ulang belum tersedia.
+
 ### Changed — Laporan ringkasan admin
 - Kartu **Tren skor** diganti karena jarang bermanfaat (sering 1 titik data).
 - Diganti: **aktivitas 7 hari**, **rata skor per mapel** (urut dari yang lemah), dan **paket perlu perhatian** (tanpa attempt / rata < 70).
